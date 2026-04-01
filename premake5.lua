@@ -111,6 +111,20 @@ project "Runtime"
 
 	filter "system:linux"
 		systemversion "latest"
+		links
+		{
+			"glfw",
+			"vulkan",
+			"shaderc_shared",
+			"dl",
+			"pthread",
+			"X11",
+			"Xrandr",
+			"Xi",
+			"Xxf86vm",
+			"Xinerama",
+			"Xcursor"
+		}
 
 	filter "configurations:Debug"
 		runtime "Debug"
