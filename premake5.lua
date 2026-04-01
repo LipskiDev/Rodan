@@ -48,7 +48,8 @@ project "Rodan"
 
 	links
 	{
-		"Velos"
+		"Velos",
+    "imgui"
 	}
 
 	filter "system:windows"
@@ -103,7 +104,8 @@ project "Runtime"
 	links
 	{
 		"Rodan",
-		"Velos"
+		"Velos",
+    "imgui"
 	}
 
 	filter "system:windows"
