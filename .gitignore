@@ -39,3 +39,25 @@
 
 # debug information files
 *.dwo
+
+# ========================
+# Build output
+# ========================
+bin/
+bin-int/
+build/
+
+# Velos submodule build output (in case it leaks up)
+external/velos/bin/
+external/velos/bin-int/
+external/velos/build/
+
+# Generated files
+Makefile
+
+# Premake / compilation database
+compile_commands.json
+
+# OS junk
+.DS_Store
+Thumbs.db
