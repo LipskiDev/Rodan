@@ -49,7 +49,7 @@ project "Rodan"
 	links
 	{
 		"Velos",
-    "imgui"
+		"imgui"
 	}
 
 	filter "system:windows"
@@ -60,6 +60,10 @@ project "Rodan"
 		pic "On"
 
 	filter "configurations:Debug"
+		defines
+		{
+			"TRACY_ENABLE"
+		}
 		runtime "Debug"
 		symbols "On"
 
@@ -105,7 +109,7 @@ project "Runtime"
 	{
 		"Rodan",
 		"Velos",
-    "imgui"
+		"imgui"
 	}
 
 	filter "system:windows"
@@ -129,6 +133,10 @@ project "Runtime"
 		}
 
 	filter "configurations:Debug"
+		defines
+		{
+			"TRACY_ENABLE"
+		}
 		runtime "Debug"
 		symbols "On"
 
