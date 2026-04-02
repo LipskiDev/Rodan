@@ -4,6 +4,7 @@
 #include "../../external/velos/velos/rhi/rhi_device.h"
 #include "../../external/velos/velos/rhi/rhi_pipeline.h"
 #include "../../external/velos/velos/rhi/rhi_types.h"
+#include "GLFW/glfw3.h"
 #include "core/input_system.h"
 #include "core/types.h"
 #include "core/window.h"
@@ -21,6 +22,8 @@
 #include <iostream>
 #include <memory>
 #include <vector>
+
+#include <core/fps_counter.h>
 
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
@@ -300,8 +303,18 @@ void Application::Run() {
 
   bool uploaded = false;
   float time = 0.0f;
+  float deltaSeconds = 0.0f;
+  double timeStamp = glfwGetTime();
+
+  FramePerSecondCounter fpsCounter(0.5f);
 
   while (!window->ShouldClose()) {
+    fpsCounter.tick(deltaSeconds);
+
+    const double newTimeStamp = glfwGetTime();
+    deltaSeconds = static_cast<float>(newTimeStamp - timeStamp);
+    timeStamp = newTimeStamp;
+
     input.BeginFrame();
     window->PollEvents();
 
@@ -340,7 +353,24 @@ void Application::Run() {
     imguiRenderer.NewFrame(deltaTime, window->GetWidth(), window->GetHeight(),
                            dims.width, dims.height);
 
-    ImGui::ShowDemoWindow(&showDemoWindow);
+    if (const ImGuiViewport *v = ImGui::GetMainViewport()) {
+      ImGui::SetNextWindowPos(
+          {v->WorkPos.x + v->WorkSize.x - 15.0f, v->WorkPos.y + 15.0f},
+          ImGuiCond_Always, {1.0f, 0.0f});
+    }
+    ImGui::SetNextWindowBgAlpha(0.30f);
+    ImGui::SetNextWindowSize(ImVec2(ImGui::CalcTextSize("FPS : _______").x, 0));
+    if (ImGui::Begin("##FPS", nullptr,
+                     ImGuiWindowFlags_NoDecoration |
+                         ImGuiWindowFlags_AlwaysAutoResize |
+                         ImGuiWindowFlags_NoSavedSettings |
+                         ImGuiWindowFlags_NoFocusOnAppearing |
+                         ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoMove)) {
+      ImGui::Text("FPS : %i", (int)fpsCounter.getFPS());
+      ImGui::Text("Ms  : %.1f", 1000.0 / fpsCounter.getFPS());
+    }
+
+    ImGui::End();
 
     ImGui::Begin("Velos");
     ImGui::Text("Custom Dear ImGui renderer on top of Velos");
