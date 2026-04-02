@@ -8,6 +8,7 @@
 #include "core/input_system.h"
 #include "core/types.h"
 #include "core/window.h"
+#include "graphics/bitmap.h"
 #include "imgui.h"
 #include "platform/glfw/glfw_window.h"
 #include "ui/imgui_input_bridge.h"
@@ -27,6 +28,8 @@
 
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#include <stb_image_write.h>
 
 namespace Rodan {
 using std::make_unique;
@@ -69,92 +72,91 @@ void Application::Run() {
       .debugName = "Main Swapchain",
   });
 
-  std::vector<Vertex> vertices = {
-      {{-0.5f, -0.5f, 0.0f}, {0.0f, 1.0f}},
-      {{0.5f, -0.5f, 0.0f}, {1.0f, 1.0f}},
-      {{0.5f, 0.5f, 0.0f}, {1.0f, 0.0f}},
-      {{-0.5f, 0.5f, 0.0f}, {0.0f, 0.0f}},
-  };
-
-  std::vector<std::uint16_t> indices = {
-      0, 1, 2, 0, 2, 3,
-  };
+  std::vector<glm::vec3> skyboxVertices = {
+      {-1, -1, -1}, {1, -1, -1}, {1, 1, -1}, {1, 1, -1},  {-1, 1, -1},
+      {-1, -1, -1}, {-1, -1, 1}, {1, -1, 1}, {1, 1, 1},   {1, 1, 1},
+      {-1, 1, 1},   {-1, -1, 1}, {-1, 1, 1}, {-1, 1, -1}, {-1, -1, -1},
+      {-1, -1, -1}, {-1, -1, 1}, {-1, 1, 1}, {1, 1, 1},   {1, 1, -1},
+      {1, -1, -1},  {1, -1, -1}, {1, -1, 1}, {1, 1, 1},   {-1, -1, -1},
+      {1, -1, -1},  {1, -1, 1},  {1, -1, 1}, {-1, -1, 1}, {-1, -1, -1},
+      {-1, 1, -1},  {1, 1, -1},  {1, 1, 1},  {1, 1, 1},   {-1, 1, 1},
+      {-1, 1, -1}};
 
   std::cout << "Creating vertex buffer\n";
   BufferHandle vertexBuffer = device->CreateBuffer({
-      .size = static_cast<Velos::u64>(vertices.size() * sizeof(Vertex)),
+      .size =
+          static_cast<Velos::u64>(skyboxVertices.size() * sizeof(glm::vec3)),
       .usage = BufferUsage::Vertex,
       .memoryUsage = MemoryUsage::CPUToGPU,
-      .initialData = vertices.data(),
+      .initialData = skyboxVertices.data(),
       .debugName = "Quad Vertex Buffer",
-  });
-
-  std::cout << "Creating index buffer\n";
-  BufferHandle indexBuffer = device->CreateBuffer({
-      .size = static_cast<Velos::u64>(indices.size() * sizeof(std::uint16_t)),
-      .usage = BufferUsage::Index,
-      .memoryUsage = MemoryUsage::CPUToGPU,
-      .initialData = indices.data(),
-      .debugName = "Quad Index Buffer",
   });
 
   std::cout << "Loading transparent texture with stb_image\n";
   stbi_set_flip_vertically_on_load(1);
 
-  int texWidth = 0;
-  int texHeight = 0;
-  int texChannels = 0;
-  stbi_uc *pixels = stbi_load("assets/textures/awesomeface.png", &texWidth,
-                              &texHeight, &texChannels, STBI_rgb_alpha);
+  int w, h;
+  const float *img =
+      stbi_loadf("assets/textures/piazza_bologni_1k.hdr", &w, &h, nullptr, 4);
 
-  if (!pixels) {
+  if (!img) {
     throw std::runtime_error("Failed to load awesomeface.png with stb_image");
   }
 
-  const Velos::u64 imageSize = static_cast<Velos::u64>(texWidth) *
-                               static_cast<Velos::u64>(texHeight) * 4ull;
+  Graphics::Bitmap in(w, h, 4, Graphics::BitmapFormat::Float, img);
+  Graphics::Bitmap out = convertEquirectangularMapToVerticalCross(in);
+  stbi_image_free((void *)img);
+
+  stbi_write_hdr(".cache/screenshot.hdr", out.w_, out.h_, out.comp_,
+                 (const float *)out.data_.data());
+
+  Graphics::Bitmap cubemap = convertVerticalCrossToCubeMapFaces(out);
+
+  const Velos::u64 cubemapSize = static_cast<Velos::u64>(cubemap.w_) *
+                                 static_cast<Velos::u64>(cubemap.h_) * 6 *
+                                 static_cast<Velos::u64>(cubemap.comp_) *
+                                 sizeof(float);
 
   std::cout << "Creating staging buffer\n";
-  BufferHandle stagingBuffer = device->CreateBuffer({
-      .size = imageSize,
+
+  BufferHandle cubemapStagingBuffer = device->CreateBuffer({
+      .size = cubemapSize,
       .usage = BufferUsage::TransferSrc,
       .memoryUsage = MemoryUsage::CPUToGPU,
-      .initialData = pixels,
-      .debugName = "Texture Upload Staging Buffer",
+      .initialData = cubemap.data_.data(),
+      .debugName = "Cubemap Upload Staging Buffer",
   });
-
-  stbi_image_free(pixels);
 
   std::cout << "Creating texture image\n";
-  ImageHandle textureImage = device->CreateImage({
-      .width = static_cast<Velos::u32>(texWidth),
-      .height = static_cast<Velos::u32>(texHeight),
-      .depth = 1,
-      .mipLevels = 1,
-      .arrayLayers = 1,
-      .format = Format::RGBA8_UNORM,
-      .usage = ImageUsage::TransferDst | Velos::RHI::ImageUsage::Sampled,
-      .debugName = "Texture Image",
-  });
+  u32 faceSize = cubemap.w_;
+  ImageHandle cubemapImage = device->CreateImage(
+      {.width = static_cast<Velos::u32>(faceSize),
+       .height = static_cast<Velos::u32>(faceSize),
+       .depth = 1,
+       .mipLevels = 1,
+       .arrayLayers = 6,
+       .format = Format::RGBA32_FLOAT,
+       .type = ImageType::Cube,
+       .usage = ImageUsage::TransferDst | ImageUsage::Sampled});
 
-  ImageViewHandle textureView = device->CreateImageView({
-      .image = textureImage,
-      .format = Format::RGBA8_UNORM,
-      .aspect = ImageAspect::Color,
-      .baseMipLevel = 0,
-      .mipLevelCount = 1,
-      .baseArrayLayer = 0,
-      .arrayLayerCount = 1,
-      .debugName = "Texture View",
-  });
+  ImageViewHandle cubemapImageView =
+      device->CreateImageView({.image = cubemapImage,
+                               .format = Format::RGBA32_FLOAT,
+                               .type = ImageViewType::Cube,
+                               .aspect = ImageAspect::Color,
+                               .baseMipLevel = 0,
+                               .mipLevelCount = 1,
+                               .baseArrayLayer = 0,
+                               .arrayLayerCount = 6,
+                               .debugName = "Cubemap Image View"});
 
   SamplerHandle sampler = device->CreateSampler({
       .minFilter = Filter::Linear,
       .magFilter = Filter::Linear,
-      .addressU = SamplerAddressMode::Repeat,
-      .addressV = SamplerAddressMode::Repeat,
-      .addressW = SamplerAddressMode::Repeat,
-      .debugName = "Texture Sampler",
+      .addressU = SamplerAddressMode::ClampToEdge,
+      .addressV = SamplerAddressMode::ClampToEdge,
+      .addressW = SamplerAddressMode::ClampToEdge,
+      .debugName = "Cubemap Sampler",
   });
 
   std::cout << "Creating descriptor set layout\n";
@@ -195,7 +197,7 @@ void Application::Run() {
   std::cout << "Updating descriptor set\n";
   DescriptorImageInfo imageInfo{};
   imageInfo.sampler = sampler;
-  imageInfo.imageView = textureView;
+  imageInfo.imageView = cubemapImageView;
   imageInfo.imageLayout = ImageLayout::ShaderReadOnly;
 
   device->UpdateDescriptorSet({
@@ -209,14 +211,14 @@ void Application::Run() {
   });
 
   auto vertSpv = ShaderCompiler::CompileFile({
-      .path = "assets/shaders/textured_quad.vert",
+      .path = "assets/shaders/skybox.vert",
 
       .stage = ShaderStage::Vertex,
       .entryPoint = "main",
   });
 
   auto fragSpv = ShaderCompiler::CompileFile({
-      .path = "assets/shaders/textured_quad.frag",
+      .path = "assets/shaders/skybox.frag",
       .stage = ShaderStage::Fragment,
       .entryPoint = "main",
   });
@@ -241,19 +243,14 @@ void Application::Run() {
       .debugName = "Blending Test Fragment Shader",
   });
 
-  VertexBufferLayoutDesc vertexLayout{
-      .stride = sizeof(Vertex),
+  VertexBufferLayoutDesc layout{
+      .stride = sizeof(glm::vec3),
       .inputRate = VertexInputRate::PerVertex,
       .attributes = {{
-                         .location = 0,
-                         .format = VertexFormat::Float32x3,
-                         .offset = static_cast<u32>(offsetof(Vertex, pos)),
-                     },
-                     {
-                         .location = 1,
-                         .format = VertexFormat::Float32x2,
-                         .offset = static_cast<u32>(offsetof(Vertex, uv)),
-                     }},
+          .location = 0,
+          .format = VertexFormat::Float32x3,
+          .offset = 0,
+      }},
   };
 
   DescriptorSetLayoutHandle setLayouts[] = {setLayout};
@@ -261,7 +258,7 @@ void Application::Run() {
   GraphicsPipelineDesc pipelineDesc{};
   pipelineDesc.vertexShader = vertexShader;
   pipelineDesc.fragmentShader = fragmentShader;
-  pipelineDesc.vertexLayouts.push_back(vertexLayout);
+  pipelineDesc.vertexLayouts.push_back(layout);
   pipelineDesc.layout.descriptorSetLayouts = setLayouts;
   pipelineDesc.layout.descriptorSetLayoutCount = 1;
   pipelineDesc.topology = PrimitiveTopology::TriangleList;
@@ -397,31 +394,42 @@ void Application::Run() {
 
       std::cout << "Recording texture upload commands\n";
 
-      BufferImageCopyRegion copyRegion{};
-      copyRegion.bufferOffset = 0;
-      copyRegion.bufferRowLength = 0;
-      copyRegion.bufferImageHeight = 0;
-      copyRegion.mipLevel = 0;
-      copyRegion.baseArrayLayer = 0;
-      copyRegion.layerCount = 1;
-      copyRegion.imageOffset = {0, 0, 0};
-      copyRegion.imageExtent = {
-          static_cast<u32>(texWidth),
-          static_cast<u32>(texHeight),
-          1,
-      };
-      copyRegion.aspect = ImageAspect::Color;
+      const u32 bytesPerPixel = cubemap.comp_ * sizeof(float);
+      const u32 faceSize = cubemap.w_; // since width = faceWidth
+      const u32 facePixelCount = faceSize * faceSize;
+      const u64 faceByteSize = (u64)facePixelCount * bytesPerPixel;
 
       cmd.Barrier({
-          .image = textureImage,
+          .image = cubemapImage,
           .newLayout = ImageLayout::TransferDst,
           .aspect = ImageAspect::Color,
       });
 
-      cmd.CopyBufferToImage(stagingBuffer, textureImage, copyRegion);
+      for (u32 face = 0; face < 6; ++face) {
+        BufferImageCopyRegion region{};
+
+        region.bufferOffset = face * faceByteSize;
+        region.bufferRowLength = 0;   // tightly packed
+        region.bufferImageHeight = 0; // tightly packed
+
+        region.mipLevel = 0;
+        region.baseArrayLayer = face;
+        region.layerCount = 1;
+
+        region.imageOffset = {0, 0, 0};
+        region.imageExtent = {
+            faceSize,
+            faceSize,
+            1,
+        };
+
+        region.aspect = ImageAspect::Color;
+
+        cmd.CopyBufferToImage(cubemapStagingBuffer, cubemapImage, region);
+      }
 
       cmd.Barrier({
-          .image = textureImage,
+          .image = cubemapImage,
           .newLayout = ImageLayout::ShaderReadOnly,
           .aspect = ImageAspect::Color,
       });
@@ -459,7 +467,10 @@ void Application::Run() {
     glm::mat4 model =
         glm::rotate(glm::mat4(1.0f), time, glm::vec3(0.0f, 0.0f, 1.0f));
     glm::mat4 view = glm::mat4(1.0f);
-    glm::mat4 proj = glm::mat4(1.0f);
+    glm::mat4 proj = glm::perspective(
+        glm::radians(60.0f), (float)dims.width / dims.height, 0.1f, 100.0f);
+
+    proj[1][1] *= -1.0f; // Vulkan clip space
     glm::mat4 mvp = proj * view * model;
 
     cmd.BeginRendering(renderingInfo);
@@ -478,12 +489,20 @@ void Application::Run() {
         .extent = {dims.width, dims.height},
     });
 
+    struct Push {
+      glm::mat4 view;
+      glm::mat4 proj;
+    };
+
+    Push push{};
+    push.view = glm::mat4(glm::mat3(view));
+    push.proj = proj;
+
     cmd.BindPipeline(pipeline);
     cmd.BindDescriptorSet(pipeline, 0, descriptorSet);
     cmd.BindVertexBuffer(0, vertexBuffer, 0);
-    cmd.BindIndexBuffer(indexBuffer, IndexType::U16, 0);
-    cmd.PushConstants(ShaderStage::Vertex, 0, sizeof(glm::mat4), &mvp);
-    cmd.DrawIndexed(static_cast<u32>(indices.size()));
+    cmd.PushConstants(ShaderStage::Vertex, 0, sizeof(Push), &push);
+    cmd.Draw(static_cast<Velos::u32>(skyboxVertices.size()));
 
     imguiRenderer.Render(cmd, ImGui::GetDrawData());
 
@@ -511,10 +530,9 @@ void Application::Run() {
   device->DestroyDescriptorPool(descriptorPool);
   device->DestroyDescriptorSetLayout(setLayout);
   device->DestroySampler(sampler);
-  device->DestroyImageView(textureView);
-  device->DestroyImage(textureImage);
-  device->DestroyBuffer(stagingBuffer);
-  device->DestroyBuffer(indexBuffer);
+  device->DestroyImageView(cubemapImageView);
+  device->DestroyImage(cubemapImage);
+  device->DestroyBuffer(cubemapStagingBuffer);
   device->DestroyBuffer(vertexBuffer);
   device->DestroySwapchain(swapchain);
   DestroyDevice(device);
