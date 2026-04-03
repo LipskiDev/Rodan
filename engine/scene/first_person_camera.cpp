@@ -13,6 +13,7 @@ void FirstPersonCamera::Update(float dt) {
   if (glm::length(forward) > 0.0f)
     forward = glm::normalize(forward);
   glm::vec3 right = GetRight();
+  glm::vec3 up = glm::cross(right, forward);
 
   glm::vec3 moveDir(0.0f);
 
@@ -24,6 +25,10 @@ void FirstPersonCamera::Update(float dt) {
     moveDir += right;
   if (movement_.left)
     moveDir -= right;
+  if (movement_.up)
+    moveDir += up;
+  if (movement_.down)
+    moveDir -= up;
 
   if (glm::length(moveDir) > 0.0f) {
     moveDir = glm::normalize(moveDir);
@@ -46,17 +51,17 @@ void FirstPersonCamera::OnKeyboard(InputEvent input) {
   bool pressed = (input.type == InputEventType::KeyDown);
 
   if (input.key.key == Key::W) {
-    printf("Forward\n");
     movement_.forward = pressed;
   } else if (input.key.key == Key::S) {
-    printf("Backward\n");
     movement_.backward = pressed;
   } else if (input.key.key == Key::A) {
-    printf("Left\n");
     movement_.left = pressed;
   } else if (input.key.key == Key::D) {
-    printf("Right\n");
     movement_.right = pressed;
+  } else if (input.key.key == Key::Space) {
+    movement_.up = pressed;
+  } else if (input.key.key == Key::LeftShift) {
+    movement_.down = pressed;
   }
 }
 
