@@ -11,6 +11,7 @@
 #include "graphics/bitmap.h"
 #include "imgui.h"
 #include "platform/glfw/glfw_window.h"
+#include "scene/first_person_camera.h"
 #include "ui/imgui_input_bridge.h"
 #include "ui/imgui_renderer.h"
 
@@ -305,6 +306,8 @@ void Application::Run() {
 
   FramePerSecondCounter fpsCounter(0.5f);
 
+  FirstPersonCamera camera;
+
   while (!window->ShouldClose()) {
     fpsCounter.tick(deltaSeconds);
 
@@ -380,6 +383,33 @@ void Application::Run() {
     ImGui::End();
 
     ImGui::Render();
+
+    for (const InputEvent &event : input.GetEvents()) {
+      if (event.type == InputEventType::KeyDown ||
+          event.type == InputEventType::KeyUp) {
+        camera.OnKeyboard(event);
+      } else if (event.type == InputEventType::MouseMove) {
+        float dx = 0.0f;
+        float dy = 0.0f;
+
+        if (firstMouse) {
+          lastMouseX = event.mouseMove.x;
+          lastMouseY = event.mouseMove.y;
+          firstMouse = false;
+        } else {
+          dx = event.mouseMove.x - lastMouseX;
+          dy = event.mouseMove.y - lastMouseY;
+          lastMouseX = event.mouseMove.x;
+          lastMouseY = event.mouseMove.y;
+        }
+
+        camera.OnMouseMove(dx, dy);
+      }
+    }
+
+    camera.SetPerspective(60.0f, static_cast<float>(dims.width) / dims.height,
+                          0.1f, 100.0f);
+    camera.Update(deltaSeconds);
 
     FrameBeginResult frame = device->BeginFrame(swapchain);
     if (!frame.success) {
@@ -464,15 +494,6 @@ void Application::Run() {
     renderingInfo.colorAttachmentCount = 1;
     renderingInfo.depthAttachment = nullptr;
 
-    glm::mat4 model =
-        glm::rotate(glm::mat4(1.0f), time, glm::vec3(0.0f, 0.0f, 1.0f));
-    glm::mat4 view = glm::mat4(1.0f);
-    glm::mat4 proj = glm::perspective(
-        glm::radians(60.0f), (float)dims.width / dims.height, 0.1f, 100.0f);
-
-    proj[1][1] *= -1.0f; // Vulkan clip space
-    glm::mat4 mvp = proj * view * model;
-
     cmd.BeginRendering(renderingInfo);
 
     cmd.SetViewport({
@@ -495,8 +516,8 @@ void Application::Run() {
     };
 
     Push push{};
-    push.view = glm::mat4(glm::mat3(view));
-    push.proj = proj;
+    push.view = camera.GetView();
+    push.proj = camera.GetProjection();
 
     cmd.BindPipeline(pipeline);
     cmd.BindDescriptorSet(pipeline, 0, descriptorSet);

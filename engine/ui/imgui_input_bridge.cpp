@@ -46,7 +46,52 @@ static ImGuiKey ToImGuiKey(Key key) {
     return ImGuiKey_B;
   case Key::C:
     return ImGuiKey_C;
-  // ...
+  case Key::D:
+    return ImGuiKey_D;
+  case Key::E:
+    return ImGuiKey_E;
+  case Key::F:
+    return ImGuiKey_F;
+  case Key::G:
+    return ImGuiKey_G;
+  case Key::H:
+    return ImGuiKey_H;
+  case Key::I:
+    return ImGuiKey_I;
+  case Key::J:
+    return ImGuiKey_J;
+  case Key::K:
+    return ImGuiKey_K;
+  case Key::L:
+    return ImGuiKey_L;
+  case Key::M:
+    return ImGuiKey_M;
+  case Key::N:
+    return ImGuiKey_N;
+  case Key::O:
+    return ImGuiKey_O;
+  case Key::P:
+    return ImGuiKey_P;
+  case Key::Q:
+    return ImGuiKey_Q;
+  case Key::R:
+    return ImGuiKey_R;
+  case Key::S:
+    return ImGuiKey_S;
+  case Key::T:
+    return ImGuiKey_T;
+  case Key::U:
+    return ImGuiKey_U;
+  case Key::V:
+    return ImGuiKey_V;
+  case Key::W:
+    return ImGuiKey_W;
+  case Key::X:
+    return ImGuiKey_X;
+  case Key::Y:
+    return ImGuiKey_Y;
+  case Key::Z:
+    return ImGuiKey_Z;
   case Key::LeftCtrl:
     return ImGuiKey_LeftCtrl;
   case Key::RightCtrl:
