@@ -11,6 +11,7 @@
 #include "graphics/bitmap.h"
 #include "imgui.h"
 #include "platform/glfw/glfw_window.h"
+#include "renderer/line_renderer.h"
 #include "scene/first_person_camera.h"
 #include "ui/imgui_input_bridge.h"
 #include "ui/imgui_renderer.h"
@@ -307,6 +308,8 @@ void Application::Run() {
   FramePerSecondCounter fpsCounter(0.5f);
 
   FirstPersonCamera camera;
+  std::unique_ptr<Debug::LineRenderer3D> line3d =
+      make_unique<Debug::LineRenderer3D>(device);
 
   while (!window->ShouldClose()) {
     fpsCounter.tick(deltaSeconds);
@@ -410,6 +413,13 @@ void Application::Run() {
     camera.SetPerspective(60.0f, static_cast<float>(dims.width) / dims.height,
                           0.1f, 100.0f);
     camera.Update(deltaSeconds);
+
+    line3d->plane(glm::vec3(0.0f), glm::vec3(1.0f, 0.0f, 0.0f),
+                  glm::vec3(0.0f, 0.0f, 1.0f), 10, 10, 10.0f, 10.0f,
+                  glm::vec4(0.3f, 0.3f, 0.3f, 1.0f),
+                  glm::vec4(0.8f, 0.8f, 0.8f, 1.0f));
+
+    line3d->box(glm::mat4(1.0f), glm::vec3(1.0f), glm::vec4(1, 0, 0, 1));
 
     FrameBeginResult frame = device->BeginFrame(swapchain);
     if (!frame.success) {
@@ -524,6 +534,7 @@ void Application::Run() {
     cmd.BindVertexBuffer(0, vertexBuffer, 0);
     cmd.PushConstants(ShaderStage::Vertex, 0, sizeof(Push), &push);
     cmd.Draw(static_cast<Velos::u32>(skyboxVertices.size()));
+    line3d->render(cmd, camera.GetProjection() * camera.GetView());
 
     imguiRenderer.Render(cmd, ImGui::GetDrawData());
 
@@ -538,6 +549,7 @@ void Application::Run() {
     cmd.End();
 
     device->SubmitAndPresent(frame.commandList, swapchain);
+    line3d->clear();
   }
 
   device->WaitIdle();
@@ -545,6 +557,7 @@ void Application::Run() {
   imguiRenderer.Shutdown();
   ImGui::DestroyContext();
 
+  line3d.reset();
   device->DestroyPipeline(pipeline);
   device->DestroyShader(fragmentShader);
   device->DestroyShader(vertexShader);
