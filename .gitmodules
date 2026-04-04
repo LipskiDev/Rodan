@@ -1,3 +1,6 @@
 [submodule "external/velos"]
 	path = external/velos
 	url = https://github.com/LipskiDev/velos.git
+[submodule "external/implot"]
+	path = external/implot
+	url = https://github.com/epezent/implot.git
