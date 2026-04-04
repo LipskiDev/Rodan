@@ -43,13 +43,15 @@ project "Rodan"
 		"external/velos/external/stb",
 		"external/velos/external/SPIRV-Reflect",
 		"external/velos/tools/imgui",
-		"external/velos/external/imgui"
+		"external/velos/external/imgui",
+    "external/implot"
 	}
 
 	links
 	{
 		"Velos",
-		"imgui"
+		"imgui",
+    "implot"
 	}
 
 	filter "system:windows"
@@ -102,14 +104,16 @@ project "Runtime"
 		"external/velos/external/stb",
 		"external/velos/external/SPIRV-Reflect",
 		"external/velos/tools/imgui",
-		"external/velos/external/imgui"
+		"external/velos/external/imgui",
+    "external/implot"
 	}
 
 	links
 	{
 		"Rodan",
 		"Velos",
-		"imgui"
+		"imgui",
+    "implot"
 	}
 
 	filter "system:windows"
@@ -143,5 +147,35 @@ project "Runtime"
 	filter "configurations:Release"
 		runtime "Release"
 		optimize "Speed"
+
+	filter {}
+
+project "implot"
+	location "build/implot"
+	kind "StaticLib"
+	language "C++"
+	cppdialect "C++23"
+	staticruntime "off"
+
+	targetdir ("bin/" .. outputdir .. "/%{prj.name}")
+	objdir ("bin-int/" .. outputdir .. "/%{prj.name}")
+
+	files
+	{
+		"external/implot/implot.h",
+		"external/implot/implot.cpp",
+		"external/implot/implot_items.cpp",
+    "external/implot/implot_internal.h",
+    "external/implot/implot_items.cpp"
+	}
+
+	includedirs
+	{
+		"external/implot",
+		"external/velos/external/imgui"
+	}
+
+	filter "system:linux"
+		pic "On"
 
 	filter {}
