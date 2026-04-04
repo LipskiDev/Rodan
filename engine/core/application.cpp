@@ -310,6 +310,8 @@ void Application::Run() {
   FirstPersonCamera camera;
   std::unique_ptr<Debug::LineRenderer3D> line3d =
       make_unique<Debug::LineRenderer3D>(device);
+  std::unique_ptr<Debug::LineRenderer2D> line2d =
+      make_unique<Debug::LineRenderer2D>();
 
   while (!window->ShouldClose()) {
     fpsCounter.tick(deltaSeconds);
@@ -383,6 +385,13 @@ void Application::Run() {
     ImGui::Text("Framebuffer: %u x %u", dims.width, dims.height);
     ImGui::Text("Delta Time: %.4f", deltaTime);
     ImGui::Text("Mouse: %.1f, %.1f", input.GetMouseX(), input.GetMouseY());
+
+    line2d->clear();
+    line2d->line({100, 300}, {100, 400}, glm::vec4(1, 0, 0, 1));
+    line2d->line({100, 400}, {200, 400}, glm::vec4(0, 1, 0, 1));
+    line2d->line({200, 400}, {200, 300}, glm::vec4(0, 0, 1, 1));
+    line2d->line({200, 300}, {100, 300}, glm::vec4(1, 1, 0, 1));
+    line2d->render("##plane");
     ImGui::End();
 
     ImGui::Render();

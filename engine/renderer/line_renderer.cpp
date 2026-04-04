@@ -1,4 +1,5 @@
 #include "core/input_types.h"
+#include "imgui.h"
 #include "rhi/rhi_pipeline.h"
 #include "rhi/rhi_types.h"
 #include "shader/shader_compiler.h"
@@ -240,5 +241,25 @@ void LineRenderer3D::render(Velos::RHI::ICommandList &cmd,
   cmd.BindPipeline(pipeline_);
   cmd.PushConstants(Velos::RHI::ShaderStage::Vertex, 0, sizeof(pc), &pc);
   cmd.Draw(static_cast<Velos::u32>(lines_.size()));
+}
+
+void LineRenderer2D::render(const char *nameImGuiWindow) {
+  ImGui::SetNextWindowPos(ImVec2(0, 0));
+  ImGui::SetNextWindowSize(ImGui::GetMainViewport()->Size);
+  ImGui::Begin(
+      nameImGuiWindow, nullptr,
+      ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize |
+          ImGuiWindowFlags_NoSavedSettings |
+          ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav |
+          ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoInputs);
+
+  ImDrawList *drawList = ImGui::GetBackgroundDrawList();
+
+  for (const LineData &l : lines_) {
+    drawList->AddLine(ImVec2(l.p1.x, l.p1.y), ImVec2(l.p2.x, l.p2.y),
+                      ImColor(l.color.r, l.color.g, l.color.b, l.color.a));
+  }
+
+  ImGui::End();
 }
 } // namespace Rodan::Debug

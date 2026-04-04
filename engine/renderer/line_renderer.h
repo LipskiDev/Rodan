@@ -42,4 +42,20 @@ private:
 
   Velos::u64 vertexBufferSize_ = 0;
 };
+
+class LineRenderer2D {
+public:
+  void clear() { lines_.clear(); }
+  void line(const vec2 &p1, const vec2 &p2, const vec4 &c) {
+    lines_.push_back({.p1 = p1, .p2 = p2, .color = c});
+  }
+  void render(const char *nameImGuiWindow);
+
+private:
+  struct LineData {
+    vec2 p1, p2;
+    vec4 color;
+  };
+  std::vector<LineData> lines_;
+};
 }; // namespace Rodan::Debug
