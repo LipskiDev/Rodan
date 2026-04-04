@@ -10,12 +10,15 @@
 #include "core/window.h"
 #include "graphics/bitmap.h"
 #include "imgui.h"
+#include "implot.h"
 #include "platform/glfw/glfw_window.h"
+#include "renderer/graph_renderer.h"
 #include "renderer/line_renderer.h"
 #include "scene/first_person_camera.h"
 #include "ui/imgui_input_bridge.h"
 #include "ui/imgui_renderer.h"
 
+#include <algorithm>
 #include <chrono>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -71,6 +74,7 @@ void Application::Run() {
       .height = static_cast<Velos::u32>(window->GetFramebufferHeight()),
       .format = Format::BGRA8_UNORM,
       .bufferCount = 2,
+      .vsync = false,
       .debugName = "Main Swapchain",
   });
 
@@ -284,6 +288,7 @@ void Application::Run() {
 
   IMGUI_CHECKVERSION();
   ImGui::CreateContext();
+  ImPlot::CreateContext();
 
   ImGuiIO &io = ImGui::GetIO();
   io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
@@ -305,13 +310,15 @@ void Application::Run() {
   float deltaSeconds = 0.0f;
   double timeStamp = glfwGetTime();
 
-  FramePerSecondCounter fpsCounter(0.5f);
+  FramePerSecondCounter fpsCounter(0.05f);
 
   FirstPersonCamera camera;
   std::unique_ptr<Debug::LineRenderer3D> line3d =
       make_unique<Debug::LineRenderer3D>(device);
   std::unique_ptr<Debug::LineRenderer2D> line2d =
       make_unique<Debug::LineRenderer2D>();
+  std::unique_ptr<Debug::GraphRenderer> graphRenderer =
+      make_unique<Debug::GraphRenderer>("fps graph", 2048);
 
   while (!window->ShouldClose()) {
     fpsCounter.tick(deltaSeconds);
@@ -391,8 +398,11 @@ void Application::Run() {
     line2d->line({100, 400}, {200, 400}, glm::vec4(0, 1, 0, 1));
     line2d->line({200, 400}, {200, 300}, glm::vec4(0, 0, 1, 1));
     line2d->line({200, 300}, {100, 300}, glm::vec4(1, 1, 0, 1));
-    line2d->render("##plane");
+    line2d->render("quad");
     ImGui::End();
+
+    graphRenderer->renderGraph(0, dims.height * 0.8f, dims.width,
+                               dims.height * 0.2f);
 
     ImGui::Render();
 
@@ -559,6 +569,7 @@ void Application::Run() {
 
     device->SubmitAndPresent(frame.commandList, swapchain);
     line3d->clear();
+    graphRenderer->addPoint(fpsCounter.getFPS());
   }
 
   device->WaitIdle();
