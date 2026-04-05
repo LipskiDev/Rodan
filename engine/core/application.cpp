@@ -409,6 +409,9 @@ void CreateDuckPipeline(IDevice *device) {
   pipelineDesc.raster.wireframe = false;
   pipelineDesc.blend = {.enable = false};
   pipelineDesc.colorFormat = Format::BGRA8_UNORM;
+  pipelineDesc.depth = {.depthTestEnable = true,
+                        .depthWriteEnable = true,
+                        .depthFormat = Velos::RHI::Format::D32_FLOAT};
   pipelineDesc.debugName = "Duck Pipeline";
 
   g_duck.pipeline = device->CreateGraphicsPipeline(pipelineDesc);
@@ -503,6 +506,8 @@ void Application::Run() {
 void Application::Initialize() {
   InitializeWindowAndDevice();
   CreateSwapchain();
+  CreateDepthResources();
+
   CreateSkyboxResources();
   CreateSkyboxDescriptors();
   CreateSkyboxPipeline();
@@ -538,6 +543,8 @@ void Application::Shutdown() {
   imguiRenderer_.reset();
 
   DestroyDuckResources(device_);
+
+  DestroyDepthResources();
 
   device_->DestroyPipeline(skybox_.pipeline);
   device_->DestroyShader(skybox_.fragmentShader);
@@ -783,10 +790,56 @@ void Application::CreateSkyboxPipeline() {
       .dstAlpha = BlendFactor::OneMinusSrcAlpha,
       .alphaOp = BlendOp::Add,
   };
+  pipelineDesc.depth = {
+      .depthTestEnable = false,
+      .depthWriteEnable = false,
+      .depthFormat = Velos::RHI::Format::D32_FLOAT,
+  };
   pipelineDesc.colorFormat = Format::BGRA8_UNORM;
   pipelineDesc.debugName = "Skybox Pipeline";
 
   skybox_.pipeline = device_->CreateGraphicsPipeline(pipelineDesc);
+}
+
+void Application::CreateDepthResources() {
+  const Extent2D dims = device_->GetSwapchainDimensions();
+  if (dims.width == 0 || dims.height == 0) {
+    return;
+  }
+
+  depthImage_ = device_->CreateImage({
+      .width = dims.width,
+      .height = dims.height,
+      .depth = 1,
+      .mipLevels = 1,
+      .arrayLayers = 1,
+      .format = depthFormat_,
+      .usage = ImageUsage::DepthStencil,
+      .debugName = "Main Depth Image",
+  });
+
+  depthImageView_ = device_->CreateImageView({
+      .image = depthImage_,
+      .format = depthFormat_,
+      .aspect = ImageAspect::Depth,
+      .baseMipLevel = 0,
+      .mipLevelCount = 1,
+      .baseArrayLayer = 0,
+      .arrayLayerCount = 1,
+      .debugName = "Main Depth View",
+  });
+}
+
+void Application::DestroyDepthResources() {
+  if (!device_) {
+    return;
+  }
+
+  device_->DestroyImageView(depthImageView_);
+  device_->DestroyImage(depthImage_);
+
+  depthImageView_ = {};
+  depthImage_ = {};
 }
 
 void Application::InitializeImGui() {
@@ -866,6 +919,9 @@ bool Application::HandleResize() {
 
   device_->WaitIdle();
   device_->ResizeSwapchain(swapchain_, fbWidth, fbHeight);
+
+  DestroyDepthResources();
+  CreateDepthResources();
 
   imguiRenderer_->Shutdown();
   imguiRenderer_->Initialize(device_, swapchain_, Format::BGRA8_UNORM,
@@ -999,6 +1055,12 @@ void Application::RenderFrame() {
       .aspect = ImageAspect::Color,
   });
 
+  cmd.Barrier({
+      .image = depthImage_,
+      .newLayout = ImageLayout::DepthAttachment,
+      .aspect = ImageAspect::Depth,
+  });
+
   ColorAttachmentDesc colorAttachment{};
   colorAttachment.view = frame.backbuffer;
   colorAttachment.loadOp = LoadOp::Clear;
@@ -1010,6 +1072,13 @@ void Application::RenderFrame() {
       .a = 1.0f,
   };
 
+  DepthAttachmentDesc depthAttachment{};
+  depthAttachment.view = depthImageView_;
+  depthAttachment.loadOp = LoadOp::Clear;
+  depthAttachment.storeOp = StoreOp::Store;
+  depthAttachment.clearDepth = 1.0f;
+  depthAttachment.clearStencil = 0;
+
   Rect2D renderArea{};
   renderArea.offset = {0, 0};
   renderArea.extent = {dims.width, dims.height};
@@ -1018,7 +1087,7 @@ void Application::RenderFrame() {
   renderingInfo.renderArea = renderArea;
   renderingInfo.colorAttachments = &colorAttachment;
   renderingInfo.colorAttachmentCount = 1;
-  renderingInfo.depthAttachment = nullptr;
+  renderingInfo.depthAttachment = &depthAttachment;
 
   cmd.BeginRendering(renderingInfo);
 

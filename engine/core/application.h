@@ -5,6 +5,7 @@
 #include "../../external/velos/velos/rhi/rhi_resources.h"
 #include "core/fps_counter.h"
 #include "core/types.h"
+#include "rhi/rhi_types.h"
 
 #include <memory>
 
@@ -61,6 +62,9 @@ private:
   void CreateSkyboxResources();
   void CreateSkyboxDescriptors();
   void CreateSkyboxPipeline();
+  void CreateDepthResources();
+
+  void DestroyDepthResources();
 
   void MainLoop();
   void BeginFrameTiming();
@@ -97,6 +101,10 @@ private:
   std::unique_ptr<Debug::LineRenderer3D> line3d_;
   std::unique_ptr<Debug::LineRenderer2D> line2d_;
   std::unique_ptr<Debug::GraphRenderer> graphRenderer_;
+
+  Velos::RHI::ImageHandle depthImage_{};
+  Velos::RHI::ImageViewHandle depthImageView_{};
+  Velos::RHI::Format depthFormat_ = Velos::RHI::Format::D32_FLOAT;
 
   FramePerSecondCounter fpsCounter_{0.005f};
   float currentFps_ = 0.0f;
