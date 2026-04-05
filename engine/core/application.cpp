@@ -31,6 +31,8 @@
 #include <stdexcept>
 #include <vector>
 
+#include <meshoptimizer.h>
+
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
 #define STB_IMAGE_WRITE_IMPLEMENTATION
@@ -61,7 +63,10 @@ struct DuckPushConstants {
 
 struct DuckResources {
   BufferHandle vertexBuffer{};
+  BufferHandle indexBuffer{};
+
   u32 vertexCount = 0;
+  u32 indexCount = 0;
 
   BufferHandle stagingBuffer{};
 
@@ -84,6 +89,11 @@ struct DuckResources {
   bool uploaded = false;
 };
 
+struct DuckMeshData {
+  std::vector<DuckVertex> vertices;
+  std::vector<u32> indices;
+};
+
 DuckResources g_duck{};
 
 std::vector<glm::vec3> CreateSkyboxVertices() {
@@ -99,7 +109,7 @@ std::vector<glm::vec3> CreateSkyboxVertices() {
   };
 }
 
-std::vector<DuckVertex> LoadDuckVertices() {
+DuckMeshData LoadDuckMesh() {
   const aiScene *scene = aiImportFile(
       "assets/meshes/rubber_duck.gltf",
       aiProcess_Triangulate | aiProcess_JoinIdenticalVertices |
@@ -123,8 +133,8 @@ std::vector<DuckVertex> LoadDuckVertices() {
     throw std::runtime_error("rubber_duck.gltf has no valid mesh");
   }
 
-  std::vector<DuckVertex> uniqueVertices;
-  uniqueVertices.reserve(mesh->mNumVertices);
+  std::vector<DuckVertex> vertices;
+  vertices.reserve(mesh->mNumVertices);
 
   for (u32 i = 0; i < mesh->mNumVertices; ++i) {
     const aiVector3D &v = mesh->mVertices[i];
@@ -134,14 +144,15 @@ std::vector<DuckVertex> LoadDuckVertices() {
       t = mesh->mTextureCoords[0][i];
     }
 
-    uniqueVertices.push_back({
-        .position = glm::vec3(v.x, v.y, v.z),
-        .uv = glm::vec2(t.x, t.y),
-    });
+    DuckVertex vert{};
+    vert.position = glm::vec3(v.x, v.y, v.z);
+    vert.uv = glm::vec2(t.x, t.y);
+
+    vertices.push_back(vert);
   }
 
-  std::vector<DuckVertex> expandedVertices;
-  expandedVertices.reserve(mesh->mNumFaces * 3);
+  std::vector<u32> indices;
+  indices.reserve(mesh->mNumFaces * 3);
 
   for (u32 i = 0; i < mesh->mNumFaces; ++i) {
     const aiFace &face = mesh->mFaces[i];
@@ -149,27 +160,77 @@ std::vector<DuckVertex> LoadDuckVertices() {
       continue;
     }
 
-    expandedVertices.push_back(uniqueVertices[face.mIndices[0]]);
-    expandedVertices.push_back(uniqueVertices[face.mIndices[1]]);
-    expandedVertices.push_back(uniqueVertices[face.mIndices[2]]);
+    indices.push_back(static_cast<u32>(face.mIndices[0]));
+    indices.push_back(static_cast<u32>(face.mIndices[1]));
+    indices.push_back(static_cast<u32>(face.mIndices[2]));
   }
 
   aiReleaseImport(scene);
-  return expandedVertices;
+
+  if (vertices.empty() || indices.empty()) {
+    throw std::runtime_error(
+        "rubber_duck.gltf produced empty vertex/index data");
+  }
+
+  // Build remap table
+  std::vector<u32> remap(indices.size());
+  const size_t remappedVertexCount = meshopt_generateVertexRemap(
+      remap.data(), indices.data(), indices.size(), vertices.data(),
+      vertices.size(), sizeof(DuckVertex));
+
+  std::vector<DuckVertex> optimizedVertices(remappedVertexCount);
+  std::vector<u32> optimizedIndices(indices.size());
+
+  meshopt_remapVertexBuffer(optimizedVertices.data(), vertices.data(),
+                            vertices.size(), sizeof(DuckVertex), remap.data());
+
+  meshopt_remapIndexBuffer(optimizedIndices.data(), indices.data(),
+                           indices.size(), remap.data());
+
+  // Optimize triangle order for post-transform vertex cache
+  meshopt_optimizeVertexCache(optimizedIndices.data(), optimizedIndices.data(),
+                              optimizedIndices.size(),
+                              optimizedVertices.size());
+
+  // Optimize vertex fetch
+  meshopt_optimizeVertexFetch(optimizedVertices.data(), optimizedIndices.data(),
+                              optimizedIndices.size(), optimizedVertices.data(),
+                              optimizedVertices.size(), sizeof(DuckVertex));
+
+  std::cout << "[Duck] Imported vertices: " << vertices.size()
+            << ", indices: " << indices.size() << "\n";
+
+  std::cout << "[Duck] Optimized vertices: " << optimizedVertices.size()
+            << ", indices: " << optimizedIndices.size() << "\n";
+
+  return {
+      .vertices = std::move(optimizedVertices),
+      .indices = std::move(optimizedIndices),
+  };
 }
 
 void CreateDuckResources(IDevice *device) {
   std::cout << "[Duck] Loading mesh and texture\n";
 
-  const std::vector<DuckVertex> vertices = LoadDuckVertices();
+  const DuckMeshData mesh = LoadDuckMesh();
 
-  g_duck.vertexCount = static_cast<u32>(vertices.size());
+  g_duck.vertexCount = static_cast<u32>(mesh.vertices.size());
+  g_duck.indexCount = static_cast<u32>(mesh.indices.size());
+
   g_duck.vertexBuffer = device->CreateBuffer({
-      .size = static_cast<u64>(vertices.size() * sizeof(DuckVertex)),
+      .size = static_cast<u64>(mesh.vertices.size() * sizeof(DuckVertex)),
       .usage = BufferUsage::Vertex,
       .memoryUsage = MemoryUsage::CPUToGPU,
-      .initialData = vertices.data(),
+      .initialData = mesh.vertices.data(),
       .debugName = "Duck Vertex Buffer",
+  });
+
+  g_duck.indexBuffer = device->CreateBuffer({
+      .size = static_cast<u64>(mesh.indices.size() * sizeof(u32)),
+      .usage = BufferUsage::Index,
+      .memoryUsage = MemoryUsage::CPUToGPU,
+      .initialData = mesh.indices.data(),
+      .debugName = "Duck Index Buffer",
   });
 
   stbi_set_flip_vertically_on_load(1);
@@ -397,8 +458,9 @@ void RenderDuck(ICommandList &cmd, FirstPersonCamera *camera) {
   cmd.BindPipeline(g_duck.pipeline);
   cmd.BindDescriptorSet(g_duck.pipeline, 0, g_duck.descriptorSet);
   cmd.BindVertexBuffer(0, g_duck.vertexBuffer, 0);
+  cmd.BindIndexBuffer(g_duck.indexBuffer, IndexType::U32, 0);
   cmd.PushConstants(ShaderStage::Vertex, 0, sizeof(DuckPushConstants), &push);
-  cmd.Draw(g_duck.vertexCount);
+  cmd.DrawIndexed(g_duck.indexCount);
 }
 
 void DestroyDuckResources(IDevice *device) {
@@ -418,6 +480,7 @@ void DestroyDuckResources(IDevice *device) {
   device->DestroyImage(g_duck.image);
 
   device->DestroyBuffer(g_duck.stagingBuffer);
+  device->DestroyBuffer(g_duck.indexBuffer);
   device->DestroyBuffer(g_duck.vertexBuffer);
 
   g_duck = {};
