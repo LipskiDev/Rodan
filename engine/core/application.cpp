@@ -19,6 +19,10 @@
 #include "ui/imgui_input_bridge.h"
 #include "ui/imgui_renderer.h"
 
+#include <assimp/cimport.h>
+#include <assimp/postprocess.h>
+#include <assimp/scene.h>
+
 #include <chrono>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -44,6 +48,44 @@ struct SkyboxPushConstants {
   glm::mat4 proj;
 };
 
+struct DuckVertex {
+  glm::vec3 position;
+  glm::vec2 uv;
+};
+
+struct DuckPushConstants {
+  glm::mat4 model;
+  glm::mat4 view;
+  glm::mat4 proj;
+};
+
+struct DuckResources {
+  BufferHandle vertexBuffer{};
+  u32 vertexCount = 0;
+
+  BufferHandle stagingBuffer{};
+
+  ImageHandle image{};
+  ImageViewHandle imageView{};
+  SamplerHandle sampler{};
+
+  DescriptorSetLayoutHandle setLayout{};
+  DescriptorPoolHandle descriptorPool{};
+  DescriptorSetHandle descriptorSet{};
+
+  ShaderHandle vertexShader{};
+  ShaderHandle fragmentShader{};
+  PipelineHandle pipeline{};
+
+  u32 textureWidth = 0;
+  u32 textureHeight = 0;
+
+  glm::mat4 model = glm::mat4(1.0f);
+  bool uploaded = false;
+};
+
+DuckResources g_duck{};
+
 std::vector<glm::vec3> CreateSkyboxVertices() {
   return {
       {-1, -1, -1}, {1, -1, -1}, {1, 1, -1}, {1, 1, -1},  {-1, 1, -1},
@@ -56,6 +98,331 @@ std::vector<glm::vec3> CreateSkyboxVertices() {
       {-1, 1, -1},
   };
 }
+
+std::vector<DuckVertex> LoadDuckVertices() {
+  const aiScene *scene = aiImportFile(
+      "assets/meshes/rubber_duck.gltf",
+      aiProcess_Triangulate | aiProcess_JoinIdenticalVertices |
+          aiProcess_ImproveCacheLocality | aiProcess_PreTransformVertices);
+
+  if (!scene) {
+    const char *err = aiGetErrorString();
+    throw std::runtime_error(
+        std::string("Unable to load assets/meshes/rubber_duck.gltf: ") +
+        (err ? err : "unknown assimp error"));
+  }
+
+  if (!scene->HasMeshes()) {
+    aiReleaseImport(scene);
+    throw std::runtime_error("rubber_duck.gltf loaded, but contains no meshes");
+  }
+
+  const aiMesh *mesh = scene->mMeshes[0];
+  if (!mesh) {
+    aiReleaseImport(scene);
+    throw std::runtime_error("rubber_duck.gltf has no valid mesh");
+  }
+
+  std::vector<DuckVertex> uniqueVertices;
+  uniqueVertices.reserve(mesh->mNumVertices);
+
+  for (u32 i = 0; i < mesh->mNumVertices; ++i) {
+    const aiVector3D &v = mesh->mVertices[i];
+
+    aiVector3D t(0.0f, 0.0f, 0.0f);
+    if (mesh->HasTextureCoords(0)) {
+      t = mesh->mTextureCoords[0][i];
+    }
+
+    uniqueVertices.push_back({
+        .position = glm::vec3(v.x, v.y, v.z),
+        .uv = glm::vec2(t.x, t.y),
+    });
+  }
+
+  std::vector<DuckVertex> expandedVertices;
+  expandedVertices.reserve(mesh->mNumFaces * 3);
+
+  for (u32 i = 0; i < mesh->mNumFaces; ++i) {
+    const aiFace &face = mesh->mFaces[i];
+    if (face.mNumIndices != 3) {
+      continue;
+    }
+
+    expandedVertices.push_back(uniqueVertices[face.mIndices[0]]);
+    expandedVertices.push_back(uniqueVertices[face.mIndices[1]]);
+    expandedVertices.push_back(uniqueVertices[face.mIndices[2]]);
+  }
+
+  aiReleaseImport(scene);
+  return expandedVertices;
+}
+
+void CreateDuckResources(IDevice *device) {
+  std::cout << "[Duck] Loading mesh and texture\n";
+
+  const std::vector<DuckVertex> vertices = LoadDuckVertices();
+
+  g_duck.vertexCount = static_cast<u32>(vertices.size());
+  g_duck.vertexBuffer = device->CreateBuffer({
+      .size = static_cast<u64>(vertices.size() * sizeof(DuckVertex)),
+      .usage = BufferUsage::Vertex,
+      .memoryUsage = MemoryUsage::CPUToGPU,
+      .initialData = vertices.data(),
+      .debugName = "Duck Vertex Buffer",
+  });
+
+  stbi_set_flip_vertically_on_load(1);
+
+  int texW = 0;
+  int texH = 0;
+  int texComp = 0;
+  stbi_uc *pixels = stbi_load("assets/textures/Duck_baseColor.png", &texW,
+                              &texH, &texComp, 4);
+
+  if (!pixels) {
+    throw std::runtime_error(
+        "Failed to load assets/textures/Duck_baseColor.png");
+  }
+
+  g_duck.textureWidth = static_cast<u32>(texW);
+  g_duck.textureHeight = static_cast<u32>(texH);
+
+  const u64 imageSize =
+      static_cast<u64>(g_duck.textureWidth) * g_duck.textureHeight * 4ull;
+
+  g_duck.stagingBuffer = device->CreateBuffer({
+      .size = imageSize,
+      .usage = BufferUsage::TransferSrc,
+      .memoryUsage = MemoryUsage::CPUToGPU,
+      .initialData = pixels,
+      .debugName = "Duck Texture Upload Buffer",
+  });
+
+  stbi_image_free(pixels);
+
+  g_duck.image = device->CreateImage({
+      .width = g_duck.textureWidth,
+      .height = g_duck.textureHeight,
+      .depth = 1,
+      .mipLevels = 1,
+      .arrayLayers = 1,
+      .format = Format::RGBA8_UNORM,
+      .type = ImageType::Image2D,
+      .usage = ImageUsage::TransferDst | ImageUsage::Sampled,
+  });
+
+  g_duck.imageView = device->CreateImageView({
+      .image = g_duck.image,
+      .format = Format::RGBA8_UNORM,
+      .type = ImageViewType::View2D,
+      .aspect = ImageAspect::Color,
+      .baseMipLevel = 0,
+      .mipLevelCount = 1,
+      .baseArrayLayer = 0,
+      .arrayLayerCount = 1,
+      .debugName = "Duck Texture View",
+  });
+
+  g_duck.sampler = device->CreateSampler({
+      .minFilter = Filter::Linear,
+      .magFilter = Filter::Linear,
+      .addressU = SamplerAddressMode::Repeat,
+      .addressV = SamplerAddressMode::Repeat,
+      .addressW = SamplerAddressMode::Repeat,
+      .debugName = "Duck Sampler",
+  });
+
+  g_duck.model = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.5f, 0.0f)) *
+                 glm::scale(glm::mat4(1.0f), glm::vec3(1.0f));
+}
+
+void CreateDuckDescriptors(IDevice *device) {
+  DescriptorBindingDesc bindings[] = {
+      {
+          .binding = 0,
+          .type = DescriptorType::CombinedImageSampler,
+          .count = 1,
+          .visibility = ShaderStage::Fragment,
+      },
+  };
+
+  g_duck.setLayout = device->CreateDescriptorSetLayout({
+      .bindings = bindings,
+      .bindingCount = 1,
+      .debugName = "Duck Descriptor Set Layout",
+  });
+
+  DescriptorPoolSize poolSizes[] = {
+      {
+          .type = DescriptorType::CombinedImageSampler,
+          .count = 1,
+      },
+  };
+
+  g_duck.descriptorPool = device->CreateDescriptorPool({
+      .poolSizes = poolSizes,
+      .poolSizeCount = 1,
+      .maxSets = 1,
+      .debugName = "Duck Descriptor Pool",
+  });
+
+  g_duck.descriptorSet = device->AllocateDescriptorSet(
+      g_duck.descriptorPool, g_duck.setLayout, "Duck Descriptor Set");
+
+  DescriptorImageInfo imageInfo{};
+  imageInfo.sampler = g_duck.sampler;
+  imageInfo.imageView = g_duck.imageView;
+  imageInfo.imageLayout = ImageLayout::ShaderReadOnly;
+
+  device->UpdateDescriptorSet({
+      .dstSet = g_duck.descriptorSet,
+      .binding = 0,
+      .arrayElement = 0,
+      .type = DescriptorType::CombinedImageSampler,
+      .bufferInfo = nullptr,
+      .imageInfo = &imageInfo,
+      .descriptorCount = 1,
+  });
+}
+
+void CreateDuckPipeline(IDevice *device) {
+  auto vertSpv = ShaderCompiler::CompileFile({
+      .path = "assets/shaders/duck.vert",
+      .stage = ShaderStage::Vertex,
+      .entryPoint = "main",
+  });
+
+  auto fragSpv = ShaderCompiler::CompileFile({
+      .path = "assets/shaders/duck.frag",
+      .stage = ShaderStage::Fragment,
+      .entryPoint = "main",
+  });
+
+  g_duck.vertexShader = device->CreateShader({
+      .stage = ShaderStage::Vertex,
+      .bytecode = vertSpv.spirv.data(),
+      .bytecodeSize =
+          static_cast<u64>(vertSpv.spirv.size() * sizeof(std::uint32_t)),
+      .entryPoint = "main",
+      .reflection = vertSpv.reflection,
+      .debugName = "Duck Vertex Shader",
+  });
+
+  g_duck.fragmentShader = device->CreateShader({
+      .stage = ShaderStage::Fragment,
+      .bytecode = fragSpv.spirv.data(),
+      .bytecodeSize =
+          static_cast<u64>(fragSpv.spirv.size() * sizeof(std::uint32_t)),
+      .entryPoint = "main",
+      .reflection = fragSpv.reflection,
+      .debugName = "Duck Fragment Shader",
+  });
+
+  VertexBufferLayoutDesc layout{
+      .stride = sizeof(DuckVertex),
+      .inputRate = VertexInputRate::PerVertex,
+      .attributes = {{
+                         .location = 0,
+                         .format = VertexFormat::Float32x3,
+                         .offset = offsetof(DuckVertex, position),
+                     },
+                     {
+                         .location = 1,
+                         .format = VertexFormat::Float32x2,
+                         .offset = offsetof(DuckVertex, uv),
+                     }},
+  };
+
+  DescriptorSetLayoutHandle setLayouts[] = {g_duck.setLayout};
+
+  GraphicsPipelineDesc pipelineDesc{};
+  pipelineDesc.vertexShader = g_duck.vertexShader;
+  pipelineDesc.fragmentShader = g_duck.fragmentShader;
+  pipelineDesc.vertexLayouts.push_back(layout);
+  pipelineDesc.layout.descriptorSetLayouts = setLayouts;
+  pipelineDesc.layout.descriptorSetLayoutCount = 1;
+  pipelineDesc.topology = PrimitiveTopology::TriangleList;
+  pipelineDesc.raster.cullBackFaces = false;
+  pipelineDesc.raster.frontFaceCCW = true;
+  pipelineDesc.raster.wireframe = false;
+  pipelineDesc.blend = {.enable = false};
+  pipelineDesc.colorFormat = Format::BGRA8_UNORM;
+  pipelineDesc.debugName = "Duck Pipeline";
+
+  g_duck.pipeline = device->CreateGraphicsPipeline(pipelineDesc);
+}
+
+void UploadDuckIfNeeded(ICommandList &cmd) {
+  if (g_duck.uploaded) {
+    return;
+  }
+
+  std::cout << "[Duck] Uploading texture\n";
+
+  cmd.Barrier({
+      .image = g_duck.image,
+      .newLayout = ImageLayout::TransferDst,
+      .aspect = ImageAspect::Color,
+  });
+
+  BufferImageCopyRegion region{};
+  region.bufferOffset = 0;
+  region.bufferRowLength = 0;
+  region.bufferImageHeight = 0;
+  region.mipLevel = 0;
+  region.baseArrayLayer = 0;
+  region.layerCount = 1;
+  region.imageOffset = {0, 0, 0};
+  region.imageExtent = {g_duck.textureWidth, g_duck.textureHeight, 1};
+  region.aspect = ImageAspect::Color;
+
+  cmd.CopyBufferToImage(g_duck.stagingBuffer, g_duck.image, region);
+
+  cmd.Barrier({
+      .image = g_duck.image,
+      .newLayout = ImageLayout::ShaderReadOnly,
+      .aspect = ImageAspect::Color,
+  });
+
+  g_duck.uploaded = true;
+}
+
+void RenderDuck(ICommandList &cmd, FirstPersonCamera *camera) {
+  DuckPushConstants push{};
+  push.model = g_duck.model;
+  push.view = camera->GetView();
+  push.proj = camera->GetProjection();
+
+  cmd.BindPipeline(g_duck.pipeline);
+  cmd.BindDescriptorSet(g_duck.pipeline, 0, g_duck.descriptorSet);
+  cmd.BindVertexBuffer(0, g_duck.vertexBuffer, 0);
+  cmd.PushConstants(ShaderStage::Vertex, 0, sizeof(DuckPushConstants), &push);
+  cmd.Draw(g_duck.vertexCount);
+}
+
+void DestroyDuckResources(IDevice *device) {
+  if (!device) {
+    return;
+  }
+
+  device->DestroyPipeline(g_duck.pipeline);
+  device->DestroyShader(g_duck.fragmentShader);
+  device->DestroyShader(g_duck.vertexShader);
+
+  device->DestroyDescriptorPool(g_duck.descriptorPool);
+  device->DestroyDescriptorSetLayout(g_duck.setLayout);
+
+  device->DestroySampler(g_duck.sampler);
+  device->DestroyImageView(g_duck.imageView);
+  device->DestroyImage(g_duck.image);
+
+  device->DestroyBuffer(g_duck.stagingBuffer);
+  device->DestroyBuffer(g_duck.vertexBuffer);
+
+  g_duck = {};
+}
+
 } // namespace
 
 Application::Application() { std::cout << "[Rodan] Application created\n"; }
@@ -76,6 +443,11 @@ void Application::Initialize() {
   CreateSkyboxResources();
   CreateSkyboxDescriptors();
   CreateSkyboxPipeline();
+
+  CreateDuckResources(device_);
+  CreateDuckDescriptors(device_);
+  CreateDuckPipeline(device_);
+
   InitializeImGui();
   InitializeDebugTools();
 
@@ -101,6 +473,8 @@ void Application::Shutdown() {
   graphRenderer_.reset();
   camera_.reset();
   imguiRenderer_.reset();
+
+  DestroyDuckResources(device_);
 
   device_->DestroyPipeline(skybox_.pipeline);
   device_->DestroyShader(skybox_.fragmentShader);
@@ -554,6 +928,7 @@ void Application::RenderFrame() {
   cmd.Begin();
 
   UploadSkyboxIfNeeded(cmd);
+  UploadDuckIfNeeded(cmd);
 
   cmd.Barrier({
       .image = frame.backbufferImage,
@@ -599,6 +974,7 @@ void Application::RenderFrame() {
   });
 
   RenderSkybox(cmd);
+  RenderDuck(cmd, camera_.get());
   RenderDebug(cmd);
   RenderImGui(cmd);
 

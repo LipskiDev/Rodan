@@ -60,7 +60,7 @@ void FirstPersonCamera::OnKeyboard(InputEvent input) {
     movement_.right = pressed;
   } else if (input.key.key == Key::Space) {
     movement_.up = pressed;
-  } else if (input.key.key == Key::LeftShift) {
+  } else if (input.key.key == Key::LeftCtrl) {
     movement_.down = pressed;
   }
 }
