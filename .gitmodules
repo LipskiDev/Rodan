@@ -4,3 +4,9 @@
 [submodule "external/implot"]
 	path = external/implot
 	url = https://github.com/epezent/implot.git
+[submodule "assimp"]
+	path = external/assimp
+	url = https://github.com/assimp/assimp.git
+[submodule "external/tinygltf"]
+	path = external/tinygltf
+	url = https://github.com/syoyo/tinygltf.git
