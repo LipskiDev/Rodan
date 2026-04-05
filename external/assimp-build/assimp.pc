@@ -1,0 +1,9 @@
+libdir=/home/lipski/dev/Rodan/external/assimp-install/lib
+includedir=/home/lipski/dev/Rodan/external/assimp-install/include
+
+Name: Assimp
+Description: Import various well-known 3D model formats in an uniform manner.
+Version: 6.0.5
+Libs: -L${libdir} -lassimp
+Libs.private: -lstdc++ -loptimized;/usr/lib/libz.so;debug;/usr/lib/libz.so
+Cflags: -I${includedir}

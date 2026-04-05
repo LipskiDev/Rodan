@@ -1,0 +1,8 @@
+{
+	"InstallScripts" : 
+	[
+		"/home/lipski/dev/Rodan/external/assimp-build/cmake_install.cmake",
+		"/home/lipski/dev/Rodan/external/assimp-build/code/cmake_install.cmake"
+	],
+	"Parallel" : false
+}

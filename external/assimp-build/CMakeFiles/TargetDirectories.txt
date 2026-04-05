@@ -1,0 +1,14 @@
+/home/lipski/dev/Rodan/external/assimp-build/CMakeFiles/uninstall.dir
+/home/lipski/dev/Rodan/external/assimp-build/CMakeFiles/edit_cache.dir
+/home/lipski/dev/Rodan/external/assimp-build/CMakeFiles/rebuild_cache.dir
+/home/lipski/dev/Rodan/external/assimp-build/CMakeFiles/list_install_components.dir
+/home/lipski/dev/Rodan/external/assimp-build/CMakeFiles/install.dir
+/home/lipski/dev/Rodan/external/assimp-build/CMakeFiles/install/local.dir
+/home/lipski/dev/Rodan/external/assimp-build/CMakeFiles/install/strip.dir
+/home/lipski/dev/Rodan/external/assimp-build/code/CMakeFiles/assimp.dir
+/home/lipski/dev/Rodan/external/assimp-build/code/CMakeFiles/edit_cache.dir
+/home/lipski/dev/Rodan/external/assimp-build/code/CMakeFiles/rebuild_cache.dir
+/home/lipski/dev/Rodan/external/assimp-build/code/CMakeFiles/list_install_components.dir
+/home/lipski/dev/Rodan/external/assimp-build/code/CMakeFiles/install.dir
+/home/lipski/dev/Rodan/external/assimp-build/code/CMakeFiles/install/local.dir
+/home/lipski/dev/Rodan/external/assimp-build/code/CMakeFiles/install/strip.dir
