@@ -47,7 +47,8 @@ project "Rodan"
 		"external/implot",
 		"external/assimp-install/include",
 		"external/assimp/include",
-		"external/meshoptimizer/src"
+		"external/meshoptimizer/src",
+    "external/tinygltf"
 	}
 
 	libdirs
@@ -125,7 +126,8 @@ project "Runtime"
 		"external/implot",
 		"external/assimp-install/include",
 		"external/assimp/include",
-		"external/meshoptimizer/src"
+		"external/meshoptimizer/src",
+    "external/tinygltf"
 	}
 
 	libdirs
