@@ -28,6 +28,7 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <iostream>
 #include <memory>
+#include <regex>
 #include <stdexcept>
 #include <vector>
 
@@ -64,9 +65,11 @@ struct DuckPushConstants {
 struct DuckResources {
   BufferHandle vertexBuffer{};
   BufferHandle indexBuffer{};
+  BufferHandle lodIndexBuffer{};
 
   u32 vertexCount = 0;
   u32 indexCount = 0;
+  u32 lodIndexCount = 0;
 
   BufferHandle stagingBuffer{};
 
@@ -92,6 +95,7 @@ struct DuckResources {
 struct DuckMeshData {
   std::vector<DuckVertex> vertices;
   std::vector<u32> indices;
+  std::vector<u32> lodIndices;
 };
 
 DuckResources g_duck{};
@@ -192,10 +196,33 @@ DuckMeshData LoadDuckMesh() {
                               optimizedIndices.size(),
                               optimizedVertices.size());
 
+  meshopt_optimizeOverdraw(
+      optimizedIndices.data(), optimizedIndices.data(), optimizedIndices.size(),
+      reinterpret_cast<const float *>(&optimizedVertices[0].position),
+      optimizedVertices.size(), sizeof(DuckVertex), 1.05f);
+
   // Optimize vertex fetch
   meshopt_optimizeVertexFetch(optimizedVertices.data(), optimizedIndices.data(),
                               optimizedIndices.size(), optimizedVertices.data(),
                               optimizedVertices.size(), sizeof(DuckVertex));
+
+  std::vector<u32> indicesLod;
+  {
+    const float threshold = 0.2f;
+    const size_t targetIndexCount =
+        static_cast<size_t>(optimizedIndices.size() * threshold);
+    const float targetError = 1e-2f;
+
+    indicesLod.resize(optimizedIndices.size());
+
+    const size_t lodIndexCount = meshopt_simplify(
+        indicesLod.data(), optimizedIndices.data(), optimizedIndices.size(),
+        reinterpret_cast<const float *>(&optimizedVertices.data()->position),
+        optimizedVertices.size(), sizeof(DuckVertex), targetIndexCount,
+        targetError);
+
+    indicesLod.resize(lodIndexCount);
+  }
 
   std::cout << "[Duck] Imported vertices: " << vertices.size()
             << ", indices: " << indices.size() << "\n";
@@ -206,6 +233,7 @@ DuckMeshData LoadDuckMesh() {
   return {
       .vertices = std::move(optimizedVertices),
       .indices = std::move(optimizedIndices),
+      .lodIndices = std::move(indicesLod),
   };
 }
 
@@ -216,6 +244,7 @@ void CreateDuckResources(IDevice *device) {
 
   g_duck.vertexCount = static_cast<u32>(mesh.vertices.size());
   g_duck.indexCount = static_cast<u32>(mesh.indices.size());
+  g_duck.lodIndexCount = static_cast<u32>(mesh.lodIndices.size());
 
   g_duck.vertexBuffer = device->CreateBuffer({
       .size = static_cast<u64>(mesh.vertices.size() * sizeof(DuckVertex)),
@@ -231,6 +260,14 @@ void CreateDuckResources(IDevice *device) {
       .memoryUsage = MemoryUsage::CPUToGPU,
       .initialData = mesh.indices.data(),
       .debugName = "Duck Index Buffer",
+  });
+
+  g_duck.lodIndexBuffer = device->CreateBuffer({
+      .size = static_cast<u64>(mesh.lodIndices.size() * sizeof(u32)),
+      .usage = BufferUsage::Index,
+      .memoryUsage = MemoryUsage::CPUToGPU,
+      .initialData = mesh.lodIndices.data(),
+      .debugName = "Duck LOD Index Buffer",
   });
 
   stbi_set_flip_vertically_on_load(1);
@@ -406,7 +443,7 @@ void CreateDuckPipeline(IDevice *device) {
   pipelineDesc.topology = PrimitiveTopology::TriangleList;
   pipelineDesc.raster.cullBackFaces = false;
   pipelineDesc.raster.frontFaceCCW = true;
-  pipelineDesc.raster.wireframe = false;
+  pipelineDesc.raster.wireframe = true;
   pipelineDesc.blend = {.enable = false};
   pipelineDesc.colorFormat = Format::BGRA8_UNORM;
   pipelineDesc.depth = {.depthTestEnable = true,
@@ -452,18 +489,20 @@ void UploadDuckIfNeeded(ICommandList &cmd) {
   g_duck.uploaded = true;
 }
 
-void RenderDuck(ICommandList &cmd, FirstPersonCamera *camera) {
+void RenderDuckInstance(ICommandList &cmd, FirstPersonCamera *camera,
+                        const glm::mat4 &model, BufferHandle indexBuffer,
+                        u32 indexCount) {
   DuckPushConstants push{};
-  push.model = g_duck.model;
+  push.model = model;
   push.view = camera->GetView();
   push.proj = camera->GetProjection();
 
   cmd.BindPipeline(g_duck.pipeline);
   cmd.BindDescriptorSet(g_duck.pipeline, 0, g_duck.descriptorSet);
   cmd.BindVertexBuffer(0, g_duck.vertexBuffer, 0);
-  cmd.BindIndexBuffer(g_duck.indexBuffer, IndexType::U32, 0);
+  cmd.BindIndexBuffer(indexBuffer, IndexType::U32, 0);
   cmd.PushConstants(ShaderStage::Vertex, 0, sizeof(DuckPushConstants), &push);
-  cmd.DrawIndexed(g_duck.indexCount);
+  cmd.DrawIndexed(indexCount);
 }
 
 void DestroyDuckResources(IDevice *device) {
@@ -482,6 +521,7 @@ void DestroyDuckResources(IDevice *device) {
   device->DestroyImageView(g_duck.imageView);
   device->DestroyImage(g_duck.image);
 
+  device->DestroyBuffer(g_duck.lodIndexBuffer);
   device->DestroyBuffer(g_duck.stagingBuffer);
   device->DestroyBuffer(g_duck.indexBuffer);
   device->DestroyBuffer(g_duck.vertexBuffer);
@@ -520,6 +560,7 @@ void Application::Initialize() {
   InitializeDebugTools();
 
   timeStamp_ = glfwGetTime();
+  fpsCounter_.printFPS_ = false;
 }
 
 void Application::Shutdown() {
@@ -855,7 +896,7 @@ void Application::InitializeImGui() {
 
   imguiRenderer_ = make_unique<ImGuiRenderer>();
   imguiRenderer_->Initialize(device_, swapchain_, Format::BGRA8_UNORM,
-                             Format::Undefined);
+                             Format::D32_FLOAT);
 }
 
 void Application::InitializeDebugTools() {
@@ -925,7 +966,7 @@ bool Application::HandleResize() {
 
   imguiRenderer_->Shutdown();
   imguiRenderer_->Initialize(device_, swapchain_, Format::BGRA8_UNORM,
-                             Format::Undefined);
+                             Format::D32_FLOAT);
 
   return true;
 }
@@ -1106,7 +1147,23 @@ void Application::RenderFrame() {
   });
 
   RenderSkybox(cmd);
-  RenderDuck(cmd, camera_.get());
+
+  const glm::mat4 leftModel =
+      glm::translate(glm::mat4(1.0f), glm::vec3(-1.5f, 0.5f, 0.0f)) *
+      glm::scale(glm::mat4(1.0f), glm::vec3(1.0f));
+
+  const glm::mat4 rightModel =
+      glm::translate(glm::mat4(1.0f), glm::vec3(1.5f, 0.5f, 0.0f)) *
+      glm::scale(glm::mat4(1.0f), glm::vec3(1.0f));
+
+  // Left: original mesh
+  RenderDuckInstance(cmd, camera_.get(), leftModel, g_duck.indexBuffer,
+                     g_duck.indexCount);
+
+  // Right: simplified LOD mesh
+  RenderDuckInstance(cmd, camera_.get(), rightModel, g_duck.lodIndexBuffer,
+                     g_duck.lodIndexCount);
+
   RenderDebug(cmd);
   RenderImGui(cmd);
 
