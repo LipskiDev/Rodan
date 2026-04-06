@@ -51,7 +51,7 @@ private:
   Velos::RHI::ImageViewHandle depthImageView_{};
 
   std::unique_ptr<IScene> currentScene_;
-  SceneType currentSceneType_ = SceneType::Duck;
+  SceneType currentSceneType_ = SceneType::MillionCubes;
 
   Velos::RHI::Format colorFormat_ = Velos::RHI::Format::BGRA8_UNORM;
   Velos::RHI::Format depthFormat_ = Velos::RHI::Format::D32_FLOAT;

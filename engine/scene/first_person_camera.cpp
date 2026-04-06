@@ -6,7 +6,7 @@
 namespace Rodan {
 
 void FirstPersonCamera::Update(float dt) {
-  const float moveSpeed = 5.0f;
+  const float moveSpeed = 500.0f;
 
   glm::vec3 forward = GetForward();
   forward.y = 0.0f;

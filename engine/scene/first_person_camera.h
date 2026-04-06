@@ -23,7 +23,7 @@ private:
   float fovDegrees_ = 60.0f;
   float aspect_ = 16.0f / 9.0f;
   float nearPlane_ = 0.1f;
-  float farPlane_ = 100.0f;
+  float farPlane_ = 5000.0f;
 
   float mouseSensitivity_ = 0.5f;
 
