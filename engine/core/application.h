@@ -1,11 +1,9 @@
 #pragma once
 
-#include "../../external/velos/velos/rhi/rhi_device.h"
-#include "../../external/velos/velos/rhi/rhi_pipeline.h"
-#include "../../external/velos/velos/rhi/rhi_resources.h"
-#include "core/fps_counter.h"
-#include "core/types.h"
+#include "rhi/rhi_device.h"
 #include "rhi/rhi_types.h"
+#include "samples/scene.h"
+#include "ui/imgui_renderer.h"
 
 #include <memory>
 
@@ -13,15 +11,6 @@ namespace Rodan {
 
 class InputSystem;
 class GlfwWindow;
-class FirstPersonCamera;
-
-namespace Debug {
-class LineRenderer3D;
-class LineRenderer2D;
-class GraphRenderer;
-} // namespace Debug
-
-class ImGuiRenderer;
 
 class Application {
 public:
@@ -31,94 +20,50 @@ public:
   void Run();
 
 private:
-  struct SkyboxResources {
-    Velos::RHI::BufferHandle vertexBuffer{};
-    Velos::RHI::BufferHandle stagingBuffer{};
-    Velos::RHI::ImageHandle image{};
-    Velos::RHI::ImageViewHandle imageView{};
-    Velos::RHI::SamplerHandle sampler{};
-
-    Velos::RHI::DescriptorSetLayoutHandle setLayout{};
-    Velos::RHI::DescriptorPoolHandle descriptorPool{};
-    Velos::RHI::DescriptorSetHandle descriptorSet{};
-
-    Velos::RHI::ShaderHandle vertexShader{};
-    Velos::RHI::ShaderHandle fragmentShader{};
-    Velos::RHI::PipelineHandle pipeline{};
-
-    Velos::u32 faceSize = 0;
-    bool uploaded = false;
-  };
-
-private:
   void Initialize();
   void Shutdown();
+  void MainLoop();
 
   void InitializeWindowAndDevice();
-  void InitializeImGui();
-  void InitializeDebugTools();
-
   void CreateSwapchain();
-  void CreateSkyboxResources();
-  void CreateSkyboxDescriptors();
-  void CreateSkyboxPipeline();
   void CreateDepthResources();
-
   void DestroyDepthResources();
 
-  void MainLoop();
-  void BeginFrameTiming();
   bool HandleResize();
-  void ProcessInputEvents();
   void Update(float deltaSeconds);
   void RenderFrame();
 
+  void InitializeImGui();
   void BeginImGuiFrame(float deltaTime);
-  void BuildImGui();
-  void RenderScene(Velos::RHI::ICommandList &cmd,
-                   const Velos::RHI::Extent2D &dims,
-                   const Velos::RHI::FrameBeginResult &frame);
-  void RenderSkybox(Velos::RHI::ICommandList &cmd);
-  void RenderDebug(Velos::RHI::ICommandList &cmd);
+  void BuildApplicationImGui();
   void RenderImGui(Velos::RHI::ICommandList &cmd);
 
-  void UploadSkyboxIfNeeded(Velos::RHI::ICommandList &cmd);
-  void LoadSkyboxTextureData();
+  void CreateScene(SceneType type);
+  void SwitchScene(SceneType type);
 
 private:
-  Velos::u32 windowWidth_ = 1280;
-  Velos::u32 windowHeight_ = 720;
-
-  std::unique_ptr<InputSystem> input_;
   std::unique_ptr<GlfwWindow> window_;
+  std::unique_ptr<InputSystem> input_;
 
   Velos::RHI::IDevice *device_ = nullptr;
   Velos::RHI::SwapchainHandle swapchain_{};
-
-  std::unique_ptr<ImGuiRenderer> imguiRenderer_;
-
-  std::unique_ptr<FirstPersonCamera> camera_;
-  std::unique_ptr<Debug::LineRenderer3D> line3d_;
-  std::unique_ptr<Debug::LineRenderer2D> line2d_;
-  std::unique_ptr<Debug::GraphRenderer> graphRenderer_;
-
   Velos::RHI::ImageHandle depthImage_{};
   Velos::RHI::ImageViewHandle depthImageView_{};
+
+  std::unique_ptr<IScene> currentScene_;
+  SceneType currentSceneType_ = SceneType::Duck;
+
+  Velos::RHI::Format colorFormat_ = Velos::RHI::Format::BGRA8_UNORM;
   Velos::RHI::Format depthFormat_ = Velos::RHI::Format::D32_FLOAT;
 
-  FramePerSecondCounter fpsCounter_{0.005f};
-  float currentFps_ = 0.0f;
+  int windowWidth_ = 1600;
+  int windowHeight_ = 900;
 
-  SkyboxResources skybox_;
-
-  bool showDemoWindow_ = true;
-  bool firstMouse_ = true;
-  float lastMouseX_ = 0.0f;
-  float lastMouseY_ = 0.0f;
-
-  float deltaSeconds_ = 0.0f;
-  float time_ = 0.0f;
   double timeStamp_ = 0.0;
+  float deltaSeconds_ = 0.0f;
+
+  std::unique_ptr<ImGuiRenderer> imguiRenderer_;
+  bool showDemoWindow_ = false;
 };
 
 } // namespace Rodan
