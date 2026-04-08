@@ -10,7 +10,7 @@
 
 namespace Rodan {
 
-enum class SceneType { Duck, MillionCubes };
+enum class SceneType { Duck, MillionCubes, Sponza };
 
 struct SceneUpdateContext {
   InputSystem *input = nullptr;

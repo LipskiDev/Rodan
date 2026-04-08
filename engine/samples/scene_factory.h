@@ -1,5 +1,6 @@
 #include "samples/scenes/duck_scene.h"
 #include "samples/scenes/million_cubes.h"
+#include "samples/scenes/sponza_scene.h"
 #include <memory>
 #include <samples/scene.h>
 
@@ -11,6 +12,8 @@ inline std::unique_ptr<IScene> CreateSceneByType(SceneType type) {
     return std::make_unique<DuckScene>();
   case SceneType::MillionCubes:
     return std::make_unique<MillionCubesScene>();
+  case SceneType::Sponza:
+    return std::make_unique<SponzaScene>();
   default:
     return nullptr;
   }
