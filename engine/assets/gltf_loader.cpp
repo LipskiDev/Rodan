@@ -1,4 +1,6 @@
 #include "assets/gltf_loader.h"
+#include "assets/imported_scene.h"
+#include <iostream>
 
 #define TINYGLTF_IMPLEMENTATION
 #define STB_IMAGE_IMPLEMENTATION
@@ -212,6 +214,19 @@ ImportedMesh LoadMesh(const tinygltf::Model &model,
   return out;
 }
 
+ImportedMaterial LoadMaterial(const tinygltf::Model &model,
+                              const tinygltf::Material &material) {
+  ImportedMaterial out;
+  const auto &baseColor = material.pbrMetallicRoughness.baseColorFactor;
+  out.baseColorFactor =
+      glm::vec4{baseColor[0], baseColor[1], baseColor[2], baseColor[3]};
+  out.metallicFactor = material.pbrMetallicRoughness.metallicFactor;
+  out.roughnessFactor = material.pbrMetallicRoughness.roughnessFactor;
+  out.doubleSided = material.doubleSided;
+
+  return out;
+}
+
 } // namespace
 
 ImportedScene GltfLoader::Load(const std::string &path) {
@@ -234,6 +249,7 @@ ImportedScene GltfLoader::Load(const std::string &path) {
 
   if (!err.empty()) {
     // replace with your logger
+    std::cout << err.c_str() << std::endl;
   }
 
   if (!ok) {
@@ -245,6 +261,11 @@ ImportedScene GltfLoader::Load(const std::string &path) {
   scene.meshes.reserve(model.meshes.size());
   for (const tinygltf::Mesh &mesh : model.meshes) {
     scene.meshes.push_back(LoadMesh(model, mesh));
+  }
+
+  scene.material.reserve(model.materials.size());
+  for (const tinygltf::Material &material : model.materials) {
+    scene.material.push_back(LoadMaterial(model, material));
   }
 
   scene.nodes.reserve(model.nodes.size());

@@ -16,6 +16,13 @@ struct ImportedPrimitive {
   int materialIndex = -1;
 };
 
+struct ImportedMaterial {
+  glm::vec4 baseColorFactor{1.0f};
+  float metallicFactor = 1.0f;
+  float roughnessFactor = 1.0f;
+  bool doubleSided = false;
+};
+
 struct ImportedMesh {
   std::string name;
   std::vector<ImportedPrimitive> primitives;
@@ -31,6 +38,7 @@ struct ImportedScene {
   std::vector<ImportedMesh> meshes;
   std::vector<ImportedNode> nodes;
   std::vector<int> rootNodes;
+  std::vector<ImportedMaterial> material;
 };
 
 } // namespace Rodan

@@ -1,4 +1,5 @@
 #include "samples/scenes/duck_scene.h"
+#include "samples/scenes/metal_roughness_spheres_no_tex_scene.h"
 #include "samples/scenes/million_cubes.h"
 #include "samples/scenes/sponza_scene.h"
 #include <memory>
@@ -14,6 +15,8 @@ inline std::unique_ptr<IScene> CreateSceneByType(SceneType type) {
     return std::make_unique<MillionCubesScene>();
   case SceneType::Sponza:
     return std::make_unique<SponzaScene>();
+  case SceneType::MetalRoughnessSpheresNoTex:
+    return std::make_unique<MetalRoughnessSpheresNoTexScene>();
   default:
     return nullptr;
   }
