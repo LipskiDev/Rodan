@@ -54,6 +54,7 @@ external/velos/bin-int/
 external/velos/build/
 external/assimp-install/
 external/assimp/build/
+external/assimp-build/
 
 # Generated files
 Makefile
