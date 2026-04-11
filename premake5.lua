@@ -48,7 +48,7 @@ project "Rodan"
 		"external/assimp-install/include",
 		"external/assimp/include",
 		"external/meshoptimizer/src",
-    "external/tinygltf"
+		"external/tinygltf"
 	}
 
 	libdirs
@@ -72,27 +72,34 @@ project "Rodan"
 		pic "On"
 
 	filter "configurations:Debug"
+		prebuildcommands
+		{
+      "bash ../../scripts/build_assimp.sh Debug"
+		}
 		defines
 		{
 			"TRACY_ENABLE"
 		}
-		links
-		{
-			"assimpd"
-		}
+    links 
+    {
+      "assimpd"
+    }
 		runtime "Debug"
 		symbols "On"
 
 	filter "configurations:Release"
-		links
+		prebuildcommands
 		{
-			"assimp"
+      "bash ../../scripts/build_assimp.sh Debug"
 		}
+    links 
+    {
+      "assimp"
+    }
 		runtime "Release"
 		optimize "Speed"
 
 	filter {}
-
 project "Runtime"
 	location "build/Runtime"
 	kind "ConsoleApp"
@@ -127,7 +134,7 @@ project "Runtime"
 		"external/assimp-install/include",
 		"external/assimp/include",
 		"external/meshoptimizer/src",
-    "external/tinygltf"
+		"external/tinygltf"
 	}
 
 	libdirs
@@ -165,31 +172,39 @@ project "Runtime"
 			"Xi",
 			"Xxf86vm",
 			"Xinerama",
-			"Xcursor"
+			"Xcursor",
+      "z"
 		}
 
 	filter "configurations:Debug"
+		prebuildcommands
+		{
+      "bash ../../scripts/build_assimp.sh Debug"
+		}
 		defines
 		{
 			"TRACY_ENABLE"
 		}
-		links
-		{
-			"assimpd"
-		}
+    links
+    {
+      "assimpd"
+    }
 		runtime "Debug"
 		symbols "On"
 
 	filter "configurations:Release"
-		links
+		prebuildcommands
 		{
-			"assimp"
+      "bash ../../scripts/build_assimp.sh Debug"
 		}
+    links
+    {
+      "assimp"
+    }
 		runtime "Release"
 		optimize "Speed"
 
 	filter {}
-
 project "implot"
 	location "build/implot"
 	kind "StaticLib"
