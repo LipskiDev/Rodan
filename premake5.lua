@@ -8,7 +8,7 @@ workspace "Rodan"
 		"Release"
 	}
 
-	multiprocessorcompile "On"
+	buildoptions { "/MP" }
 
 	outputdir = "%{cfg.buildcfg}-%{cfg.system}-%{cfg.architecture}"
 
