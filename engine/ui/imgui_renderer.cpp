@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <stdexcept>
 #include <vector>
+#include <path.h>
 
 namespace VRHI = Velos::RHI;
 
@@ -33,13 +34,13 @@ CreateImGuiPipeline(VRHI::IDevice *device, VRHI::Format colorFormat,
                     VRHI::DescriptorSetLayoutHandle setLayout) {
 
   const auto vsOutput = Velos::ShaderCompiler::CompileFile({
-      .path = "engine/ui/shaders/imgui.vert",
+      .path = Velos::Path::Resolve("engine/ui/shaders/imgui.vert").string(),
       .stage = VRHI::ShaderStage::Vertex,
       .entryPoint = "main",
   });
 
   const auto fsOutput = Velos::ShaderCompiler::CompileFile({
-      .path = "engine/ui/shaders/imgui.frag",
+      .path = Velos::Path::Resolve("engine/ui/shaders/imgui.frag").string(),
       .stage = VRHI::ShaderStage::Fragment,
       .entryPoint = "main",
   });

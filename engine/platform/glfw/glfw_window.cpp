@@ -12,7 +12,12 @@ inline void EnsureGlfwInitialized() {
   static bool initialized = false;
 
   if (!initialized) {
+#ifdef RODAN_PLATFORM_WINDOWS
+
+#endif
+#ifdef RODAN_PLATFORM_LINUX
     glfwInitHint(GLFW_PLATFORM, GLFW_PLATFORM_X11);
+#endif
     if (!glfwInit()) {
       throw std::runtime_error("Failed to initialize GLFW");
     }

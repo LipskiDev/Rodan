@@ -14,6 +14,9 @@ workspace "Rodan"
 
 include "external/velos/premake/embedded.lua"
 
+-- =========================
+-- RODAN
+-- =========================
 project "Rodan"
 	location "build/Rodan"
 	kind "StaticLib"
@@ -36,6 +39,7 @@ project "Rodan"
 	{
 		"engine",
 		"external/velos/velos",
+		"external/velos/velos/core",
 		"external/velos/external/glfw/include",
 		"external/velos/external/glm",
 		"external/velos/external/volk",
@@ -45,15 +49,8 @@ project "Rodan"
 		"external/velos/tools/imgui",
 		"external/velos/external/imgui",
 		"external/implot",
-		"external/assimp-install/include",
-		"external/assimp/include",
 		"external/meshoptimizer/src",
 		"external/tinygltf"
-	}
-
-	libdirs
-	{
-		"external/assimp-install/lib"
 	}
 
 	links
@@ -66,40 +63,80 @@ project "Rodan"
 
 	filter "system:windows"
 		systemversion "latest"
+		defines
+		{
+			"RODAN_PLATFORM_WINDOWS"
+		}
+		includedirs
+		{
+			"external/assimp-install-windows/include"
+		}
+		libdirs
+		{
+			"external/assimp-install-windows/lib"
+		}
 
 	filter "system:linux"
 		systemversion "latest"
 		pic "On"
-
-	filter "configurations:Debug"
-		prebuildcommands
-		{
-      "bash ../../scripts/build_assimp.sh Debug"
-		}
 		defines
 		{
-			"TRACY_ENABLE"
+			"RODAN_PLATFORM_LINUX"
 		}
-    links 
-    {
-      "assimpd"
-    }
+		includedirs
+		{
+			"external/assimp-install/include"
+		}
+		libdirs
+		{
+			"external/assimp-install/lib"
+		}
+
+	-- Debug
+	filter { "system:windows", "configurations:Debug" }
+		prebuildcommands
+		{
+			"call ../../scripts/build_assimp.bat Debug"
+		}
+		defines { "TRACY_ENABLE" }
+		links { "assimp-vc143-mtd" }
 		runtime "Debug"
 		symbols "On"
 
-	filter "configurations:Release"
+	filter { "system:linux", "configurations:Debug" }
 		prebuildcommands
 		{
-      "bash ../../scripts/build_assimp.sh Debug"
+			"bash ../../scripts/build_assimp.sh Debug"
 		}
-    links 
-    {
-      "assimp"
-    }
+		defines { "TRACY_ENABLE" }
+		links { "assimpd" }
+		runtime "Debug"
+		symbols "On"
+
+	-- Release
+	filter { "system:windows", "configurations:Release" }
+		prebuildcommands
+		{
+			"call ../../scripts/build_assimp.bat Release"
+		}
+		links { "assimp-vc143-mt" }
+		runtime "Release"
+		optimize "Speed"
+
+	filter { "system:linux", "configurations:Release" }
+		prebuildcommands
+		{
+			"bash ../../scripts/build_assimp.sh Release"
+		}
+		links { "assimp" }
 		runtime "Release"
 		optimize "Speed"
 
 	filter {}
+
+-- =========================
+-- RUNTIME
+-- =========================
 project "Runtime"
 	location "build/Runtime"
 	kind "ConsoleApp"
@@ -122,6 +159,7 @@ project "Runtime"
 	{
 		"engine",
 		"external/velos/velos",
+		"external/velos/velos/core",
 		"external/velos/external/glfw/include",
 		"external/velos/external/glm",
 		"external/velos/external/volk",
@@ -131,15 +169,8 @@ project "Runtime"
 		"external/velos/tools/imgui",
 		"external/velos/external/imgui",
 		"external/implot",
-		"external/assimp-install/include",
-		"external/assimp/include",
 		"external/meshoptimizer/src",
 		"external/tinygltf"
-	}
-
-	libdirs
-	{
-		"external/assimp-install/lib"
 	}
 
 	links
@@ -153,9 +184,34 @@ project "Runtime"
 
 	filter "system:windows"
 		systemversion "latest"
+		debugdir "%{wks.location}"
+		defines
+		{
+			"RODAN_PLATFORM_WINDOWS"
+		}
+		includedirs
+		{
+			"external/assimp-install-windows/include"
+		}
+		libdirs
+		{
+			"external/assimp-install-windows/lib"
+		}
 
 	filter "system:linux"
 		systemversion "latest"
+		defines
+		{
+			"RODAN_PLATFORM_LINUX"
+		}
+		includedirs
+		{
+			"external/assimp-install/include"
+		}
+		libdirs
+		{
+			"external/assimp-install/lib"
+		}
 		linkoptions
 		{
 			"-Wl,-rpath,'$$ORIGIN/../../../external/assimp-install/lib'"
@@ -173,38 +229,62 @@ project "Runtime"
 			"Xxf86vm",
 			"Xinerama",
 			"Xcursor",
-      "z"
+			"z"
 		}
 
-	filter "configurations:Debug"
+	-- Debug
+	filter { "system:windows", "configurations:Debug" }
 		prebuildcommands
 		{
-      "bash ../../scripts/build_assimp.sh Debug"
+			"call ../../scripts/build_assimp.bat Debug"
 		}
-		defines
+		postbuildcommands
 		{
-			"TRACY_ENABLE"
+			'{COPY} "%{wks.location}/external/assimp-install-windows/bin/assimp-vc143-mtd.dll" "%{cfg.targetdir}"'
 		}
-    links
-    {
-      "assimpd"
-    }
+		defines { "TRACY_ENABLE" }
+		links { "assimp-vc143-mtd" }
 		runtime "Debug"
 		symbols "On"
 
-	filter "configurations:Release"
+	filter { "system:linux", "configurations:Debug" }
 		prebuildcommands
 		{
-      "bash ../../scripts/build_assimp.sh Debug"
+			"bash ../../scripts/build_assimp.sh Debug"
 		}
-    links
-    {
-      "assimp"
-    }
+		defines { "TRACY_ENABLE" }
+		links { "assimpd" }
+		runtime "Debug"
+		symbols "On"
+
+	-- Release
+	filter { "system:windows", "configurations:Release" }
+		prebuildcommands
+		{
+			"call ../../scripts/build_assimp.bat Release"
+		}
+		postbuildcommands
+		{
+			'{COPY} "%{wks.location}/external/assimp-install-windows/bin/assimp-vc143-mt.dll" "%{cfg.targetdir}"'
+		}
+		links { "assimp-vc143-mt" }
+		runtime "Release"
+		optimize "Speed"
+
+	filter { "system:linux", "configurations:Release" }
+		prebuildcommands
+		{
+			"bash ../../scripts/build_assimp.sh Release"
+		}
+		links { "assimp" }
 		runtime "Release"
 		optimize "Speed"
 
 	filter {}
+
+-- =========================
+-- IMPLOT
+-- =========================
 project "implot"
 	location "build/implot"
 	kind "StaticLib"
@@ -234,6 +314,9 @@ project "implot"
 
 	filter {}
 
+-- =========================
+-- MESHOPTIMIZER
+-- =========================
 project "meshoptimizer"
 	location "build/meshoptimizer"
 	kind "StaticLib"

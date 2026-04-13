@@ -3,6 +3,7 @@
 #include <glm/gtc/random.hpp>
 #include <iostream>
 #include <samples/scenes/million_cubes.h>
+#include <path.h>
 
 namespace Rodan {
 
@@ -228,14 +229,14 @@ void MillionCubesScene::CreateDescriptors(Velos::RHI::IDevice *device) {
 
 void MillionCubesScene::CreatePipeline(Velos::RHI::IDevice *device) {
 
-  auto vertSpv = ShaderCompiler::CompileFile({
-      .path = "assets/shaders/cubes.vert",
+    auto vertSpv = ShaderCompiler::CompileFile({
+      .path = Velos::Path::Resolve("assets/shaders/cubes.vert").string(),
       .stage = ShaderStage::Vertex,
       .entryPoint = "main",
   });
 
   auto fragSpv = ShaderCompiler::CompileFile({
-      .path = "assets/shaders/cubes.frag",
+      .path = Velos::Path::Resolve("assets/shaders/cubes.frag").string(),
       .stage = ShaderStage::Fragment,
       .entryPoint = "main",
   });

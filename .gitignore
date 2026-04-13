@@ -48,6 +48,9 @@ bin-int/
 build/
 .cache/
 
+.vs
+*.sln
+
 # Velos submodule build output (in case it leaks up)
 external/velos/bin/
 external/velos/bin-int/
@@ -55,6 +58,9 @@ external/velos/build/
 external/assimp-install/
 external/assimp/build/
 external/assimp-build/
+external/assimp-build/
+external/assimp-build-windows/
+external/assimp-install-windows/
 
 # Generated files
 Makefile

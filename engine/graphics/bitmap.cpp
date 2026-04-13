@@ -1,5 +1,6 @@
 #include "glm/fwd.hpp"
 #include <graphics/bitmap.h>
+#include <numbers>
 
 namespace Rodan::Graphics {
 
@@ -52,8 +53,8 @@ Bitmap convertEquirectangularMapToVerticalCross(const Bitmap &input) {
         const float theta = atan2(P.y, P.x);
         const float phi = atan2(P.z, R);
         //	float point source coordinates
-        const float Uf = float(2.0f * faceSize * (theta + M_PI) / M_PI);
-        const float Vf = float(2.0f * faceSize * (M_PI / 2.0f - phi) / M_PI);
+        const float Uf = float(2.0f * faceSize * (theta + std::numbers::pi_v<float>) / std::numbers::pi_v<float>);
+        const float Vf = float(2.0f * faceSize * (std::numbers::pi_v<float> / 2.0f - phi) / std::numbers::pi_v<float>);
         // 4-samples for bilinear interpolation
         const int U1 = glm::clamp(int(floor(Uf)), 0, clampW);
         const int V1 = glm::clamp(int(floor(Vf)), 0, clampH);
