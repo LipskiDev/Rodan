@@ -1,6 +1,26 @@
+#include <assert.h>
+
+#ifndef assert
+#error direct assert.h still missing assert
+#endif
+
 #include <cassert>
+
+#ifndef assert
+#error cassert still missing assert
+#endif
+
 #include <core/fps_counter.h>
+
+#ifndef assert
+#error assert disappeared after fps_counter.h
+#endif
+
 #include <cstdio>
+
+#ifndef assert
+#error assert disappeared after cstdio
+#endif
 
 namespace Rodan {
 

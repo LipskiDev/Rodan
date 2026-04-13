@@ -6,6 +6,7 @@
 
 #include <glm/gtc/matrix_transform.hpp>
 #include <stdexcept>
+#include <path.h>
 
 namespace Rodan {
 
@@ -139,13 +140,13 @@ void MetalRoughnessSpheresNoTexScene::RenderImGui() {
 
 void MetalRoughnessSpheresNoTexScene::CreatePipeline(IDevice *device) {
   auto vertSpv = ShaderCompiler::CompileFile({
-      .path = "assets/shaders/sponza.vert",
+      .path = Velos::Path::Resolve("assets/shaders/sponza.vert").string().c_str(),
       .stage = ShaderStage::Vertex,
       .entryPoint = "main",
   });
 
   auto fragSpv = ShaderCompiler::CompileFile({
-      .path = "assets/shaders/sponza.frag",
+      .path = Velos::Path::Resolve("assets/shaders/sponza.frag").string().c_str(),
       .stage = ShaderStage::Fragment,
       .entryPoint = "main",
   });
@@ -212,8 +213,8 @@ void MetalRoughnessSpheresNoTexScene::CreatePipeline(IDevice *device) {
 
 void MetalRoughnessSpheresNoTexScene::LoadScene(IDevice *device) {
   importedScene_ =
-      GltfLoader::Load("assets/models/metal-roughness-spheres-no-textures/"
-                       "MetalRoughSpheresNoTextures.glb");
+      GltfLoader::Load(Velos::Path::Resolve("assets/models/metal-roughness-spheres-no-textures/"
+                       "MetalRoughSpheresNoTextures.glb").string());
 
   uploadedMeshes_.clear();
   uploadedMeshes_.reserve(importedScene_.meshes.size());

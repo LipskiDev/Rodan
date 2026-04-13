@@ -12,6 +12,7 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <iostream>
 #include <stdexcept>
+#include <path.h>
 
 namespace Rodan {
 
@@ -135,7 +136,7 @@ void DuckScene::RenderImGui() {
 
 DuckScene::DuckMeshData DuckScene::LoadDuckMesh() const {
   const aiScene *scene = aiImportFile(
-      "assets/meshes/rubber_duck.gltf",
+      Velos::Path::Resolve("assets/meshes/rubber_duck.gltf").string().c_str(),
       aiProcess_Triangulate | aiProcess_JoinIdenticalVertices |
           aiProcess_ImproveCacheLocality | aiProcess_PreTransformVertices);
 
@@ -287,7 +288,7 @@ void DuckScene::CreateResources(IDevice *device) {
   int texW = 0;
   int texH = 0;
   int texComp = 0;
-  stbi_uc *pixels = stbi_load("assets/textures/Duck_baseColor.png", &texW,
+  stbi_uc *pixels = stbi_load(Velos::Path::Resolve("assets/textures/Duck_baseColor.png").string().c_str(), &texW,
                               &texH, &texComp, 4);
 
   if (!pixels) {
@@ -395,13 +396,13 @@ void DuckScene::CreateDescriptors(IDevice *device) {
 
 void DuckScene::CreatePipeline(IDevice *device) {
   auto vertSpv = ShaderCompiler::CompileFile({
-      .path = "assets/shaders/duck.vert",
+      .path = Velos::Path::Resolve("assets/shaders/duck.vert").string(),
       .stage = ShaderStage::Vertex,
       .entryPoint = "main",
   });
 
   auto fragSpv = ShaderCompiler::CompileFile({
-      .path = "assets/shaders/duck.frag",
+      .path = Velos::Path::Resolve("assets/shaders/duck.frag").string(),
       .stage = ShaderStage::Fragment,
       .entryPoint = "main",
   });
