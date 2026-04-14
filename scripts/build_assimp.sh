@@ -22,6 +22,7 @@ cmake -S "$ASSIMP_SRC" \
       -B "$ASSIMP_BUILD/$BUILD_TYPE" \
       -DCMAKE_BUILD_TYPE="$BUILD_TYPE" \
       -DCMAKE_INSTALL_PREFIX="$ASSIMP_INSTALL" \
+      -DCMAKE_INSTALL_MESSAGE=NEVER \
       -DASSIMP_BUILD_TESTS=OFF \
       -DASSIMP_BUILD_ASSIMP_TOOLS=OFF \
       -DASSIMP_BUILD_SAMPLES=OFF \
@@ -29,7 +30,7 @@ cmake -S "$ASSIMP_SRC" \
       -DBUILD_SHARED_LIBS=OFF
 
 cmake --build "$ASSIMP_BUILD/$BUILD_TYPE" -j"$(nproc)"
-cmake --install "$ASSIMP_BUILD/$BUILD_TYPE"
+cmake --install "$ASSIMP_BUILD/$BUILD_TYPE" 
 
 echo "==> Assimp build complete"
 echo "    Headers: $ASSIMP_INSTALL/include"

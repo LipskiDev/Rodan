@@ -30,7 +30,10 @@ cmake -S "%ASSIMP_SRC%" -B "%ASSIMP_BUILD%" ^
 
 if errorlevel 1 exit /b 1
 
-cmake --build "%ASSIMP_BUILD%" --config %CONFIG% --target INSTALL
+cmake --build "%ASSIMP_BUILD%" --config %CONFIG%
+if errorlevel 1 exit /b 1
+
+cmake --install "%ASSIMP_BUILD%" --config %CONFIG% --log-level=ERROR
 if errorlevel 1 exit /b 1
 
 endlocal
