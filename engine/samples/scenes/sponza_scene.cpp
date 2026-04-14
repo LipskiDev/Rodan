@@ -5,8 +5,8 @@
 #include "shader/shader_compiler.h"
 
 #include <glm/gtc/matrix_transform.hpp>
-#include <stdexcept>
 #include <path.h>
+#include <stdexcept>
 
 namespace Rodan {
 
@@ -34,6 +34,11 @@ void SponzaScene::Shutdown(IDevice *device) {
   instances_.clear();
   uploadedMeshes_.clear();
   importedScene_ = {};
+
+  for (auto &m : uploadedMeshes_) {
+    device->DestroyBuffer(m->vertexBuffer);
+    device->DestroyBuffer(m->indexBuffer);
+  }
 
   device->DestroyPipeline(pipeline_);
   device->DestroyShader(fragmentShader_);
@@ -208,8 +213,8 @@ void SponzaScene::CreatePipeline(IDevice *device) {
 }
 
 void SponzaScene::LoadScene(IDevice *device) {
-  importedScene_ = GltfLoader::Load(Velos::Path::Resolve("assets/models/sponza/Sponza.gltf").string());
-
+  importedScene_ = GltfLoader::Load(
+      Velos::Path::Resolve("assets/models/sponza/Sponza.gltf").string());
   uploadedMeshes_.clear();
   uploadedMeshes_.reserve(importedScene_.meshes.size());
 

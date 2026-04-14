@@ -42,20 +42,20 @@ std::shared_ptr<MeshResource> MeshUploader::Upload(IDevice *device,
 
   // Replace this with your real buffer creation/upload path.
   // Ideally: GPU-only buffer + staging upload.
-  resource->vertexBuffer = device->CreateBuffer({
-      .size = static_cast<uint64_t>(combinedVertices.size() *
-                                    sizeof(ImportedVertex)),
-      .usage = BufferUsage::Vertex | BufferUsage::TransferDst,
-      .memoryUsage = MemoryUsage::CPUToGPU,
-      .initialData = combinedVertices.data(),
-  });
+  resource->vertexBuffer = device->CreateBuffer(
+      {.size = static_cast<uint64_t>(combinedVertices.size() *
+                                     sizeof(ImportedVertex)),
+       .usage = BufferUsage::Vertex | BufferUsage::TransferDst,
+       .memoryUsage = MemoryUsage::CPUToGPU,
+       .initialData = combinedVertices.data(),
+       .debugName = "Mesh Vertex Buffer"});
 
-  resource->indexBuffer = device->CreateBuffer({
-      .size = static_cast<uint64_t>(combinedIndices.size() * sizeof(uint32_t)),
-      .usage = BufferUsage::Index | BufferUsage::TransferDst,
-      .memoryUsage = MemoryUsage::CPUToGPU,
-      .initialData = combinedIndices.data(),
-  });
+  resource->indexBuffer = device->CreateBuffer(
+      {.size = static_cast<uint64_t>(combinedIndices.size() * sizeof(uint32_t)),
+       .usage = BufferUsage::Index | BufferUsage::TransferDst,
+       .memoryUsage = MemoryUsage::CPUToGPU,
+       .initialData = combinedIndices.data(),
+       .debugName = "Mesh Index Buffer"});
 
   return resource;
 }

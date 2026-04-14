@@ -5,6 +5,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <path.h>
 #include <stdexcept>
 #include <vector>
 #include <path.h>
@@ -345,6 +346,7 @@ void ImGuiRenderer::Render(VRHI::ICommandList &cmd, ImDrawData *drawData) {
 
   if (newVBSize != frame.vertexCapacityBytes) {
     if (frame.vertexCapacityBytes > 0) {
+      device_->WaitIdle();
       device_->DestroyBuffer(frame.vertexBuffer);
     }
 
@@ -361,6 +363,7 @@ void ImGuiRenderer::Render(VRHI::ICommandList &cmd, ImDrawData *drawData) {
 
   if (newIBSize != frame.indexCapacityBytes) {
     if (frame.indexCapacityBytes > 0) {
+      device_->WaitIdle();
       device_->DestroyBuffer(frame.indexBuffer);
     }
 
