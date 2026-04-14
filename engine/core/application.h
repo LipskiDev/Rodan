@@ -63,7 +63,7 @@ private:
   float deltaSeconds_ = 0.0f;
 
   std::unique_ptr<ImGuiRenderer> imguiRenderer_;
-  bool showDemoWindow_ = false;
+  bool showDemoWindow_ = true;
 };
 
 } // namespace Rodan

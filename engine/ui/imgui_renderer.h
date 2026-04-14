@@ -23,6 +23,8 @@ public:
 
   void OnResize(int fbWidth, int fbHeight);
 
+  void SetCurrentFrame(uint32_t frameIndex) { currentFrame_ = frameIndex; }
+
 private:
   struct FrameResources {
     VRHI::BufferHandle vertexBuffer;
@@ -41,7 +43,8 @@ private:
   VRHI::DescriptorPoolHandle pool_;
   VRHI::DescriptorSetHandle fontSet_;
 
-  FrameResources frame_;
+  FrameResources frames_[2]; // MAX_FRAMES_IN_FLIGHT = 2
+  uint32_t currentFrame_ = 0;
 };
 
 } // namespace Rodan

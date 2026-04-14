@@ -191,7 +191,6 @@ void Application::MainLoop() {
     Update(deltaSeconds_);
 
     BeginImGuiFrame(deltaSeconds_);
-
     BuildApplicationImGui();
 
     if (currentScene_)
@@ -256,7 +255,9 @@ void Application::RenderFrame() {
     return;
   }
 
-  ICommandList &cmd = device_->GetCommandList(frame.commandList);
+  imguiRenderer_->SetCurrentFrame(frame.frameIndex);
+
+  ICommandList &cmd = device_->GetCommandList();
   cmd.Begin();
 
   if (currentScene_) {
@@ -334,7 +335,7 @@ void Application::RenderFrame() {
   });
 
   cmd.End();
-  device_->SubmitAndPresent(frame.commandList, swapchain_);
+  device_->SubmitAndPresent(swapchain_);
 }
 
 void Application::BeginImGuiFrame(float deltaTime) {

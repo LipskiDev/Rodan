@@ -8,7 +8,6 @@
 #include <path.h>
 #include <stdexcept>
 #include <vector>
-#include <path.h>
 
 namespace VRHI = Velos::RHI;
 
@@ -189,7 +188,7 @@ void ImGuiRenderer::Initialize(VRHI::IDevice *device,
                         1};
   region.aspect = VRHI::ImageAspect::Color;
 
-  auto &cmd = device_->GetCommandList(VRHI::CommandListHandle{1});
+  auto &cmd = device_->GetCommandList();
 
   cmd.Begin();
 
@@ -201,7 +200,7 @@ void ImGuiRenderer::Initialize(VRHI::IDevice *device,
 
   cmd.End();
 
-  device_->Submit(VRHI::CommandListHandle{1});
+  device_->Submit();
   device_->WaitIdle();
   device_->DestroyBuffer(staging);
 
@@ -261,16 +260,19 @@ void ImGuiRenderer::Shutdown() {
 
   device_->WaitIdle();
 
-  if (frame_.vertexCapacityBytes > 0) {
-    device_->DestroyBuffer(frame_.vertexBuffer);
-    frame_.vertexBuffer = {};
-    frame_.vertexCapacityBytes = 0;
-  }
+  for (auto &frame_ : frames_) {
 
-  if (frame_.indexCapacityBytes > 0) {
-    device_->DestroyBuffer(frame_.indexBuffer);
-    frame_.indexBuffer = {};
-    frame_.indexCapacityBytes = 0;
+    if (frame_.vertexCapacityBytes > 0) {
+      device_->DestroyBuffer(frame_.vertexBuffer);
+      frame_.vertexBuffer = {};
+      frame_.vertexCapacityBytes = 0;
+    }
+
+    if (frame_.indexCapacityBytes > 0) {
+      device_->DestroyBuffer(frame_.indexBuffer);
+      frame_.indexBuffer = {};
+      frame_.indexCapacityBytes = 0;
+    }
   }
 
   if (pipeline_.IsValid()) {
@@ -334,7 +336,7 @@ void ImGuiRenderer::Render(VRHI::ICommandList &cmd, ImDrawData *drawData) {
     return;
   }
 
-  auto &frame = frame_;
+  auto &frame = frames_[currentFrame_];
 
   const Velos::u32 vbSize = static_cast<Velos::u32>(
       drawData->TotalVtxCount * static_cast<int>(sizeof(ImDrawVert)));
