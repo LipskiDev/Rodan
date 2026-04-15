@@ -32,13 +32,14 @@ void SponzaScene::Shutdown(IDevice *device) {
   }
 
   instances_.clear();
-  uploadedMeshes_.clear();
   importedScene_ = {};
 
   for (auto &m : uploadedMeshes_) {
     device->DestroyBuffer(m->vertexBuffer);
     device->DestroyBuffer(m->indexBuffer);
   }
+
+  uploadedMeshes_.clear();
 
   device->DestroyPipeline(pipeline_);
   device->DestroyShader(fragmentShader_);
