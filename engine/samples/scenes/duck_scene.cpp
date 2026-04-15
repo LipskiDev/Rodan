@@ -1,5 +1,6 @@
 #include "duck_scene.h"
 
+#include "graphics/mesh_resource.h"
 #include "imgui.h"
 
 #include <assimp/cimport.h>
@@ -11,8 +12,8 @@
 
 #include <glm/gtc/matrix_transform.hpp>
 #include <iostream>
-#include <stdexcept>
 #include <path.h>
+#include <stdexcept>
 
 namespace Rodan {
 
@@ -288,8 +289,11 @@ void DuckScene::CreateResources(IDevice *device) {
   int texW = 0;
   int texH = 0;
   int texComp = 0;
-  stbi_uc *pixels = stbi_load(Velos::Path::Resolve("assets/textures/Duck_baseColor.png").string().c_str(), &texW,
-                              &texH, &texComp, 4);
+  stbi_uc *pixels =
+      stbi_load(Velos::Path::Resolve("assets/textures/Duck_baseColor.png")
+                    .string()
+                    .c_str(),
+                &texW, &texH, &texComp, 4);
 
   if (!pixels) {
     throw std::runtime_error(
@@ -501,7 +505,7 @@ void DuckScene::UploadTextureIfNeeded(ICommandList &cmd) {
 
 void DuckScene::RenderDuckInstance(ICommandList &cmd, const glm::mat4 &model,
                                    BufferHandle indexBuffer, u32 indexCount) {
-  DuckPushConstants push{};
+  MVPPushConstants push{};
   push.model = model;
   push.view = camera_.GetView();
   push.proj = camera_.GetProjection();
@@ -510,7 +514,7 @@ void DuckScene::RenderDuckInstance(ICommandList &cmd, const glm::mat4 &model,
   cmd.BindDescriptorSet(duck_.pipeline, 0, duck_.descriptorSet);
   cmd.BindVertexBuffer(0, duck_.vertexBuffer, 0);
   cmd.BindIndexBuffer(indexBuffer, IndexType::U32, 0);
-  cmd.PushConstants(ShaderStage::Vertex, 0, sizeof(DuckPushConstants), &push);
+  cmd.PushConstants(ShaderStage::Vertex, 0, sizeof(MVPPushConstants), &push);
   cmd.DrawIndexed(indexCount);
 }
 

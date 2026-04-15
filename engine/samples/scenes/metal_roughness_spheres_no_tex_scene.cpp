@@ -5,8 +5,9 @@
 #include "shader/shader_compiler.h"
 
 #include <glm/gtc/matrix_transform.hpp>
-#include <stdexcept>
+#include <iostream>
 #include <path.h>
+#include <stdexcept>
 
 namespace Rodan {
 
@@ -105,27 +106,31 @@ void MetalRoughnessSpheresNoTexScene::Render(ICommandList &cmd) {
 
   cmd.BindPipeline(pipeline_);
 
+  int drawn = 0;
+
   for (const StaticMeshInstance &instance : instances_) {
     if (!instance.mesh) {
       continue;
     }
 
-    PushConstants push{};
+    MVPPushConstants push{};
     push.model = instance.transform;
     push.view = camera_.GetView();
     push.proj = camera_.GetProjection();
 
-    cmd.PushConstants(ShaderStage::Vertex, 0, sizeof(PushConstants), &push);
+    cmd.PushConstants(ShaderStage::Vertex | ShaderStage::Fragment, 0,
+                      sizeof(MVPPushConstants), &push);
 
     const MeshResource &mesh = *instance.mesh;
     drawSubmeshCount_ += static_cast<u32>(mesh.submeshes.size());
 
-    meshRenderer_.Draw(&cmd, instance);
+    meshRenderer_.Draw(&cmd, instance, importedScene_);
+    drawn++;
   }
 }
 
 void MetalRoughnessSpheresNoTexScene::RenderImGui() {
-  ImGui::Begin("Sponza Scene");
+  ImGui::Begin("Metal Roughness Scene");
   ImGui::Text("Static glTF scene test");
   ImGui::Separator();
   ImGui::Text("Imported meshes: %u",
@@ -140,13 +145,17 @@ void MetalRoughnessSpheresNoTexScene::RenderImGui() {
 
 void MetalRoughnessSpheresNoTexScene::CreatePipeline(IDevice *device) {
   auto vertSpv = ShaderCompiler::CompileFile({
-      .path = Velos::Path::Resolve("assets/shaders/sponza.vert").string().c_str(),
+      .path = Velos::Path::Resolve("assets/shaders/static_mesh.vert")
+                  .string()
+                  .c_str(),
       .stage = ShaderStage::Vertex,
       .entryPoint = "main",
   });
 
   auto fragSpv = ShaderCompiler::CompileFile({
-      .path = Velos::Path::Resolve("assets/shaders/sponza.frag").string().c_str(),
+      .path = Velos::Path::Resolve("assets/shaders/static_mesh.frag")
+                  .string()
+                  .c_str(),
       .stage = ShaderStage::Fragment,
       .entryPoint = "main",
   });
@@ -158,7 +167,7 @@ void MetalRoughnessSpheresNoTexScene::CreatePipeline(IDevice *device) {
           static_cast<u64>(vertSpv.spirv.size() * sizeof(std::uint32_t)),
       .entryPoint = "main",
       .reflection = vertSpv.reflection,
-      .debugName = "Sponza Vertex Shader",
+      .debugName = "Metal Roughness Vertex Shader",
   });
 
   fragmentShader_ = device->CreateShader({
@@ -168,7 +177,7 @@ void MetalRoughnessSpheresNoTexScene::CreatePipeline(IDevice *device) {
           static_cast<u64>(fragSpv.spirv.size() * sizeof(std::uint32_t)),
       .entryPoint = "main",
       .reflection = fragSpv.reflection,
-      .debugName = "Sponza Fragment Shader",
+      .debugName = "Metal Roughness Fragment Shader",
   });
 
   VertexBufferLayoutDesc layout{
@@ -206,15 +215,16 @@ void MetalRoughnessSpheresNoTexScene::CreatePipeline(IDevice *device) {
       .depthWriteEnable = true,
       .depthFormat = depthFormat_,
   };
-  pipelineDesc.debugName = "Sponza Scene Pipeline";
+  pipelineDesc.debugName = "Metal Roughness Scene Pipeline";
 
   pipeline_ = device->CreateGraphicsPipeline(pipelineDesc);
 }
 
 void MetalRoughnessSpheresNoTexScene::LoadScene(IDevice *device) {
-  importedScene_ =
-      GltfLoader::Load(Velos::Path::Resolve("assets/models/metal-roughness-spheres-no-textures/"
-                       "MetalRoughSpheresNoTextures.glb").string());
+  importedScene_ = GltfLoader::Load(
+      Velos::Path::Resolve("assets/models/metal-roughness-spheres-no-textures/"
+                           "MetalRoughSpheresNoTextures.gltf")
+          .string());
 
   uploadedMeshes_.clear();
   uploadedMeshes_.reserve(importedScene_.meshes.size());
@@ -230,7 +240,8 @@ void MetalRoughnessSpheresNoTexScene::LoadScene(IDevice *device) {
   }
 
   if (instances_.empty()) {
-    throw std::runtime_error("Sponza scene loaded, but produced no instances");
+    throw std::runtime_error(
+        "Metal Roughness scene loaded, but produced no instances");
   }
 }
 
@@ -241,12 +252,14 @@ void MetalRoughnessSpheresNoTexScene::SpawnNodeRecursive(
 
   if (node.meshIndex >= 0) {
     if (node.meshIndex >= static_cast<int>(uploadedMeshes_.size())) {
-      throw std::runtime_error("Sponza node references invalid mesh index");
+      throw std::runtime_error(
+          "Metal Roughness node references invalid mesh index");
     }
 
     StaticMeshInstance instance;
     instance.mesh = uploadedMeshes_[node.meshIndex];
-    instance.transform = worldTransform;
+    instance.transform =
+        glm::scale(glm::mat4(1.0f), glm::vec3(1000.0f)) * worldTransform;
     instances_.push_back(instance);
   }
 

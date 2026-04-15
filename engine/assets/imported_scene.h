@@ -38,7 +38,7 @@ struct ImportedScene {
   std::vector<ImportedMesh> meshes;
   std::vector<ImportedNode> nodes;
   std::vector<int> rootNodes;
-  std::vector<ImportedMaterial> material;
+  std::vector<ImportedMaterial> materials;
 };
 
 } // namespace Rodan

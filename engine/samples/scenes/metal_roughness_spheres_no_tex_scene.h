@@ -28,12 +28,6 @@ public:
   void RenderImGui() override;
 
 private:
-  struct PushConstants {
-    glm::mat4 model;
-    glm::mat4 view;
-    glm::mat4 proj;
-  };
-
   void CreatePipeline(Velos::RHI::IDevice *device);
   void LoadScene(Velos::RHI::IDevice *device);
   void SpawnNodeRecursive(int nodeIndex, const glm::mat4 &parentTransform);

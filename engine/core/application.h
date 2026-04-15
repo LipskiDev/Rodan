@@ -51,7 +51,7 @@ private:
   Velos::RHI::ImageViewHandle depthImageView_{};
 
   std::unique_ptr<IScene> currentScene_;
-  SceneType currentSceneType_ = SceneType::MillionCubes;
+  SceneType currentSceneType_ = SceneType::MetalRoughnessSpheresNoTex;
 
   Velos::RHI::Format colorFormat_ = Velos::RHI::Format::BGRA8_UNORM;
   Velos::RHI::Format depthFormat_ = Velos::RHI::Format::D32_FLOAT;
@@ -63,7 +63,7 @@ private:
   float deltaSeconds_ = 0.0f;
 
   std::unique_ptr<ImGuiRenderer> imguiRenderer_;
-  bool showDemoWindow_ = true;
+  bool showDemoWindow_ = false;
 };
 
 } // namespace Rodan

@@ -262,9 +262,9 @@ ImportedScene GltfLoader::Load(const std::string &path) {
     scene.meshes.push_back(LoadMesh(model, mesh));
   }
 
-  scene.material.reserve(model.materials.size());
+  scene.materials.reserve(model.materials.size());
   for (const tinygltf::Material &material : model.materials) {
-    scene.material.push_back(LoadMaterial(model, material));
+    scene.materials.push_back(LoadMaterial(model, material));
   }
 
   scene.nodes.reserve(model.nodes.size());

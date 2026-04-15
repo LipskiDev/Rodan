@@ -39,12 +39,6 @@ private:
     glm::vec2 uv;
   };
 
-  struct DuckPushConstants {
-    glm::mat4 model;
-    glm::mat4 view;
-    glm::mat4 proj;
-  };
-
   struct DuckMeshData {
     std::vector<DuckVertex> vertices;
     std::vector<u32> indices;

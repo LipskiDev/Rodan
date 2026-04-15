@@ -111,17 +111,18 @@ void SponzaScene::Render(ICommandList &cmd) {
       continue;
     }
 
-    PushConstants push{};
+    MVPPushConstants push{};
     push.model = instance.transform;
     push.view = camera_.GetView();
     push.proj = camera_.GetProjection();
 
-    cmd.PushConstants(ShaderStage::Vertex, 0, sizeof(PushConstants), &push);
+    cmd.PushConstants(ShaderStage::Vertex | ShaderStage::Fragment, 0,
+                      sizeof(MVPPushConstants), &push);
 
     const MeshResource &mesh = *instance.mesh;
     drawSubmeshCount_ += static_cast<u32>(mesh.submeshes.size());
 
-    meshRenderer_.Draw(&cmd, instance);
+    meshRenderer_.Draw(&cmd, instance, importedScene_);
   }
 }
 
@@ -141,13 +142,13 @@ void SponzaScene::RenderImGui() {
 
 void SponzaScene::CreatePipeline(IDevice *device) {
   auto vertSpv = ShaderCompiler::CompileFile({
-      .path = Velos::Path::Resolve("assets/shaders/sponza.vert").string(),
+      .path = Velos::Path::Resolve("assets/shaders/static_mesh.vert").string(),
       .stage = ShaderStage::Vertex,
       .entryPoint = "main",
   });
 
   auto fragSpv = ShaderCompiler::CompileFile({
-      .path = Velos::Path::Resolve("assets/shaders/sponza.frag").string(),
+      .path = Velos::Path::Resolve("assets/shaders/static_mesh.frag").string(),
       .stage = ShaderStage::Fragment,
       .entryPoint = "main",
   });

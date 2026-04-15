@@ -12,6 +12,11 @@ layout(push_constant) uniform PushConstants {
     mat4 model;
     mat4 view;
     mat4 proj;
+
+    vec4 baseColorFactor;
+    float metallicFactor;
+    float roughnessFactor;
+    int hasMaterial;
 } pc;
 
 void main() {
