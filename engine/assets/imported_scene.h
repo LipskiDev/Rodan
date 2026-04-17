@@ -16,11 +16,34 @@ struct ImportedPrimitive {
   int materialIndex = -1;
 };
 
+struct ImportedTextureRef {
+  int imageIndex = -1;
+  int samplerIndex = -1;
+  int texCoord = 0;
+};
+
 struct ImportedMaterial {
   glm::vec4 baseColorFactor{1.0f};
   float metallicFactor = 1.0f;
   float roughnessFactor = 1.0f;
   bool doubleSided = false;
+
+  ImportedTextureRef baseColorTexture;
+};
+
+struct ImportedImage {
+  std::string name;
+  int width = 0;
+  int height = 0;
+  int components = 0;
+  std::vector<std::uint8_t> pixelsRGBA8;
+};
+
+struct ImportedSampler {
+  int minFilter = -1;
+  int magFilter = -1;
+  int wrapS = -1;
+  int wrapT = -1;
 };
 
 struct ImportedMesh {
@@ -39,6 +62,8 @@ struct ImportedScene {
   std::vector<ImportedNode> nodes;
   std::vector<int> rootNodes;
   std::vector<ImportedMaterial> materials;
+  std::vector<ImportedImage> images;
+  std::vector<ImportedSampler> samplers;
 };
 
 } // namespace Rodan

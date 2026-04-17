@@ -213,16 +213,85 @@ ImportedMesh LoadMesh(const tinygltf::Model &model,
   return out;
 }
 
-ImportedMaterial LoadMaterial(const tinygltf::Model &model,
-                              const tinygltf::Material &material) {
-  ImportedMaterial out;
-  const auto &baseColor = material.pbrMetallicRoughness.baseColorFactor;
-  out.baseColorFactor =
-      glm::vec4{baseColor[0], baseColor[1], baseColor[2], baseColor[3]};
-  out.metallicFactor = material.pbrMetallicRoughness.metallicFactor;
-  out.roughnessFactor = material.pbrMetallicRoughness.roughnessFactor;
+static ImportedMaterial LoadMaterial(const tinygltf::Model &model,
+                                     const tinygltf::Material &material) {
+  ImportedMaterial out{};
+
+  const auto &pbr = material.pbrMetallicRoughness;
+
+  if (pbr.baseColorFactor.size() == 4) {
+    out.baseColorFactor = glm::vec4(static_cast<float>(pbr.baseColorFactor[0]),
+                                    static_cast<float>(pbr.baseColorFactor[1]),
+                                    static_cast<float>(pbr.baseColorFactor[2]),
+                                    static_cast<float>(pbr.baseColorFactor[3]));
+  }
+
+  out.metallicFactor = static_cast<float>(pbr.metallicFactor);
+  out.roughnessFactor = static_cast<float>(pbr.roughnessFactor);
   out.doubleSided = material.doubleSided;
 
+  if (pbr.baseColorTexture.index >= 0) {
+    const int textureIndex = pbr.baseColorTexture.index;
+    if (textureIndex < 0 ||
+        textureIndex >= static_cast<int>(model.textures.size())) {
+      throw std::runtime_error(
+          "glTF material references invalid base color texture");
+    }
+
+    const tinygltf::Texture &tex = model.textures[textureIndex];
+    out.baseColorTexture.imageIndex = tex.source;
+    out.baseColorTexture.samplerIndex = tex.sampler;
+    out.baseColorTexture.texCoord = pbr.baseColorTexture.texCoord;
+
+    if (tex.source < 0 || tex.source >= static_cast<int>(model.images.size())) {
+      throw std::runtime_error(
+          "glTF material references invalid base color image");
+    }
+  }
+
+  return out;
+}
+
+static ImportedImage LoadImage(const tinygltf::Image &image) {
+  ImportedImage out{};
+  out.name = image.name;
+  out.width = image.width;
+  out.height = image.height;
+  out.components = 4;
+
+  if (image.image.empty()) {
+    throw std::runtime_error("glTF image has no pixel data");
+  }
+
+  if (image.component == 4) {
+    out.pixelsRGBA8 = image.image;
+  } else {
+    const size_t pixelCount =
+        static_cast<size_t>(image.width) * static_cast<size_t>(image.height);
+    out.pixelsRGBA8.resize(pixelCount * 4);
+
+    for (size_t i = 0; i < pixelCount; ++i) {
+      const size_t src = i * static_cast<size_t>(image.component);
+      const size_t dst = i * 4;
+
+      out.pixelsRGBA8[dst + 0] = image.image[src + 0];
+      out.pixelsRGBA8[dst + 1] =
+          image.component > 1 ? image.image[src + 1] : image.image[src + 0];
+      out.pixelsRGBA8[dst + 2] =
+          image.component > 2 ? image.image[src + 2] : image.image[src + 0];
+      out.pixelsRGBA8[dst + 3] = 255;
+    }
+  }
+
+  return out;
+}
+
+static ImportedSampler LoadSampler(const tinygltf::Sampler &sampler) {
+  ImportedSampler out{};
+  out.minFilter = sampler.minFilter;
+  out.magFilter = sampler.magFilter;
+  out.wrapS = sampler.wrapS;
+  out.wrapT = sampler.wrapT;
   return out;
 }
 
@@ -265,6 +334,16 @@ ImportedScene GltfLoader::Load(const std::string &path) {
   scene.materials.reserve(model.materials.size());
   for (const tinygltf::Material &material : model.materials) {
     scene.materials.push_back(LoadMaterial(model, material));
+  }
+
+  scene.images.reserve(model.images.size());
+  for (const tinygltf::Image &image : model.images) {
+    scene.images.push_back(LoadImage(image));
+  }
+
+  scene.samplers.reserve(model.samplers.size());
+  for (const tinygltf::Sampler &sampler : model.samplers) {
+    scene.samplers.push_back(LoadSampler(sampler));
   }
 
   scene.nodes.reserve(model.nodes.size());

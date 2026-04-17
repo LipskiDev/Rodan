@@ -6,6 +6,7 @@
 #include "samples/scene.h"
 #include "scene/first_person_camera.h"
 #include "scene/static_mesh_instance.h"
+#include <assets/gltf_asset_loader.h>
 
 #include <glm/glm.hpp>
 #include <vector>
@@ -42,6 +43,7 @@ private:
   Velos::RHI::ShaderHandle fragmentShader_{};
   Velos::RHI::PipelineHandle pipeline_{};
 
+  std::unique_ptr<StaticGltfAsset> asset_;
   ImportedScene importedScene_;
   std::vector<std::shared_ptr<MeshResource>> uploadedMeshes_;
   std::vector<StaticMeshInstance> instances_;

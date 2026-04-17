@@ -1,11 +1,11 @@
 #pragma once
 
-#include "assets/gltf_loader.h"
-#include "core/input_system.h"
 #include "renderer/mesh_renderer.h"
+#include "rhi/rhi_handles.h"
 #include "samples/scene.h"
 #include "scene/first_person_camera.h"
 #include "scene/static_mesh_instance.h"
+#include <assets/gltf_asset_loader.h>
 
 #include <glm/glm.hpp>
 #include <vector>
@@ -55,6 +55,8 @@ private:
 
   Velos::u32 drawInstanceCount_ = 0;
   Velos::u32 drawSubmeshCount_ = 0;
+
+  std::unique_ptr<StaticGltfAsset> asset_;
 };
 
 } // namespace Rodan

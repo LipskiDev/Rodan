@@ -1,6 +1,5 @@
 #include "sponza_scene.h"
 
-#include "graphics/mesh_uploader.h"
 #include "imgui.h"
 #include "shader/shader_compiler.h"
 
@@ -22,8 +21,8 @@ void SponzaScene::Initialize(IDevice *device, SwapchainHandle swapchain,
 
   camera_.SetPerspective(60.0f, 16.0f / 9.0f, 0.1f, 500.0f);
 
-  CreatePipeline(device_);
   LoadScene(device_);
+  CreatePipeline(device_);
 }
 
 void SponzaScene::Shutdown(IDevice *device) {
@@ -32,14 +31,11 @@ void SponzaScene::Shutdown(IDevice *device) {
   }
 
   instances_.clear();
-  importedScene_ = {};
 
-  for (auto &m : uploadedMeshes_) {
-    device->DestroyBuffer(m->vertexBuffer);
-    device->DestroyBuffer(m->indexBuffer);
+  if (asset_) {
+    asset_->Destroy(device);
+    asset_.reset();
   }
-
-  uploadedMeshes_.clear();
 
   device->DestroyPipeline(pipeline_);
   device->DestroyShader(fragmentShader_);
@@ -99,13 +95,19 @@ void SponzaScene::Update(float deltaSeconds, const SceneUpdateContext &ctx) {
   camera_.Update(deltaSeconds);
 }
 
-void SponzaScene::Prepare(ICommandList &cmd) { (void)cmd; }
+void SponzaScene::Prepare(ICommandList &cmd) {
+  if (asset_) {
+    asset_->Prepare(cmd);
+  }
+}
 
 void SponzaScene::Render(ICommandList &cmd) {
   drawInstanceCount_ = static_cast<u32>(instances_.size());
   drawSubmeshCount_ = 0;
 
   cmd.BindPipeline(pipeline_);
+
+  const auto &materials = asset_->GetMaterials();
 
   for (const StaticMeshInstance &instance : instances_) {
     if (!instance.mesh) {
@@ -123,7 +125,7 @@ void SponzaScene::Render(ICommandList &cmd) {
     const MeshResource &mesh = *instance.mesh;
     drawSubmeshCount_ += static_cast<u32>(mesh.submeshes.size());
 
-    meshRenderer_.Draw(&cmd, instance, importedScene_);
+    meshRenderer_.Draw(&cmd, instance, materials, pipeline_);
   }
 }
 
@@ -131,12 +133,14 @@ void SponzaScene::RenderImGui() {
   ImGui::Begin("Sponza Scene");
   ImGui::Text("Static glTF scene test");
   ImGui::Separator();
-  ImGui::Text("Imported meshes: %u",
-              static_cast<u32>(importedScene_.meshes.size()));
-  ImGui::Text("Imported nodes: %u",
-              static_cast<u32>(importedScene_.nodes.size()));
-  ImGui::Text("Instances: %u", drawInstanceCount_);
-  ImGui::Text("Submeshes drawn: %u", drawSubmeshCount_);
+
+  if (asset_) {
+    ImGui::Text("Instances: %u", drawInstanceCount_);
+    ImGui::Text("Submeshes drawn: %u", drawSubmeshCount_);
+    ImGui::Text("Materials: %u",
+                static_cast<u32>(asset_->GetMaterials().size()));
+  }
+
   ImGui::Text("Hold RMB to look around");
   ImGui::End();
 }
@@ -194,10 +198,15 @@ void SponzaScene::CreatePipeline(IDevice *device) {
                      }},
   };
 
+  DescriptorSetLayoutHandle setLayouts[] = {asset_->GetMaterialLayout()};
+
   GraphicsPipelineDesc pipelineDesc{};
   pipelineDesc.vertexShader = vertexShader_;
   pipelineDesc.fragmentShader = fragmentShader_;
   pipelineDesc.vertexLayouts.push_back(layout);
+  pipelineDesc.layout.descriptorSetLayouts = setLayouts;
+  pipelineDesc.layout.descriptorSetLayoutCount = 1;
+
   pipelineDesc.topology = PrimitiveTopology::TriangleList;
   pipelineDesc.raster.cullBackFaces = true;
   pipelineDesc.raster.frontFaceCCW = true;
@@ -215,44 +224,14 @@ void SponzaScene::CreatePipeline(IDevice *device) {
 }
 
 void SponzaScene::LoadScene(IDevice *device) {
-  importedScene_ = GltfLoader::Load(
+  asset_ = StaticGltfAsset::Load(
+      device,
       Velos::Path::Resolve("assets/models/sponza/Sponza.gltf").string());
-  uploadedMeshes_.clear();
-  uploadedMeshes_.reserve(importedScene_.meshes.size());
 
-  for (const ImportedMesh &mesh : importedScene_.meshes) {
-    uploadedMeshes_.push_back(MeshUploader::Upload(device, mesh));
-  }
-
-  instances_.clear();
-
-  for (int rootNode : importedScene_.rootNodes) {
-    SpawnNodeRecursive(rootNode, glm::mat4(1.0f));
-  }
+  instances_ = asset_->GetInstances();
 
   if (instances_.empty()) {
     throw std::runtime_error("Sponza scene loaded, but produced no instances");
-  }
-}
-
-void SponzaScene::SpawnNodeRecursive(int nodeIndex,
-                                     const glm::mat4 &parentTransform) {
-  const ImportedNode &node = importedScene_.nodes.at(nodeIndex);
-  const glm::mat4 worldTransform = parentTransform * node.transform;
-
-  if (node.meshIndex >= 0) {
-    if (node.meshIndex >= static_cast<int>(uploadedMeshes_.size())) {
-      throw std::runtime_error("Sponza node references invalid mesh index");
-    }
-
-    StaticMeshInstance instance;
-    instance.mesh = uploadedMeshes_[node.meshIndex];
-    instance.transform = worldTransform;
-    instances_.push_back(instance);
-  }
-
-  for (int childIndex : node.children) {
-    SpawnNodeRecursive(childIndex, worldTransform);
   }
 }
 

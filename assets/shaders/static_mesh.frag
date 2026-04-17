@@ -4,6 +4,8 @@ layout(location = 0) in vec3 vWorldNormal;
 layout(location = 1) in vec3 vWorldPos;
 layout(location = 2) in vec2 vUV;
 
+layout(set = 0, binding = 0) uniform sampler2D u_BaseColor;
+
 layout(location = 0) out vec4 outColor;
 
 layout(push_constant) uniform PushConstants {
@@ -55,9 +57,9 @@ vec3 FresnelSchlick(float cosTheta, vec3 F0) {
 void main() {
     vec3 N = normalize(vWorldNormal);
 
-    vec3 baseColor = pc.hasMaterial != 0
-        ? pc.baseColorFactor.rgb
-        : vec3(0.75);
+    vec4 texColor = texture(u_BaseColor, vUV); 
+    vec3 baseColor = pc.baseColorFactor.rgb * texColor.rgb;
+    float alpha = pc.baseColorFactor.a * texColor.a;
 
     float metallic = pc.hasMaterial != 0 ? pc.metallicFactor : 0.0;
     float roughness = pc.hasMaterial != 0 ? pc.roughnessFactor : 0.5;
@@ -101,5 +103,5 @@ void main() {
     color = color / (color + vec3(1.0));
     color = pow(color, vec3(1.0 / 2.2));
 
-    outColor = vec4(color, 1.0);
+    outColor = vec4(color, alpha);
 }

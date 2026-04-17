@@ -6,7 +6,8 @@
 namespace Rodan {
 
 void MeshRenderer::Draw(ICommandList *cmd, const StaticMeshInstance &instance,
-                        const ImportedScene &scene) {
+                        const std::vector<MaterialResource> &materials,
+                        PipelineHandle pipeline) {
   if (!cmd) {
     throw std::runtime_error("MeshRenderer::Draw: cmd is null");
   }
@@ -21,23 +22,22 @@ void MeshRenderer::Draw(ICommandList *cmd, const StaticMeshInstance &instance,
   cmd->BindIndexBuffer(mesh.indexBuffer, IndexType::U32, 0);
 
   for (const Submesh &submesh : mesh.submeshes) {
-    MaterialPushConstants matPc{};
-    if (submesh.materialSlot >= 0 &&
-        submesh.materialSlot < static_cast<int>(scene.materials.size())) {
-      const ImportedMaterial &mat = scene.materials[submesh.materialSlot];
+    if (submesh.materialSlot < materials.size()) {
+      const MaterialResource &mat = materials[submesh.materialSlot];
+
+      cmd->BindDescriptorSet(pipeline, 0, mat.descriptorSet);
+
+      MaterialPushConstants matPc{};
       matPc.baseColorFactor = mat.baseColorFactor;
       matPc.metallicFactor = mat.metallicFactor;
       matPc.roughnessFactor = mat.roughnessFactor;
       matPc.hasMaterial = 1;
-    } else {
-      matPc.baseColorFactor = glm::vec4(1.0f);
-      matPc.metallicFactor = 1.0f;
-      matPc.roughnessFactor = 1.0f;
-      matPc.hasMaterial = 0;
+
+      cmd->PushConstants(ShaderStage::Vertex | ShaderStage::Fragment,
+                         sizeof(MVPPushConstants),
+                         sizeof(MaterialPushConstants), &matPc);
     }
-    cmd->PushConstants(ShaderStage::Vertex | ShaderStage::Fragment,
-                       sizeof(MVPPushConstants), sizeof(MaterialPushConstants),
-                       &matPc);
+
     cmd->DrawIndexed(submesh.indexCount, submesh.firstIndex, 0);
   }
 }
