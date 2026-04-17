@@ -103,5 +103,7 @@ void main() {
     color = color / (color + vec3(1.0));
     color = pow(color, vec3(1.0 / 2.2));
 
+    if(alpha < 0.5) discard;
+
     outColor = vec4(color, alpha);
 }

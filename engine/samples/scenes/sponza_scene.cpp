@@ -1,6 +1,7 @@
 #include "sponza_scene.h"
 
 #include "imgui.h"
+#include "rhi/rhi_types.h"
 #include "shader/shader_compiler.h"
 
 #include <glm/gtc/matrix_transform.hpp>
@@ -211,7 +212,17 @@ void SponzaScene::CreatePipeline(IDevice *device) {
   pipelineDesc.raster.cullBackFaces = true;
   pipelineDesc.raster.frontFaceCCW = true;
   pipelineDesc.raster.wireframe = false;
-  pipelineDesc.blend = {.enable = false};
+  pipelineDesc.blend = {
+      .enable = true,
+
+      .srcColor = BlendFactor::SrcAlpha,
+      .dstColor = BlendFactor::OneMinusSrcAlpha,
+      .colorOp = BlendOp::Add,
+
+      .srcAlpha = BlendFactor::One,
+      .dstAlpha = BlendFactor::OneMinusSrcAlpha,
+      .alphaOp = BlendOp::Add,
+  };
   pipelineDesc.colorFormat = colorFormat_;
   pipelineDesc.depth = {
       .depthTestEnable = true,
