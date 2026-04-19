@@ -23,7 +23,7 @@ StaticGltfAsset::Load(IDevice *device, IUploadContext *upload,
   asset->importedScene_ = GltfLoader::Load(path);
   asset->CreateMaterialLayout(device);
   asset->CreateDescriptorPool(device);
-  asset->CreateFallbackResources(device);
+  asset->CreateFallbackResources(device, upload);
   asset->UploadMeshes(device, upload);
   asset->UploadMaterials(device, upload);
   asset->BuildInstances();
@@ -93,11 +93,6 @@ void StaticGltfAsset::Destroy(IDevice *device) {
   if (fallbackImage_.IsValid()) {
     device->DestroyImage(fallbackImage_);
     fallbackImage_ = {};
-  }
-
-  if (fallbackBuffer_.IsValid()) {
-    device->DestroyBuffer(fallbackBuffer_);
-    fallbackBuffer_ = {};
   }
 
   if (descriptorPool_.IsValid()) {
@@ -295,7 +290,7 @@ void StaticGltfAsset::BuildInstances() {
 
       StaticMeshInstance instance{};
       instance.mesh = meshes_[node.meshIndex];
-      instance.transform = world;
+      instance.localTransform = world;
 
       instances_.push_back(instance);
     }
@@ -315,7 +310,8 @@ void StaticGltfAsset::BuildInstances() {
   }
 }
 
-void StaticGltfAsset::CreateFallbackResources(IDevice *device) {
+void StaticGltfAsset::CreateFallbackResources(IDevice *device,
+                                              IUploadContext *upload) {
   if (!device) {
     throw std::runtime_error(
         "StaticGltfAsset::CreateFallbackResources: device is null");
@@ -326,14 +322,6 @@ void StaticGltfAsset::CreateFallbackResources(IDevice *device) {
   }
 
   const std::uint8_t whitePixel[4] = {255, 255, 255, 255};
-
-  fallbackBuffer_ = device->CreateBuffer({
-      .size = 4,
-      .usage = BufferUsage::TransferSrc,
-      .memoryUsage = MemoryUsage::CPUToGPU,
-      .initialData = whitePixel,
-      .debugName = "Fallback White Buffer",
-  });
 
   fallbackImage_ = device->CreateImage({
       .width = 1,
@@ -366,35 +354,20 @@ void StaticGltfAsset::CreateFallbackResources(IDevice *device) {
       .addressW = SamplerAddressMode::Repeat,
       .debugName = "Fallback White Sampler",
   });
-}
 
-void StaticGltfAsset::UploadFallbackIfNeeded(ICommandList &cmd) {
-  if (fallbackUploaded_)
-    return;
-
-  cmd.Barrier({
-      .image = fallbackImage_,
-      .newLayout = ImageLayout::TransferDst,
-      .aspect = ImageAspect::Color,
-  });
-
-  BufferImageCopyRegion region{};
-  region.bufferOffset = 0;
-  region.mipLevel = 0;
-  region.baseArrayLayer = 0;
-  region.layerCount = 1;
-  region.imageOffset = {0, 0, 0};
-  region.imageExtent = {1, 1, 1};
-  region.aspect = ImageAspect::Color;
-
-  cmd.CopyBufferToImage(fallbackBuffer_, fallbackImage_, region);
-
-  cmd.Barrier({
-      .image = fallbackImage_,
-      .newLayout = ImageLayout::ShaderReadOnly,
-      .aspect = ImageAspect::Color,
-  });
-
-  fallbackUploaded_ = true;
+  upload->UploadImage(
+      {
+          .dstImage = fallbackImage_,
+          .oldLayout = ImageLayout::Undefined,
+          .finalLayout = ImageLayout::ShaderReadOnly,
+          .aspect = ImageAspect::Color,
+          .mipLevel = 0,
+          .baseArrayLayer = 0,
+          .layerCount = 1,
+          .width = 1,
+          .height = 1,
+          .depth = 1,
+      },
+      whitePixel, 4);
 }
 } // namespace Rodan

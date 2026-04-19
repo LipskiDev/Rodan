@@ -6,6 +6,7 @@
 namespace Rodan {
 struct StaticMeshInstance {
   std::shared_ptr<MeshResource> mesh;
-  glm::mat4 transform{1.0f};
+  glm::mat4 worldTransform{1.0f};
+  glm::mat4 localTransform{1.0};
 };
 } // namespace Rodan

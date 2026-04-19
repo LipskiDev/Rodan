@@ -25,6 +25,12 @@ void MetalRoughnessSpheresNoTexScene::Initialize(IDevice *device,
 
   // IMPORTANT: load asset before pipeline (we need descriptor layouts)
   LoadScene(device_);
+
+  glm::mat4 S = glm::scale(glm::mat4(1.0f), glm::vec3(1000.0f));
+  for (auto &instance : instances_) {
+    instance.localTransform = S * instance.localTransform;
+  }
+
   CreatePipeline(device_);
 }
 
@@ -118,7 +124,7 @@ void MetalRoughnessSpheresNoTexScene::Render(ICommandList &cmd) {
     }
 
     MVPPushConstants push{};
-    push.model = instance.transform;
+    push.model = instance.localTransform;
     push.view = camera_.GetView();
     push.proj = camera_.GetProjection();
 
@@ -204,7 +210,7 @@ void MetalRoughnessSpheresNoTexScene::CreatePipeline(IDevice *device) {
   pipelineDesc.layout.descriptorSetLayouts = setLayouts;
   pipelineDesc.layout.descriptorSetLayoutCount = 1;
   pipelineDesc.topology = PrimitiveTopology::TriangleList;
-  pipelineDesc.raster.cullBackFaces = true;
+  pipelineDesc.raster.cullBackFaces = false;
   pipelineDesc.raster.frontFaceCCW = true;
   pipelineDesc.raster.wireframe = false;
   pipelineDesc.blend = {.enable = false};
@@ -221,6 +227,7 @@ void MetalRoughnessSpheresNoTexScene::CreatePipeline(IDevice *device) {
 
 void MetalRoughnessSpheresNoTexScene::LoadScene(IDevice *device) {
   auto upload = device->CreateUploadContext(32 * 1024 * 1024);
+  upload->Begin();
   asset_ = StaticGltfAsset::Load(
       device, upload.get(),
       Velos::Path::Resolve("assets/models/metal-roughness-spheres-no-textures/"

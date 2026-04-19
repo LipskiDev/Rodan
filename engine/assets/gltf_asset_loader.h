@@ -49,7 +49,6 @@ private:
   ImageHandle fallbackImage_{};
   ImageViewHandle fallbackImageView_{};
   SamplerHandle fallbackSampler_{};
-  BufferHandle fallbackBuffer_{};
 
 private:
   void CreateMaterialLayout(IDevice *device);
@@ -58,7 +57,6 @@ private:
   void UploadMaterials(IDevice *device, IUploadContext *upload);
   void BuildInstances();
 
-  void CreateFallbackResources(IDevice *device);
-  void UploadFallbackIfNeeded(ICommandList &cmd);
+  void CreateFallbackResources(IDevice *device, IUploadContext *upload);
 };
 } // namespace Rodan

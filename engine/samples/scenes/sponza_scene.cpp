@@ -112,7 +112,7 @@ void SponzaScene::Render(ICommandList &cmd) {
     }
 
     MVPPushConstants push{};
-    push.model = instance.transform;
+    push.model = instance.localTransform;
     push.view = camera_.GetView();
     push.proj = camera_.GetProjection();
 
