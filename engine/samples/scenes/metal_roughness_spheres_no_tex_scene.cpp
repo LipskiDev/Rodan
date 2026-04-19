@@ -220,11 +220,14 @@ void MetalRoughnessSpheresNoTexScene::CreatePipeline(IDevice *device) {
 }
 
 void MetalRoughnessSpheresNoTexScene::LoadScene(IDevice *device) {
+  auto upload = device->CreateUploadContext(32 * 1024 * 1024);
   asset_ = StaticGltfAsset::Load(
-      device,
+      device, upload.get(),
       Velos::Path::Resolve("assets/models/metal-roughness-spheres-no-textures/"
                            "MetalRoughSpheresNoTextures.gltf")
           .string());
+
+  upload->Flush();
 
   instances_ = asset_->GetInstances();
 

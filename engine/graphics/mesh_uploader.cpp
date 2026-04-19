@@ -1,4 +1,5 @@
 #include "graphics/mesh_uploader.h"
+#include "rhi/rhi_upload_context.h"
 
 #include <stdexcept>
 #include <vector>
@@ -6,9 +7,14 @@
 namespace Rodan {
 
 std::shared_ptr<MeshResource> MeshUploader::Upload(IDevice *device,
+                                                   IUploadContext *upload,
                                                    const ImportedMesh &mesh) {
   if (!device) {
     throw std::runtime_error("MeshUploader::Upload: device is null");
+  }
+
+  if (!upload) {
+    throw std::runtime_error("MeshUploader::Upload: upload is null");
   }
 
   std::vector<ImportedVertex> combinedVertices;
@@ -27,7 +33,7 @@ std::shared_ptr<MeshResource> MeshUploader::Upload(IDevice *device,
       combinedIndices.push_back(baseVertex + index);
     }
 
-    Submesh submesh;
+    Submesh submesh{};
     submesh.firstIndex = firstIndex;
     submesh.indexCount = static_cast<uint32_t>(primitive.indices.size());
     submesh.materialSlot = primitive.materialIndex >= 0
@@ -40,24 +46,51 @@ std::shared_ptr<MeshResource> MeshUploader::Upload(IDevice *device,
   auto resource = std::make_shared<MeshResource>();
   resource->submeshes = std::move(submeshes);
 
-  // Replace this with your real buffer creation/upload path.
-  // Ideally: GPU-only buffer + staging upload.
-  resource->vertexBuffer = device->CreateBuffer(
-      {.size = static_cast<uint64_t>(combinedVertices.size() *
-                                     sizeof(ImportedVertex)),
-       .usage = BufferUsage::Vertex | BufferUsage::TransferDst,
-       .memoryUsage = MemoryUsage::CPUToGPU,
-       .initialData = combinedVertices.data(),
-       .debugName = "Mesh Vertex Buffer"});
+  const uint64_t vertexBufferSize =
+      static_cast<uint64_t>(combinedVertices.size() * sizeof(ImportedVertex));
+  const uint64_t indexBufferSize =
+      static_cast<uint64_t>(combinedIndices.size() * sizeof(uint32_t));
 
-  resource->indexBuffer = device->CreateBuffer(
-      {.size = static_cast<uint64_t>(combinedIndices.size() * sizeof(uint32_t)),
-       .usage = BufferUsage::Index | BufferUsage::TransferDst,
-       .memoryUsage = MemoryUsage::CPUToGPU,
-       .initialData = combinedIndices.data(),
-       .debugName = "Mesh Index Buffer"});
+  if (vertexBufferSize == 0) {
+    throw std::runtime_error(
+        "MeshUploader::Upload: mesh produced an empty vertex buffer");
+  }
+
+  if (indexBufferSize == 0) {
+    throw std::runtime_error(
+        "MeshUploader::Upload: mesh produced an empty index buffer");
+  }
+
+  resource->vertexBuffer = device->CreateBuffer({
+      .size = vertexBufferSize,
+      .usage = BufferUsage::Vertex | BufferUsage::TransferDst,
+      .memoryUsage = MemoryUsage::GPUOnly,
+      .initialData = nullptr,
+      .debugName = "Mesh Vertex Buffer",
+  });
+
+  resource->indexBuffer = device->CreateBuffer({
+      .size = indexBufferSize,
+      .usage = BufferUsage::Index | BufferUsage::TransferDst,
+      .memoryUsage = MemoryUsage::GPUOnly,
+      .initialData = nullptr,
+      .debugName = "Mesh Index Buffer",
+  });
+
+  upload->UploadBuffer({
+      .dstBuffer = resource->vertexBuffer,
+      .dstOffset = 0,
+      .size = vertexBufferSize,
+      .data = combinedVertices.data(),
+  });
+
+  upload->UploadBuffer({
+      .dstBuffer = resource->indexBuffer,
+      .dstOffset = 0,
+      .size = indexBufferSize,
+      .data = combinedIndices.data(),
+  });
 
   return resource;
 }
-
 } // namespace Rodan

@@ -50,7 +50,8 @@ project "Rodan"
 		"external/velos/external/imgui",
 		"external/implot",
 		"external/meshoptimizer/src",
-		"external/tinygltf"
+		"external/tinygltf",
+    "external/velos/external/tracy/public"
 	}
 
 	links

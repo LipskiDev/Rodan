@@ -3,6 +3,7 @@
 #include "assets/imported_scene.h"
 #include "graphics/material_resource.h"
 #include "rhi/rhi_command_list.h"
+#include "rhi/rhi_upload_context.h"
 #include "scene/static_mesh_instance.h"
 
 #include <memory>
@@ -14,8 +15,8 @@ using namespace Velos::RHI;
 
 class StaticGltfAsset {
 public:
-  static std::unique_ptr<StaticGltfAsset> Load(IDevice *device,
-                                               const std::string &path);
+  static std::unique_ptr<StaticGltfAsset>
+  Load(IDevice *device, IUploadContext *upload, const std::string &path);
 
   void Prepare(ICommandList &cmd);
   void Destroy(IDevice *device);
@@ -53,8 +54,8 @@ private:
 private:
   void CreateMaterialLayout(IDevice *device);
   void CreateDescriptorPool(IDevice *device);
-  void UploadMeshes(IDevice *device);
-  void UploadMaterials(IDevice *device);
+  void UploadMeshes(IDevice *device, IUploadContext *upload);
+  void UploadMaterials(IDevice *device, IUploadContext *upload);
   void BuildInstances();
 
   void CreateFallbackResources(IDevice *device);

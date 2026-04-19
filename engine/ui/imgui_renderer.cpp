@@ -192,11 +192,29 @@ void ImGuiRenderer::Initialize(VRHI::IDevice *device,
 
   cmd.Begin();
 
-  cmd.Barrier(
-      {fontImage_, VRHI::ImageLayout::TransferDst, VRHI::ImageAspect::Color});
+  cmd.Barrier(VRHI::ImageBarrier{
+      .image = fontImage_,
+      .oldLayout = VRHI::ImageLayout::Undefined,
+      .newLayout = VRHI::ImageLayout::TransferDst,
+      .aspect = VRHI::ImageAspect::Color,
+      .baseMipLevel = 0,
+      .mipLevelCount = 1,
+      .baseArrayLayer = 0,
+      .layerCount = 1,
+  });
+
   cmd.CopyBufferToImage(staging, fontImage_, region);
-  cmd.Barrier({fontImage_, VRHI::ImageLayout::ShaderReadOnly,
-               VRHI::ImageAspect::Color});
+
+  cmd.Barrier(VRHI::ImageBarrier{
+      .image = fontImage_,
+      .oldLayout = VRHI::ImageLayout::TransferDst,
+      .newLayout = VRHI::ImageLayout::ShaderReadOnly,
+      .aspect = VRHI::ImageAspect::Color,
+      .baseMipLevel = 0,
+      .mipLevelCount = 1,
+      .baseArrayLayer = 0,
+      .layerCount = 1,
+  });
 
   cmd.End();
 

@@ -1,9 +1,9 @@
 #include "glm/ext/vector_float4.hpp"
 #include "rhi/rhi_types.h"
 #include <glm/gtc/random.hpp>
-#include <iostream>
-#include <samples/scenes/million_cubes.h>
 #include <path.h>
+#include <rhi/vulkan/vk_upload_context.h>
+#include <samples/scenes/million_cubes.h>
 
 namespace Rodan {
 
@@ -229,7 +229,7 @@ void MillionCubesScene::CreateDescriptors(Velos::RHI::IDevice *device) {
 
 void MillionCubesScene::CreatePipeline(Velos::RHI::IDevice *device) {
 
-    auto vertSpv = ShaderCompiler::CompileFile({
+  auto vertSpv = ShaderCompiler::CompileFile({
       .path = Velos::Path::Resolve("assets/shaders/cubes.vert").string(),
       .stage = ShaderStage::Vertex,
       .entryPoint = "main",

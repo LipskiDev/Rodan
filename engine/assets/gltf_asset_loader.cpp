@@ -1,13 +1,20 @@
+#include "rhi/rhi_upload_context.h"
 #include <assets/gltf_asset_loader.h>
 #include <assets/gltf_loader.h>
 #include <graphics/mesh_uploader.h>
+#include <stdexcept>
 
 namespace Rodan {
 
 std::unique_ptr<StaticGltfAsset>
-StaticGltfAsset::Load(IDevice *device, const std::string &path) {
+StaticGltfAsset::Load(IDevice *device, IUploadContext *upload,
+                      const std::string &path) {
   if (!device) {
     throw std::runtime_error("StaticGltfAsset::Load: device is null");
+  }
+
+  if (!upload) {
+    throw std::runtime_error("StaticGltfAsset::Load: upload context is null");
   }
 
   auto asset = std::make_unique<StaticGltfAsset>();
@@ -17,8 +24,8 @@ StaticGltfAsset::Load(IDevice *device, const std::string &path) {
   asset->CreateMaterialLayout(device);
   asset->CreateDescriptorPool(device);
   asset->CreateFallbackResources(device);
-  asset->UploadMeshes(device);
-  asset->UploadMaterials(device);
+  asset->UploadMeshes(device, upload);
+  asset->UploadMaterials(device, upload);
   asset->BuildInstances();
 
   return asset;
@@ -64,6 +71,11 @@ void StaticGltfAsset::Destroy(IDevice *device) {
     if (mat.baseColorImage.IsValid()) {
       device->DestroyImage(mat.baseColorImage);
       mat.baseColorImage = {};
+    }
+
+    if (mat.baseColorStagingBuffer.IsValid()) {
+      device->DestroyBuffer(mat.baseColorStagingBuffer);
+      mat.baseColorStagingBuffer = {};
     }
   }
   materials_.clear();
@@ -135,85 +147,38 @@ void StaticGltfAsset::CreateDescriptorPool(IDevice *device) {
   descriptorPool_ = device->CreateDescriptorPool(poolDesc);
 }
 
-void StaticGltfAsset::Prepare(ICommandList &cmd) {
-  if (prepared_) {
-    return;
+void StaticGltfAsset::Prepare(ICommandList &cmd) { prepared_ = true; }
+
+void StaticGltfAsset::UploadMeshes(IDevice *device, IUploadContext *upload) {
+  if (!device) {
+    throw std::runtime_error("StaticGltfAsset::UploadMeshes: device is null");
   }
 
-  cmd.Barrier({
-      .image = fallbackImage_,
-      .newLayout = ImageLayout::TransferDst,
-      .aspect = ImageAspect::Color,
-  });
-
-  BufferImageCopyRegion fallbackRegion{};
-  fallbackRegion.bufferOffset = 0;
-  fallbackRegion.bufferRowLength = 0;
-  fallbackRegion.bufferImageHeight = 0;
-  fallbackRegion.mipLevel = 0;
-  fallbackRegion.baseArrayLayer = 0;
-  fallbackRegion.layerCount = 1;
-  fallbackRegion.imageOffset = {0, 0, 0};
-  fallbackRegion.imageExtent = {1, 1, 1};
-  fallbackRegion.aspect = ImageAspect::Color;
-
-  cmd.CopyBufferToImage(fallbackBuffer_, fallbackImage_, fallbackRegion);
-
-  cmd.Barrier({
-      .image = fallbackImage_,
-      .newLayout = ImageLayout::ShaderReadOnly,
-      .aspect = ImageAspect::Color,
-  });
-
-  for (auto &mat : materials_) {
-    if (!mat.ownsBaseColorResources || mat.uploaded) {
-      continue;
-    }
-
-    cmd.Barrier({
-        .image = mat.baseColorImage,
-        .newLayout = ImageLayout::TransferDst,
-        .aspect = ImageAspect::Color,
-    });
-
-    BufferImageCopyRegion region{};
-    region.bufferOffset = 0;
-    region.bufferRowLength = 0;
-    region.bufferImageHeight = 0;
-    region.mipLevel = 0;
-    region.baseArrayLayer = 0;
-    region.layerCount = 1;
-    region.imageOffset = {0, 0, 0};
-    region.imageExtent = {mat.baseColorWidth, mat.baseColorHeight, 1};
-    region.aspect = ImageAspect::Color;
-
-    cmd.CopyBufferToImage(mat.baseColorStagingBuffer, mat.baseColorImage,
-                          region);
-
-    cmd.Barrier({
-        .image = mat.baseColorImage,
-        .newLayout = ImageLayout::ShaderReadOnly,
-        .aspect = ImageAspect::Color,
-    });
-
-    mat.uploaded = true;
+  if (!upload) {
+    throw std::runtime_error("StaticGltfAsset::UploadMeshes: upload is null");
   }
 
-  prepared_ = true;
-}
-
-void StaticGltfAsset::UploadMeshes(IDevice *device) {
-
+  meshes_.clear();
   meshes_.reserve(importedScene_.meshes.size());
   for (const auto &mesh : importedScene_.meshes) {
 
-    auto gpuMesh = MeshUploader::Upload(device, mesh);
+    auto gpuMesh = MeshUploader::Upload(device, upload, mesh);
 
     meshes_.push_back(gpuMesh);
   }
 }
 
-void StaticGltfAsset::UploadMaterials(IDevice *device) {
+void StaticGltfAsset::UploadMaterials(IDevice *device, IUploadContext *upload) {
+  if (!device) {
+    throw std::runtime_error(
+        "StaticGltfAsset::UploadMaterials: device is null");
+  }
+
+  if (!upload) {
+    throw std::runtime_error(
+        "StaticGltfAsset::UploadMaterials: upload is null");
+  }
+
   materials_.clear();
   materials_.reserve(importedScene_.materials.size());
 
@@ -234,21 +199,13 @@ void StaticGltfAsset::UploadMaterials(IDevice *device) {
       gpuMat.baseColorHeight = static_cast<uint32_t>(img.height);
       gpuMat.ownsBaseColorResources = true;
 
-      gpuMat.baseColorStagingBuffer = device->CreateBuffer({
-          .size = static_cast<uint64_t>(img.pixelsRGBA8.size()),
-          .usage = BufferUsage::TransferSrc,
-          .memoryUsage = MemoryUsage::CPUToGPU,
-          .initialData = img.pixelsRGBA8.data(),
-          .debugName = "GLTF Base Color Staging Buffer",
-      });
-
       gpuMat.baseColorImage = device->CreateImage({
           .width = gpuMat.baseColorWidth,
           .height = gpuMat.baseColorHeight,
           .depth = 1,
           .mipLevels = 1,
           .arrayLayers = 1,
-          .format = Format::RGBA8_UNORM, // use SRGB later if available
+          .format = Format::RGBA8_UNORM,
           .type = ImageType::Image2D,
           .usage = ImageUsage::TransferDst | ImageUsage::Sampled,
           .debugName = "GLTF Base Color Image",
@@ -274,6 +231,24 @@ void StaticGltfAsset::UploadMaterials(IDevice *device) {
           .addressW = SamplerAddressMode::Repeat,
           .debugName = "GLTF Base Color Sampler",
       });
+
+      upload->UploadImage(
+          {
+              .dstImage = gpuMat.baseColorImage,
+              .oldLayout = ImageLayout::Undefined,
+              .finalLayout = ImageLayout::ShaderReadOnly,
+              .aspect = ImageAspect::Color,
+              .mipLevel = 0,
+              .baseArrayLayer = 0,
+              .layerCount = 1,
+              .width = gpuMat.baseColorWidth,
+              .height = gpuMat.baseColorHeight,
+              .depth = 1,
+              .bufferRowLength = 0,
+              .bufferImageHeight = 0,
+          },
+          img.pixelsRGBA8.data(),
+          static_cast<uint64_t>(img.pixelsRGBA8.size()));
     } else {
       gpuMat.baseColorImage = fallbackImage_;
       gpuMat.baseColorImageView = fallbackImageView_;

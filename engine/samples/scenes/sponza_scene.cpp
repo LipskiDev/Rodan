@@ -96,11 +96,7 @@ void SponzaScene::Update(float deltaSeconds, const SceneUpdateContext &ctx) {
   camera_.Update(deltaSeconds);
 }
 
-void SponzaScene::Prepare(ICommandList &cmd) {
-  if (asset_) {
-    asset_->Prepare(cmd);
-  }
-}
+void SponzaScene::Prepare(ICommandList &cmd) { (void)cmd; }
 
 void SponzaScene::Render(ICommandList &cmd) {
   drawInstanceCount_ = static_cast<u32>(instances_.size());
@@ -235,9 +231,14 @@ void SponzaScene::CreatePipeline(IDevice *device) {
 }
 
 void SponzaScene::LoadScene(IDevice *device) {
+  auto upload = device->CreateUploadContext(256 * 1024 * 1024);
+  upload->Begin();
+
   asset_ = StaticGltfAsset::Load(
-      device,
+      device, upload.get(),
       Velos::Path::Resolve("assets/models/sponza/Sponza.gltf").string());
+
+  upload->Flush();
 
   instances_ = asset_->GetInstances();
 
