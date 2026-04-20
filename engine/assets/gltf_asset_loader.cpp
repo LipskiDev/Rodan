@@ -1,3 +1,4 @@
+#include "rhi/rhi_types.h"
 #include "rhi/rhi_upload_context.h"
 #include <assets/gltf_asset_loader.h>
 #include <assets/gltf_loader.h>
@@ -57,43 +58,13 @@ void StaticGltfAsset::Destroy(IDevice *device) {
   meshes_.clear();
 
   for (auto &mat : materials_) {
-    // only destroy if these are owned per-material and valid
-    if (mat.baseColorSampler.IsValid()) {
-      device->DestroySampler(mat.baseColorSampler);
-      mat.baseColorSampler = {};
-    }
-
-    if (mat.baseColorImageView.IsValid()) {
-      device->DestroyImageView(mat.baseColorImageView);
-      mat.baseColorImageView = {};
-    }
-
-    if (mat.baseColorImage.IsValid()) {
-      device->DestroyImage(mat.baseColorImage);
-      mat.baseColorImage = {};
-    }
-
-    if (mat.baseColorStagingBuffer.IsValid()) {
-      device->DestroyBuffer(mat.baseColorStagingBuffer);
-      mat.baseColorStagingBuffer = {};
+    if (mat.ownsBaseColorResources) {
+      DestroyTexture(device, mat.baseColor);
     }
   }
   materials_.clear();
 
-  if (fallbackSampler_.IsValid()) {
-    device->DestroySampler(fallbackSampler_);
-    fallbackSampler_ = {};
-  }
-
-  if (fallbackImageView_.IsValid()) {
-    device->DestroyImageView(fallbackImageView_);
-    fallbackImageView_ = {};
-  }
-
-  if (fallbackImage_.IsValid()) {
-    device->DestroyImage(fallbackImage_);
-    fallbackImage_ = {};
-  }
+  DestroyTexture(device, fallbackTexture_);
 
   if (descriptorPool_.IsValid()) {
     device->DestroyDescriptorPool(descriptorPool_);
@@ -190,66 +161,22 @@ void StaticGltfAsset::UploadMaterials(IDevice *device, IUploadContext *upload) {
       const ImportedImage &img =
           importedScene_.images[mat.baseColorTexture.imageIndex];
 
-      gpuMat.baseColorWidth = static_cast<uint32_t>(img.width);
-      gpuMat.baseColorHeight = static_cast<uint32_t>(img.height);
-      gpuMat.ownsBaseColorResources = true;
-
-      gpuMat.baseColorImage = device->CreateImage({
-          .width = gpuMat.baseColorWidth,
-          .height = gpuMat.baseColorHeight,
-          .depth = 1,
-          .mipLevels = 1,
-          .arrayLayers = 1,
-          .format = Format::RGBA8_UNORM,
-          .type = ImageType::Image2D,
-          .usage = ImageUsage::TransferDst | ImageUsage::Sampled,
-          .debugName = "GLTF Base Color Image",
-      });
-
-      gpuMat.baseColorImageView = device->CreateImageView({
-          .image = gpuMat.baseColorImage,
-          .format = Format::RGBA8_UNORM,
-          .type = ImageViewType::View2D,
-          .aspect = ImageAspect::Color,
-          .baseMipLevel = 0,
-          .mipLevelCount = 1,
-          .baseArrayLayer = 0,
-          .arrayLayerCount = 1,
-          .debugName = "GLTF Base Color Image View",
-      });
-
-      gpuMat.baseColorSampler = device->CreateSampler({
-          .minFilter = Filter::Linear,
-          .magFilter = Filter::Linear,
-          .addressU = SamplerAddressMode::Repeat,
-          .addressV = SamplerAddressMode::Repeat,
-          .addressW = SamplerAddressMode::Repeat,
-          .debugName = "GLTF Base Color Sampler",
-      });
-
-      upload->UploadImage(
-          {
-              .dstImage = gpuMat.baseColorImage,
-              .oldLayout = ImageLayout::Undefined,
-              .finalLayout = ImageLayout::ShaderReadOnly,
-              .aspect = ImageAspect::Color,
-              .mipLevel = 0,
-              .baseArrayLayer = 0,
-              .layerCount = 1,
-              .width = gpuMat.baseColorWidth,
-              .height = gpuMat.baseColorHeight,
-              .depth = 1,
-              .bufferRowLength = 0,
-              .bufferImageHeight = 0,
-          },
+      gpuMat.baseColor = CreateTexture2D(
+          device, upload,
+          TextureDesc{.width = static_cast<uint32_t>(img.width),
+                      .height = static_cast<uint32_t>(img.height),
+                      .format = Format::RGBA8_UNORM,
+                      .minFilter = Filter::Linear,
+                      .magFilter = Filter::Linear,
+                      .addressU = SamplerAddressMode::Repeat,
+                      .addressV = SamplerAddressMode::Repeat,
+                      .addressW = SamplerAddressMode::Repeat,
+                      .debugName = "GLTF Base Color Texture"},
           img.pixelsRGBA8.data(),
           static_cast<uint64_t>(img.pixelsRGBA8.size()));
+
     } else {
-      gpuMat.baseColorImage = fallbackImage_;
-      gpuMat.baseColorImageView = fallbackImageView_;
-      gpuMat.baseColorSampler = fallbackSampler_;
-      gpuMat.baseColorWidth = 1;
-      gpuMat.baseColorHeight = 1;
+      gpuMat.baseColor = fallbackTexture_;
       gpuMat.ownsBaseColorResources = false;
     }
 
@@ -257,8 +184,8 @@ void StaticGltfAsset::UploadMaterials(IDevice *device, IUploadContext *upload) {
         device->AllocateDescriptorSet(descriptorPool_, materialLayout_);
 
     DescriptorImageInfo imageInfo{};
-    imageInfo.sampler = gpuMat.baseColorSampler;
-    imageInfo.imageView = gpuMat.baseColorImageView;
+    imageInfo.sampler = gpuMat.baseColor.sampler;
+    imageInfo.imageView = gpuMat.baseColor.view;
     imageInfo.imageLayout = ImageLayout::ShaderReadOnly;
 
     device->UpdateDescriptorSet({
@@ -317,57 +244,29 @@ void StaticGltfAsset::CreateFallbackResources(IDevice *device,
         "StaticGltfAsset::CreateFallbackResources: device is null");
   }
 
-  if (fallbackImage_.IsValid()) {
+  if (!upload) {
+    throw std::runtime_error(
+        "StaticGltfAsset::CreateFallbackResources: upload is null");
+  }
+
+  if (fallbackTexture_.IsValid()) {
     return;
   }
 
   const std::uint8_t whitePixel[4] = {255, 255, 255, 255};
 
-  fallbackImage_ = device->CreateImage({
-      .width = 1,
-      .height = 1,
-      .depth = 1,
-      .mipLevels = 1,
-      .arrayLayers = 1,
-      .format = Format::RGBA8_UNORM,
-      .type = ImageType::Image2D,
-      .usage = ImageUsage::TransferDst | ImageUsage::Sampled,
-      .debugName = "Fallback White Texture",
-  });
-
-  fallbackImageView_ = device->CreateImageView({
-      .image = fallbackImage_,
-      .format = Format::RGBA8_UNORM,
-      .type = ImageViewType::View2D,
-      .aspect = ImageAspect::Color,
-      .baseMipLevel = 0,
-      .mipLevelCount = 1,
-      .baseArrayLayer = 0,
-      .arrayLayerCount = 1,
-  });
-
-  fallbackSampler_ = device->CreateSampler({
-      .minFilter = Filter::Linear,
-      .magFilter = Filter::Linear,
-      .addressU = SamplerAddressMode::Repeat,
-      .addressV = SamplerAddressMode::Repeat,
-      .addressW = SamplerAddressMode::Repeat,
-      .debugName = "Fallback White Sampler",
-  });
-
-  upload->UploadImage(
-      {
-          .dstImage = fallbackImage_,
-          .oldLayout = ImageLayout::Undefined,
-          .finalLayout = ImageLayout::ShaderReadOnly,
-          .aspect = ImageAspect::Color,
-          .mipLevel = 0,
-          .baseArrayLayer = 0,
-          .layerCount = 1,
-          .width = 1,
-          .height = 1,
-          .depth = 1,
-      },
-      whitePixel, 4);
+  fallbackTexture_ = CreateTexture2D(device, upload,
+                                     TextureDesc{
+                                         .width = 1,
+                                         .height = 1,
+                                         .format = Format::RGBA8_UNORM,
+                                         .minFilter = Filter::Linear,
+                                         .magFilter = Filter::Linear,
+                                         .addressU = SamplerAddressMode::Repeat,
+                                         .addressV = SamplerAddressMode::Repeat,
+                                         .addressW = SamplerAddressMode::Repeat,
+                                         .debugName = "Fallback White Texture",
+                                     },
+                                     whitePixel, 4);
 }
 } // namespace Rodan

@@ -2,6 +2,7 @@
 
 #include "assets/imported_scene.h"
 #include "graphics/material_resource.h"
+#include "graphics/texture.h"
 #include "rhi/rhi_command_list.h"
 #include "rhi/rhi_upload_context.h"
 #include "scene/static_mesh_instance.h"
@@ -46,9 +47,7 @@ private:
   DescriptorSetLayoutHandle materialLayout_{};
   DescriptorPoolHandle descriptorPool_{};
 
-  ImageHandle fallbackImage_{};
-  ImageViewHandle fallbackImageView_{};
-  SamplerHandle fallbackSampler_{};
+  Texture fallbackTexture_{};
 
 private:
   void CreateMaterialLayout(IDevice *device);
