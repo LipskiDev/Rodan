@@ -57,6 +57,15 @@ private:
   Velos::u32 drawSubmeshCount_ = 0;
 
   std::unique_ptr<StaticGltfAsset> asset_;
+
+  enum Show {
+    BaseColor = 0,
+    Normal = 1,
+    MetallicRoughness = 2,
+    Tangent = 3,
+    Final = 4
+  };
+  Show showMode_ = Final;
 };
 
 } // namespace Rodan

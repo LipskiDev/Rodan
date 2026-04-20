@@ -8,6 +8,7 @@ struct ImportedVertex {
   glm::vec3 position;
   glm::vec3 normal;
   glm::vec2 uv;
+  glm::vec4 tangent;
 };
 
 struct ImportedPrimitive {
@@ -29,6 +30,8 @@ struct ImportedMaterial {
   bool doubleSided = false;
 
   ImportedTextureRef baseColorTexture;
+  ImportedTextureRef normalTexture;
+  ImportedTextureRef metallicRoughnessTexture;
 };
 
 struct ImportedImage {

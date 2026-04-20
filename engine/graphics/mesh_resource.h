@@ -16,6 +16,8 @@ struct MVPPushConstants {
   glm::mat4 model;
   glm::mat4 view;
   glm::mat4 proj;
+  int showMode;
+  int pad[3];
 };
 
 struct MaterialPushConstants {
@@ -23,6 +25,7 @@ struct MaterialPushConstants {
   float metallicFactor;
   float roughnessFactor;
   int hasMaterial;
+  float pad0;
 };
 
 using namespace Velos::RHI;

@@ -8,14 +8,23 @@ namespace Rodan {
 using namespace Velos::RHI;
 
 struct MaterialResource {
-  Texture baseColor{};
+  Texture baseColorTexture{};
+  Texture normalTexture{};
+  Texture metallicRoughnessTexture{};
 
   glm::vec4 baseColorFactor{1.0f};
   float metallicFactor = 1.0f;
   float roughnessFactor = 1.0f;
 
   DescriptorSetHandle descriptorSet{};
+
   bool ownsBaseColorResources = false;
+  bool ownsNormalResources = false;
+  bool ownsMetallicRoughnessResources = false;
+
+  bool hasBaseColorTexture = false;
+  bool hasNormalTexture = false;
+  bool hasMetallicRoughnessTexture = false;
 };
 
 } // namespace Rodan

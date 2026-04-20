@@ -226,7 +226,7 @@ void MetalRoughnessSpheresNoTexScene::CreatePipeline(IDevice *device) {
 }
 
 void MetalRoughnessSpheresNoTexScene::LoadScene(IDevice *device) {
-  auto upload = device->CreateUploadContext(32 * 1024 * 1024);
+  auto upload = device->CreateUploadContext(64 * 1024 * 1024);
   upload->Begin();
   asset_ = StaticGltfAsset::Load(
       device, upload.get(),

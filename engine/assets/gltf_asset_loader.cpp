@@ -59,7 +59,15 @@ void StaticGltfAsset::Destroy(IDevice *device) {
 
   for (auto &mat : materials_) {
     if (mat.ownsBaseColorResources) {
-      DestroyTexture(device, mat.baseColor);
+      DestroyTexture(device, mat.baseColorTexture);
+    }
+
+    if (mat.ownsNormalResources) {
+      DestroyTexture(device, mat.normalTexture);
+    }
+
+    if (mat.ownsMetallicRoughnessResources) {
+      DestroyTexture(device, mat.metallicRoughnessTexture);
     }
   }
   materials_.clear();
@@ -82,15 +90,30 @@ void StaticGltfAsset::Destroy(IDevice *device) {
 
 void StaticGltfAsset::CreateMaterialLayout(IDevice *device) {
 
-  DescriptorBindingDesc binding{};
-  binding.binding = 0;
-  binding.type = DescriptorType::CombinedImageSampler;
-  binding.count = 1;
-  binding.visibility = ShaderStage::Fragment;
+  DescriptorBindingDesc bindings[] = {
+      DescriptorBindingDesc{
+          .binding = 0,
+          .type = DescriptorType::CombinedImageSampler,
+          .count = 1,
+          .visibility = ShaderStage::Fragment,
+      },
+      DescriptorBindingDesc{
+          .binding = 1,
+          .type = DescriptorType::CombinedImageSampler,
+          .count = 1,
+          .visibility = ShaderStage::Fragment,
+      },
+      DescriptorBindingDesc{
+          .binding = 2,
+          .type = DescriptorType::CombinedImageSampler,
+          .count = 1,
+          .visibility = ShaderStage::Fragment,
+      },
+  };
 
   DescriptorSetLayoutDesc layout{};
-  layout.bindings = &binding;
-  layout.bindingCount = 1;
+  layout.bindings = bindings;
+  layout.bindingCount = 3;
   layout.debugName = "GLTF Material Layout";
 
   materialLayout_ = device->CreateDescriptorSetLayout(layout);
@@ -103,7 +126,7 @@ void StaticGltfAsset::CreateDescriptorPool(IDevice *device) {
 
   DescriptorPoolSize poolSize{};
   poolSize.type = DescriptorType::CombinedImageSampler;
-  poolSize.count = materialCount;
+  poolSize.count = materialCount * 3;
 
   DescriptorPoolDesc poolDesc{};
   poolDesc.poolSizes = &poolSize;
@@ -161,7 +184,7 @@ void StaticGltfAsset::UploadMaterials(IDevice *device, IUploadContext *upload) {
       const ImportedImage &img =
           importedScene_.images[mat.baseColorTexture.imageIndex];
 
-      gpuMat.baseColor = CreateTexture2D(
+      gpuMat.baseColorTexture = CreateTexture2D(
           device, upload,
           TextureDesc{.width = static_cast<uint32_t>(img.width),
                       .height = static_cast<uint32_t>(img.height),
@@ -174,19 +197,83 @@ void StaticGltfAsset::UploadMaterials(IDevice *device, IUploadContext *upload) {
                       .debugName = "GLTF Base Color Texture"},
           img.pixelsRGBA8.data(),
           static_cast<uint64_t>(img.pixelsRGBA8.size()));
+      gpuMat.ownsBaseColorResources = true;
 
     } else {
-      gpuMat.baseColor = fallbackTexture_;
+      gpuMat.baseColorTexture = fallbackTexture_;
       gpuMat.ownsBaseColorResources = false;
+    }
+
+    if (mat.normalTexture.imageIndex >= 0 &&
+        mat.normalTexture.imageIndex <
+            static_cast<int>(importedScene_.images.size())) {
+      const ImportedImage &img =
+          importedScene_.images[mat.normalTexture.imageIndex];
+
+      gpuMat.normalTexture = CreateTexture2D(
+          device, upload,
+          TextureDesc{.width = static_cast<uint32_t>(img.width),
+                      .height = static_cast<uint32_t>(img.height),
+                      .format = Format::RGBA8_UNORM,
+                      .minFilter = Filter::Linear,
+                      .magFilter = Filter::Linear,
+                      .addressU = SamplerAddressMode::Repeat,
+                      .addressV = SamplerAddressMode::Repeat,
+                      .addressW = SamplerAddressMode::Repeat,
+                      .debugName = "GLTF Normal Texture"},
+          img.pixelsRGBA8.data(),
+          static_cast<uint64_t>(img.pixelsRGBA8.size()));
+      gpuMat.ownsNormalResources = true;
+    } else {
+      gpuMat.normalTexture = fallbackTexture_;
+      gpuMat.ownsNormalResources = false;
+    }
+
+    if (mat.metallicRoughnessTexture.imageIndex >= 0 &&
+        mat.metallicRoughnessTexture.imageIndex <
+            static_cast<int>(importedScene_.images.size())) {
+      const ImportedImage &img =
+          importedScene_.images[mat.metallicRoughnessTexture.imageIndex];
+
+      gpuMat.metallicRoughnessTexture = CreateTexture2D(
+          device, upload,
+          TextureDesc{.width = static_cast<uint32_t>(img.width),
+                      .height = static_cast<uint32_t>(img.height),
+                      .format = Format::RGBA8_UNORM,
+                      .minFilter = Filter::Linear,
+                      .magFilter = Filter::Linear,
+                      .addressU = SamplerAddressMode::Repeat,
+                      .addressV = SamplerAddressMode::Repeat,
+                      .addressW = SamplerAddressMode::Repeat,
+                      .debugName = "GLTF Metallic Roughness Texture"},
+          img.pixelsRGBA8.data(),
+          static_cast<uint64_t>(img.pixelsRGBA8.size()));
+
+      gpuMat.ownsMetallicRoughnessResources = true;
+
+    } else {
+      gpuMat.metallicRoughnessTexture = fallbackTexture_;
+      gpuMat.ownsMetallicRoughnessResources = false;
     }
 
     gpuMat.descriptorSet =
         device->AllocateDescriptorSet(descriptorPool_, materialLayout_);
 
-    DescriptorImageInfo imageInfo{};
-    imageInfo.sampler = gpuMat.baseColor.sampler;
-    imageInfo.imageView = gpuMat.baseColor.view;
-    imageInfo.imageLayout = ImageLayout::ShaderReadOnly;
+    DescriptorImageInfo baseColorImageInfo{};
+    baseColorImageInfo.sampler = gpuMat.baseColorTexture.sampler;
+    baseColorImageInfo.imageView = gpuMat.baseColorTexture.view;
+    baseColorImageInfo.imageLayout = ImageLayout::ShaderReadOnly;
+
+    DescriptorImageInfo normalImageInfo{};
+    normalImageInfo.sampler = gpuMat.normalTexture.sampler;
+    normalImageInfo.imageView = gpuMat.normalTexture.view;
+    normalImageInfo.imageLayout = ImageLayout::ShaderReadOnly;
+
+    DescriptorImageInfo metallicRoughnessImageInfo{};
+    metallicRoughnessImageInfo.sampler =
+        gpuMat.metallicRoughnessTexture.sampler;
+    metallicRoughnessImageInfo.imageView = gpuMat.metallicRoughnessTexture.view;
+    metallicRoughnessImageInfo.imageLayout = ImageLayout::ShaderReadOnly;
 
     device->UpdateDescriptorSet({
         .dstSet = gpuMat.descriptorSet,
@@ -194,7 +281,27 @@ void StaticGltfAsset::UploadMaterials(IDevice *device, IUploadContext *upload) {
         .arrayElement = 0,
         .type = DescriptorType::CombinedImageSampler,
         .bufferInfo = nullptr,
-        .imageInfo = &imageInfo,
+        .imageInfo = &baseColorImageInfo,
+        .descriptorCount = 1,
+    });
+
+    device->UpdateDescriptorSet({
+        .dstSet = gpuMat.descriptorSet,
+        .binding = 1,
+        .arrayElement = 0,
+        .type = DescriptorType::CombinedImageSampler,
+        .bufferInfo = nullptr,
+        .imageInfo = &normalImageInfo,
+        .descriptorCount = 1,
+    });
+
+    device->UpdateDescriptorSet({
+        .dstSet = gpuMat.descriptorSet,
+        .binding = 2,
+        .arrayElement = 0,
+        .type = DescriptorType::CombinedImageSampler,
+        .bufferInfo = nullptr,
+        .imageInfo = &metallicRoughnessImageInfo,
         .descriptorCount = 1,
     });
 

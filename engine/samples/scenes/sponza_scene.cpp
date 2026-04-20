@@ -115,6 +115,7 @@ void SponzaScene::Render(ICommandList &cmd) {
     push.model = instance.localTransform;
     push.view = camera_.GetView();
     push.proj = camera_.GetProjection();
+    push.showMode = static_cast<int>(showMode_);
 
     cmd.PushConstants(ShaderStage::Vertex | ShaderStage::Fragment, 0,
                       sizeof(MVPPushConstants), &push);
@@ -137,6 +138,14 @@ void SponzaScene::RenderImGui() {
     ImGui::Text("Materials: %u",
                 static_cast<u32>(asset_->GetMaterials().size()));
   }
+
+  const char *items[] = {"BaseColor", "Normal", "MetallicRoughness", "Tangent",
+                         "Final"};
+  int mode = static_cast<int>(showMode_);
+  if (ImGui::Combo("Show", &mode, items, IM_ARRAYSIZE(items))) {
+    showMode_ = static_cast<Show>(mode);
+  }
+  ImGui::Text("Mode: %s", items[mode]);
 
   ImGui::Text("Hold RMB to look around");
   ImGui::End();
@@ -192,8 +201,12 @@ void SponzaScene::CreatePipeline(IDevice *device) {
                          .location = 2,
                          .format = VertexFormat::Float32x2,
                          .offset = offsetof(ImportedVertex, uv),
-                     }},
-  };
+                     },
+                     {
+                         .location = 3,
+                         .format = VertexFormat::Float32x4,
+                         .offset = offsetof(ImportedVertex, tangent),
+                     }}};
 
   DescriptorSetLayoutHandle setLayouts[] = {asset_->GetMaterialLayout()};
 
@@ -231,7 +244,7 @@ void SponzaScene::CreatePipeline(IDevice *device) {
 }
 
 void SponzaScene::LoadScene(IDevice *device) {
-  auto upload = device->CreateUploadContext(256 * 1024 * 1024);
+  auto upload = device->CreateUploadContext(4 * 256 * 1024 * 1024);
   upload->Begin();
 
   asset_ = StaticGltfAsset::Load(

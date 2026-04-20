@@ -71,6 +71,31 @@ size_t GetAccessorStride(const tinygltf::Model &model,
          tinygltf::GetNumComponentsInType(accessor.type);
 }
 
+void ReadVec4Attribute(const tinygltf::Model &model, int accessorIndex,
+                       std::vector<glm::vec4> &out, size_t expectedCount) {
+  if (accessorIndex < 0) {
+    out.assign(expectedCount, glm::vec4(1.0f, 0.0f, 0.0f, 1.0f));
+    return;
+  }
+
+  const tinygltf::Accessor &accessor = model.accessors.at(accessorIndex);
+
+  if (accessor.componentType != TINYGLTF_COMPONENT_TYPE_FLOAT ||
+      accessor.type != TINYGLTF_TYPE_VEC4) {
+    throw std::runtime_error("Unsupported VEC4 attribute format in glTF");
+  }
+
+  const unsigned char *data = GetAccessorDataPtr(model, accessor);
+  const size_t stride = GetAccessorStride(model, accessor);
+
+  out.resize(accessor.count);
+
+  for (size_t i = 0; i < accessor.count; ++i) {
+    const float *v = reinterpret_cast<const float *>(data + i * stride);
+    out[i] = glm::vec4(v[0], v[1], v[2], v[3]);
+  }
+}
+
 void ReadVec3Attribute(const tinygltf::Model &model, int accessorIndex,
                        std::vector<glm::vec3> &out, size_t expectedCount) {
   if (accessorIndex < 0) {
@@ -173,6 +198,7 @@ ImportedPrimitive LoadPrimitive(const tinygltf::Model &model,
   std::vector<glm::vec3> positions;
   std::vector<glm::vec3> normals;
   std::vector<glm::vec2> uvs;
+  std::vector<glm::vec4> tangents;
 
   ReadVec3Attribute(model, positionAccessorIndex, positions, vertexCount);
 
@@ -186,6 +212,11 @@ ImportedPrimitive LoadPrimitive(const tinygltf::Model &model,
                     uvIt != primitive.attributes.end() ? uvIt->second : -1, uvs,
                     vertexCount);
 
+  auto tangentIt = primitive.attributes.find("TANGENT");
+  ReadVec4Attribute(
+      model, tangentIt != primitive.attributes.end() ? tangentIt->second : -1,
+      tangents, vertexCount);
+
   ImportedPrimitive out;
   out.vertices.resize(vertexCount);
 
@@ -193,6 +224,7 @@ ImportedPrimitive LoadPrimitive(const tinygltf::Model &model,
     out.vertices[i].position = positions[i];
     out.vertices[i].normal = normals[i];
     out.vertices[i].uv = uvs[i];
+    out.vertices[i].tangent = tangents[i];
   }
 
   out.indices = ReadIndices(model, primitive.indices);
@@ -246,6 +278,44 @@ static ImportedMaterial LoadMaterial(const tinygltf::Model &model,
     if (tex.source < 0 || tex.source >= static_cast<int>(model.images.size())) {
       throw std::runtime_error(
           "glTF material references invalid base color image");
+    }
+  }
+
+  if (material.normalTexture.index >= 0) {
+    const int textureIndex = material.normalTexture.index;
+    if (textureIndex < 0 ||
+        textureIndex >= static_cast<int>(model.textures.size())) {
+      throw std::runtime_error(
+          "glTF material references invalid normal texture");
+    }
+
+    const tinygltf::Texture &tex = model.textures[textureIndex];
+    out.normalTexture.imageIndex = tex.source;
+    out.normalTexture.samplerIndex = tex.sampler;
+    out.normalTexture.texCoord = material.normalTexture.texCoord;
+
+    if (tex.source < 0 || tex.source >= static_cast<int>(model.images.size())) {
+      throw std::runtime_error("glTF material references invalid normal image");
+    }
+  }
+
+  if (pbr.metallicRoughnessTexture.index >= 0) {
+    const int textureIndex = pbr.metallicRoughnessTexture.index;
+    if (textureIndex < 0 ||
+        textureIndex >= static_cast<int>(model.textures.size())) {
+      throw std::runtime_error(
+          "glTF material references invalid metallic roughness texture");
+    }
+
+    const tinygltf::Texture &tex = model.textures[textureIndex];
+    out.metallicRoughnessTexture.imageIndex = tex.source;
+    out.metallicRoughnessTexture.samplerIndex = tex.sampler;
+    out.metallicRoughnessTexture.texCoord =
+        pbr.metallicRoughnessTexture.texCoord;
+
+    if (tex.source < 0 || tex.source >= static_cast<int>(model.images.size())) {
+      throw std::runtime_error(
+          "glTF material references invalid metallic roughness image");
     }
   }
 
