@@ -1,6 +1,7 @@
 #pragma once
 
 #include <glm/glm.hpp>
+#include <graphics/material_types.h>
 #include <string>
 
 namespace Rodan {
@@ -27,11 +28,14 @@ struct ImportedMaterial {
   glm::vec4 baseColorFactor{1.0f};
   float metallicFactor = 1.0f;
   float roughnessFactor = 1.0f;
-  bool doubleSided = false;
 
   ImportedTextureRef baseColorTexture;
   ImportedTextureRef normalTexture;
   ImportedTextureRef metallicRoughnessTexture;
+
+  AlphaMode alphaMode = AlphaMode::Opaque;
+  float alphaCutoff = 0.5f;
+  bool doubleSided = false;
 };
 
 struct ImportedImage {

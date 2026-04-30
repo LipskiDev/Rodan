@@ -3,6 +3,7 @@
 #include "glm/ext/matrix_float4x4.hpp"
 #include "glm/ext/vector_float4.hpp"
 #include "rhi/rhi_handles.h"
+#include "rhi/rhi_pipeline.h"
 #include <cstdint>
 #include <vector>
 namespace Rodan {
@@ -12,27 +13,19 @@ struct Submesh {
   uint32_t materialSlot;
 };
 
-struct MVPPushConstants {
-  glm::mat4 model;
-  glm::mat4 view;
-  glm::mat4 proj;
-  int showMode;
-  int pad[3];
+struct MeshVertex {
+  glm::vec3 position;
+  glm::vec3 normal;
+  glm::vec2 uv;
+  glm::vec4 tangent;
 };
 
-struct MaterialPushConstants {
-  glm::vec4 baseColorFactor;
-  float metallicFactor;
-  float roughnessFactor;
-  int hasMaterial;
-  float pad0;
-};
+std::vector<Velos::RHI::VertexBufferLayoutDesc> GetMeshVertexLayout();
 
-using namespace Velos::RHI;
 class MeshResource {
 public:
-  BufferHandle vertexBuffer;
-  BufferHandle indexBuffer;
+  Velos::RHI::BufferHandle vertexBuffer;
+  Velos::RHI::BufferHandle indexBuffer;
 
   std::vector<Submesh> submeshes;
 };

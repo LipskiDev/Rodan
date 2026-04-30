@@ -17,13 +17,13 @@ void SponzaScene::Initialize(IDevice *device, SwapchainHandle swapchain,
                              Format colorFormat, Format depthFormat) {
   device_ = device;
   swapchain_ = swapchain;
-  colorFormat_ = colorFormat;
-  depthFormat_ = depthFormat;
 
   camera_.SetPerspective(60.0f, 16.0f / 9.0f, 0.1f, 500.0f);
 
   LoadScene(device_);
-  CreatePipeline(device_);
+
+  sceneRenderer_.Initialize(device_, swapchain_, colorFormat, depthFormat,
+                            asset_->GetMaterialLayout());
 }
 
 void SponzaScene::Shutdown(IDevice *device) {
@@ -37,14 +37,6 @@ void SponzaScene::Shutdown(IDevice *device) {
     asset_->Destroy(device);
     asset_.reset();
   }
-
-  device->DestroyPipeline(pipeline_);
-  device->DestroyShader(fragmentShader_);
-  device->DestroyShader(vertexShader_);
-
-  pipeline_ = {};
-  fragmentShader_ = {};
-  vertexShader_ = {};
 
   device_ = nullptr;
   swapchain_ = {};
@@ -102,7 +94,9 @@ void SponzaScene::Render(ICommandList &cmd) {
   drawInstanceCount_ = static_cast<u32>(instances_.size());
   drawSubmeshCount_ = 0;
 
-  cmd.BindPipeline(pipeline_);
+  if (!asset_) {
+    return;
+  }
 
   const auto &materials = asset_->GetMaterials();
 
@@ -111,20 +105,17 @@ void SponzaScene::Render(ICommandList &cmd) {
       continue;
     }
 
-    MVPPushConstants push{};
-    push.model = instance.localTransform;
-    push.view = camera_.GetView();
-    push.proj = camera_.GetProjection();
-    push.showMode = static_cast<int>(showMode_);
+    drawSubmeshCount_ += static_cast<u32>(instance.mesh->submeshes.size());
 
-    cmd.PushConstants(ShaderStage::Vertex | ShaderStage::Fragment, 0,
-                      sizeof(MVPPushConstants), &push);
+    StaticMeshRenderItem item{};
+    item.instance = &instance;
+    item.materials = &asset_->GetMaterials();
+    item.world = instance.localTransform;
 
-    const MeshResource &mesh = *instance.mesh;
-    drawSubmeshCount_ += static_cast<u32>(mesh.submeshes.size());
-
-    meshRenderer_.Draw(&cmd, instance, materials, pipeline_);
+    sceneRenderer_.SubmitStaticMesh(item);
   }
+
+  sceneRenderer_.Render(cmd, camera_);
 }
 
 void SponzaScene::RenderImGui() {
@@ -149,98 +140,6 @@ void SponzaScene::RenderImGui() {
 
   ImGui::Text("Hold RMB to look around");
   ImGui::End();
-}
-
-void SponzaScene::CreatePipeline(IDevice *device) {
-  auto vertSpv = ShaderCompiler::CompileFile({
-      .path = Velos::Path::Resolve("assets/shaders/static_mesh.vert").string(),
-      .stage = ShaderStage::Vertex,
-      .entryPoint = "main",
-  });
-
-  auto fragSpv = ShaderCompiler::CompileFile({
-      .path = Velos::Path::Resolve("assets/shaders/static_mesh.frag").string(),
-      .stage = ShaderStage::Fragment,
-      .entryPoint = "main",
-  });
-
-  vertexShader_ = device->CreateShader({
-      .stage = ShaderStage::Vertex,
-      .bytecode = vertSpv.spirv.data(),
-      .bytecodeSize =
-          static_cast<u64>(vertSpv.spirv.size() * sizeof(std::uint32_t)),
-      .entryPoint = "main",
-      .reflection = vertSpv.reflection,
-      .debugName = "Sponza Vertex Shader",
-  });
-
-  fragmentShader_ = device->CreateShader({
-      .stage = ShaderStage::Fragment,
-      .bytecode = fragSpv.spirv.data(),
-      .bytecodeSize =
-          static_cast<u64>(fragSpv.spirv.size() * sizeof(std::uint32_t)),
-      .entryPoint = "main",
-      .reflection = fragSpv.reflection,
-      .debugName = "Sponza Fragment Shader",
-  });
-
-  VertexBufferLayoutDesc layout{
-      .stride = sizeof(ImportedVertex),
-      .inputRate = VertexInputRate::PerVertex,
-      .attributes = {{
-                         .location = 0,
-                         .format = VertexFormat::Float32x3,
-                         .offset = offsetof(ImportedVertex, position),
-                     },
-                     {
-                         .location = 1,
-                         .format = VertexFormat::Float32x3,
-                         .offset = offsetof(ImportedVertex, normal),
-                     },
-                     {
-                         .location = 2,
-                         .format = VertexFormat::Float32x2,
-                         .offset = offsetof(ImportedVertex, uv),
-                     },
-                     {
-                         .location = 3,
-                         .format = VertexFormat::Float32x4,
-                         .offset = offsetof(ImportedVertex, tangent),
-                     }}};
-
-  DescriptorSetLayoutHandle setLayouts[] = {asset_->GetMaterialLayout()};
-
-  GraphicsPipelineDesc pipelineDesc{};
-  pipelineDesc.vertexShader = vertexShader_;
-  pipelineDesc.fragmentShader = fragmentShader_;
-  pipelineDesc.vertexLayouts.push_back(layout);
-  pipelineDesc.layout.descriptorSetLayouts = setLayouts;
-  pipelineDesc.layout.descriptorSetLayoutCount = 1;
-
-  pipelineDesc.topology = PrimitiveTopology::TriangleList;
-  pipelineDesc.raster.cullBackFaces = true;
-  pipelineDesc.raster.frontFaceCCW = true;
-  pipelineDesc.raster.wireframe = false;
-  pipelineDesc.blend = {
-      .enable = true,
-
-      .srcColor = BlendFactor::SrcAlpha,
-      .dstColor = BlendFactor::OneMinusSrcAlpha,
-      .colorOp = BlendOp::Add,
-
-      .srcAlpha = BlendFactor::One,
-      .dstAlpha = BlendFactor::OneMinusSrcAlpha,
-      .alphaOp = BlendOp::Add,
-  };
-  pipelineDesc.colorFormat = colorFormat_;
-  pipelineDesc.depth = {
-      .depthTestEnable = true,
-      .depthWriteEnable = true,
-      .depthFormat = depthFormat_,
-  };
-  pipelineDesc.debugName = "Sponza Scene Pipeline";
-
-  pipeline_ = device->CreateGraphicsPipeline(pipelineDesc);
 }
 
 void SponzaScene::LoadScene(IDevice *device) {

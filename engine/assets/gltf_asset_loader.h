@@ -39,7 +39,6 @@ private:
   bool fallbackUploaded_ = false;
   bool prepared_ = false;
 
-  ImportedScene importedScene_;
   std::vector<std::shared_ptr<MeshResource>> meshes_;
   std::vector<MaterialResource> materials_;
   std::vector<StaticMeshInstance> instances_;
@@ -51,10 +50,12 @@ private:
 
 private:
   void CreateMaterialLayout(IDevice *device);
-  void CreateDescriptorPool(IDevice *device);
-  void UploadMeshes(IDevice *device, IUploadContext *upload);
-  void UploadMaterials(IDevice *device, IUploadContext *upload);
-  void BuildInstances();
+  void CreateDescriptorPool(IDevice *device, ImportedScene importedScene);
+  void UploadMeshes(IDevice *device, IUploadContext *upload,
+                    ImportedScene importedScene);
+  void UploadMaterials(IDevice *device, IUploadContext *upload,
+                       ImportedScene importedScene);
+  void BuildInstances(ImportedScene importedScene);
 
   void CreateFallbackResources(IDevice *device, IUploadContext *upload);
 };

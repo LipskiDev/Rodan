@@ -6,6 +6,7 @@
 #include "scene/first_person_camera.h"
 #include "scene/static_mesh_instance.h"
 #include <assets/gltf_asset_loader.h>
+#include <renderer/scene_renderer.h>
 
 #include <glm/glm.hpp>
 #include <vector>
@@ -28,25 +29,18 @@ public:
   void RenderImGui() override;
 
 private:
-  void CreatePipeline(Velos::RHI::IDevice *device);
   void LoadScene(Velos::RHI::IDevice *device);
   void SpawnNodeRecursive(int nodeIndex, const glm::mat4 &parentTransform);
 
 private:
   Velos::RHI::IDevice *device_ = nullptr;
   Velos::RHI::SwapchainHandle swapchain_{};
-  Velos::RHI::Format colorFormat_{};
-  Velos::RHI::Format depthFormat_{};
-
-  Velos::RHI::ShaderHandle vertexShader_{};
-  Velos::RHI::ShaderHandle fragmentShader_{};
-  Velos::RHI::PipelineHandle pipeline_{};
 
   ImportedScene importedScene_;
   std::vector<std::shared_ptr<MeshResource>> uploadedMeshes_;
   std::vector<StaticMeshInstance> instances_;
 
-  MeshRenderer meshRenderer_;
+  SceneRenderer sceneRenderer_;
   FirstPersonCamera camera_;
 
   bool firstMouse_ = true;

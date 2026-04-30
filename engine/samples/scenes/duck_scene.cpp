@@ -1,6 +1,7 @@
 #include "duck_scene.h"
 
 #include "graphics/mesh_resource.h"
+#include "graphics/shaders_types.h"
 #include "imgui.h"
 
 #include <assimp/cimport.h>

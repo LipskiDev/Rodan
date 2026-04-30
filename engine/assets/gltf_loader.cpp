@@ -261,6 +261,8 @@ static ImportedMaterial LoadMaterial(const tinygltf::Model &model,
   out.metallicFactor = static_cast<float>(pbr.metallicFactor);
   out.roughnessFactor = static_cast<float>(pbr.roughnessFactor);
   out.doubleSided = material.doubleSided;
+  out.alphaCutoff = material.alphaCutoff;
+  out.alphaMode = ToAlphaMode(material.alphaMode);
 
   if (pbr.baseColorTexture.index >= 0) {
     const int textureIndex = pbr.baseColorTexture.index;

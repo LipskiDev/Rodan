@@ -21,13 +21,13 @@ StaticGltfAsset::Load(IDevice *device, IUploadContext *upload,
   auto asset = std::make_unique<StaticGltfAsset>();
   asset->device_ = device;
 
-  asset->importedScene_ = GltfLoader::Load(path);
+  auto importedScene = GltfLoader::Load(path);
   asset->CreateMaterialLayout(device);
-  asset->CreateDescriptorPool(device);
+  asset->CreateDescriptorPool(device, importedScene);
   asset->CreateFallbackResources(device, upload);
-  asset->UploadMeshes(device, upload);
-  asset->UploadMaterials(device, upload);
-  asset->BuildInstances();
+  asset->UploadMeshes(device, upload, importedScene);
+  asset->UploadMaterials(device, upload, importedScene);
+  asset->BuildInstances(importedScene);
 
   return asset;
 }
@@ -38,7 +38,6 @@ void StaticGltfAsset::Destroy(IDevice *device) {
   }
 
   instances_.clear();
-  importedScene_ = {};
 
   for (auto &mesh : meshes_) {
     if (!mesh) {
@@ -119,10 +118,11 @@ void StaticGltfAsset::CreateMaterialLayout(IDevice *device) {
   materialLayout_ = device->CreateDescriptorSetLayout(layout);
 }
 
-void StaticGltfAsset::CreateDescriptorPool(IDevice *device) {
+void StaticGltfAsset::CreateDescriptorPool(IDevice *device,
+                                           ImportedScene importedScene) {
 
   const Velos::u32 materialCount = std::max<Velos::u32>(
-      1, static_cast<Velos::u32>(importedScene_.materials.size()));
+      1, static_cast<Velos::u32>(importedScene.materials.size()));
 
   DescriptorPoolSize poolSize{};
   poolSize.type = DescriptorType::CombinedImageSampler;
@@ -138,7 +138,8 @@ void StaticGltfAsset::CreateDescriptorPool(IDevice *device) {
 
 void StaticGltfAsset::Prepare(ICommandList &cmd) { prepared_ = true; }
 
-void StaticGltfAsset::UploadMeshes(IDevice *device, IUploadContext *upload) {
+void StaticGltfAsset::UploadMeshes(IDevice *device, IUploadContext *upload,
+                                   ImportedScene importedScene) {
   if (!device) {
     throw std::runtime_error("StaticGltfAsset::UploadMeshes: device is null");
   }
@@ -148,8 +149,8 @@ void StaticGltfAsset::UploadMeshes(IDevice *device, IUploadContext *upload) {
   }
 
   meshes_.clear();
-  meshes_.reserve(importedScene_.meshes.size());
-  for (const auto &mesh : importedScene_.meshes) {
+  meshes_.reserve(importedScene.meshes.size());
+  for (const auto &mesh : importedScene.meshes) {
 
     auto gpuMesh = MeshUploader::Upload(device, upload, mesh);
 
@@ -157,7 +158,8 @@ void StaticGltfAsset::UploadMeshes(IDevice *device, IUploadContext *upload) {
   }
 }
 
-void StaticGltfAsset::UploadMaterials(IDevice *device, IUploadContext *upload) {
+void StaticGltfAsset::UploadMaterials(IDevice *device, IUploadContext *upload,
+                                      ImportedScene importedScene) {
   if (!device) {
     throw std::runtime_error(
         "StaticGltfAsset::UploadMaterials: device is null");
@@ -169,9 +171,9 @@ void StaticGltfAsset::UploadMaterials(IDevice *device, IUploadContext *upload) {
   }
 
   materials_.clear();
-  materials_.reserve(importedScene_.materials.size());
+  materials_.reserve(importedScene.materials.size());
 
-  for (const auto &mat : importedScene_.materials) {
+  for (const auto &mat : importedScene.materials) {
     MaterialResource gpuMat{};
 
     gpuMat.baseColorFactor = mat.baseColorFactor;
@@ -180,9 +182,9 @@ void StaticGltfAsset::UploadMaterials(IDevice *device, IUploadContext *upload) {
 
     if (mat.baseColorTexture.imageIndex >= 0 &&
         mat.baseColorTexture.imageIndex <
-            static_cast<int>(importedScene_.images.size())) {
+            static_cast<int>(importedScene.images.size())) {
       const ImportedImage &img =
-          importedScene_.images[mat.baseColorTexture.imageIndex];
+          importedScene.images[mat.baseColorTexture.imageIndex];
 
       gpuMat.baseColorTexture = CreateTexture2D(
           device, upload,
@@ -206,9 +208,9 @@ void StaticGltfAsset::UploadMaterials(IDevice *device, IUploadContext *upload) {
 
     if (mat.normalTexture.imageIndex >= 0 &&
         mat.normalTexture.imageIndex <
-            static_cast<int>(importedScene_.images.size())) {
+            static_cast<int>(importedScene.images.size())) {
       const ImportedImage &img =
-          importedScene_.images[mat.normalTexture.imageIndex];
+          importedScene.images[mat.normalTexture.imageIndex];
 
       gpuMat.normalTexture = CreateTexture2D(
           device, upload,
@@ -231,9 +233,9 @@ void StaticGltfAsset::UploadMaterials(IDevice *device, IUploadContext *upload) {
 
     if (mat.metallicRoughnessTexture.imageIndex >= 0 &&
         mat.metallicRoughnessTexture.imageIndex <
-            static_cast<int>(importedScene_.images.size())) {
+            static_cast<int>(importedScene.images.size())) {
       const ImportedImage &img =
-          importedScene_.images[mat.metallicRoughnessTexture.imageIndex];
+          importedScene.images[mat.metallicRoughnessTexture.imageIndex];
 
       gpuMat.metallicRoughnessTexture = CreateTexture2D(
           device, upload,
@@ -309,11 +311,11 @@ void StaticGltfAsset::UploadMaterials(IDevice *device, IUploadContext *upload) {
   }
 }
 
-void StaticGltfAsset::BuildInstances() {
+void StaticGltfAsset::BuildInstances(ImportedScene importedScene) {
 
   std::function<void(int, const glm::mat4 &)> spawn;
   spawn = [&](int nodeIndex, const glm::mat4 &parent) {
-    const auto &node = importedScene_.nodes[nodeIndex];
+    const auto &node = importedScene.nodes[nodeIndex];
 
     glm::mat4 world = parent * node.transform;
 
@@ -334,7 +336,7 @@ void StaticGltfAsset::BuildInstances() {
     }
   };
 
-  for (int root : importedScene_.rootNodes) {
+  for (int root : importedScene.rootNodes) {
     spawn(root, glm::mat4(1.0f));
   }
 

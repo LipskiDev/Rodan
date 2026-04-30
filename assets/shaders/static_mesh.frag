@@ -17,11 +17,21 @@ layout(push_constant) uniform PushConstants {
     mat4 proj;
 
     int showMode;
+    int _pad0;
+    int _pad1;
+    int _pad2;
 
     vec4 baseColorFactor;
+
     float metallicFactor;
     float roughnessFactor;
     int hasMaterial;
+    int alphaMode;
+
+    float alphaCutoff;
+    float _pad3;
+    float _pad4;
+    float _pad5;
 } pc;
 
 const float PI = 3.14159265359;
@@ -60,7 +70,6 @@ void main() {
     vec4 mrTex   = texture(u_MetallicRoughness, vUV);
     vec3 nTex = texture(u_Normal, vUV).xyz * 2.0 - 1.0;
     vec3 N = normalize(vTBN * nTex);
-
     vec3 baseColor = pc.baseColorFactor.rgb * baseTex.rgb;
     float alpha = pc.baseColorFactor.a * baseTex.a;
 
@@ -108,8 +117,9 @@ void main() {
     color = color / (color + vec3(1.0));
     color = pow(color, vec3(1.0 / 2.2));
 
-    if (alpha < 0.5)
+    if (pc.alphaMode == 1 && alpha < pc.alphaCutoff) {
         discard;
+    }
 
     if (pc.showMode == 0) {
         outColor = vec4(baseTex.rgb, 1.0);

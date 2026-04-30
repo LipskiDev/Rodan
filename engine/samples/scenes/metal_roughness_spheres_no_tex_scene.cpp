@@ -1,5 +1,6 @@
 #include "metal_roughness_spheres_no_tex_scene.h"
 
+#include "graphics/shaders_types.h"
 #include "imgui.h"
 #include "shader/shader_compiler.h"
 

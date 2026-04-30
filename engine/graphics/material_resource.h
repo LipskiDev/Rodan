@@ -1,5 +1,6 @@
 #pragma once
 
+#include "graphics/material_types.h"
 #include "graphics/texture.h"
 #include "rhi/rhi_handles.h"
 #include <glm/glm.hpp>
@@ -25,6 +26,10 @@ struct MaterialResource {
   bool hasBaseColorTexture = false;
   bool hasNormalTexture = false;
   bool hasMetallicRoughnessTexture = false;
+
+  AlphaMode alphaMode;
+  float alphaCutoff;
+  bool doubleSided;
 };
 
 } // namespace Rodan

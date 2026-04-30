@@ -11,5 +11,8 @@ public:
   void Draw(ICommandList *cmd, const StaticMeshInstance &instance,
             const std::vector<MaterialResource> &materials,
             PipelineHandle pipeline);
+  void DrawSubmesh(ICommandList *cmd, const StaticMeshInstance &instance,
+                   const Submesh &submesh, const MaterialResource *material,
+                   PipelineHandle);
 };
 } // namespace Rodan
