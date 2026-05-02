@@ -179,6 +179,8 @@ void StaticGltfAsset::UploadMaterials(IDevice *device, IUploadContext *upload,
     gpuMat.baseColorFactor = mat.baseColorFactor;
     gpuMat.metallicFactor = mat.metallicFactor;
     gpuMat.roughnessFactor = mat.roughnessFactor;
+    gpuMat.alphaCutoff = mat.alphaCutoff;
+    gpuMat.alphaMode = mat.alphaMode;
 
     if (mat.baseColorTexture.imageIndex >= 0 &&
         mat.baseColorTexture.imageIndex <

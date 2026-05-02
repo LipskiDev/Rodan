@@ -92,6 +92,7 @@ Texture CreateTexture2D(Velos::RHI::IDevice *device,
 Texture CreateSolidColorTexture(Velos::RHI::IDevice *device,
                                 Velos::RHI::IUploadContext *upload,
                                 const glm::vec4 &color, const char *debugName) {
+    return Texture{};
 }
 
 void DestroyTexture(Velos::RHI::IDevice *device, Texture &texture) {

@@ -1,4 +1,7 @@
 workspace "Rodan"
+
+	VULKAN_SDK = os.getenv("VULKAN_SDK")
+
 	architecture "x86_64"
 	startproject "Runtime"
 
@@ -70,7 +73,8 @@ project "Rodan"
 		}
 		includedirs
 		{
-			"external/assimp-install-windows/include"
+			"external/assimp-install-windows/include",
+			VULKAN_SDK .. "/Include"
 		}
 		libdirs
 		{
@@ -192,7 +196,8 @@ project "Runtime"
 		}
 		includedirs
 		{
-			"external/assimp-install-windows/include"
+			"external/assimp-install-windows/include",
+			VULKAN_SDK .. "/Include"
 		}
 		libdirs
 		{

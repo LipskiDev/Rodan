@@ -33,7 +33,7 @@ if errorlevel 1 exit /b 1
 cmake --build "%ASSIMP_BUILD%" --config %CONFIG%
 if errorlevel 1 exit /b 1
 
-cmake --install "%ASSIMP_BUILD%" --config %CONFIG% --log-level=ERROR
+cmake --install "%ASSIMP_BUILD%" --config %CONFIG%
 if errorlevel 1 exit /b 1
 
 endlocal
