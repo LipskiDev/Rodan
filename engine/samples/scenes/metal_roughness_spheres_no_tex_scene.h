@@ -57,6 +57,8 @@ private:
 
   Velos::u32 drawInstanceCount_ = 0;
   Velos::u32 drawSubmeshCount_ = 0;
+
+  std::vector<const MaterialResource *> materialPtrs_;
 };
 
 } // namespace Rodan

@@ -5,54 +5,34 @@
 #include <stdexcept>
 
 namespace Rodan {
-
-void MeshRenderer::Draw(ICommandList *cmd, const StaticMeshInstance &instance,
-                        const std::vector<MaterialResource> &materials,
+void MeshRenderer::Draw(ICommandList *cmd, const MeshResource &mesh,
+                        const std::vector<const MaterialResource *> &materials,
                         PipelineHandle pipeline) {
   if (!cmd) {
     throw std::runtime_error("MeshRenderer::Draw: cmd is null");
   }
 
-  if (!instance.mesh) {
-    return;
-  }
-
-  const MeshResource &mesh = *instance.mesh;
-
   cmd->BindVertexBuffer(0, mesh.vertexBuffer, 0);
   cmd->BindIndexBuffer(mesh.indexBuffer, IndexType::U32, 0);
 
   for (const Submesh &submesh : mesh.submeshes) {
+    const MaterialResource *mat = nullptr;
+
     if (submesh.materialSlot < materials.size()) {
-      const MaterialResource &mat = materials[submesh.materialSlot];
-
-      cmd->BindDescriptorSet(pipeline, 0, mat.descriptorSet);
-
-      MaterialPushConstants matPc{};
-      matPc.baseColorFactor = mat.baseColorFactor;
-      matPc.metallicFactor = mat.metallicFactor;
-      matPc.roughnessFactor = mat.roughnessFactor;
-      matPc.hasMaterial = 1;
-
-      cmd->PushConstants(ShaderStage::Vertex | ShaderStage::Fragment,
-                         sizeof(MVPPushConstants),
-                         sizeof(MaterialPushConstants), &matPc);
+      mat = materials[submesh.materialSlot];
     }
 
-    cmd->DrawIndexed(submesh.indexCount, submesh.firstIndex, 0);
+    DrawSubmesh(cmd, mesh, submesh, mat, pipeline);
   }
 }
 
-void MeshRenderer::DrawSubmesh(ICommandList *cmd,
-                               const StaticMeshInstance &instance,
+void MeshRenderer::DrawSubmesh(ICommandList *cmd, const MeshResource &mesh,
                                const Submesh &submesh,
                                const MaterialResource *material,
                                PipelineHandle pipeline) {
-  if (!cmd || !instance.mesh) {
+  if (!cmd) {
     return;
   }
-
-  const MeshResource &mesh = *instance.mesh;
 
   cmd->BindPipeline(pipeline);
 
@@ -85,5 +65,4 @@ void MeshRenderer::DrawSubmesh(ICommandList *cmd,
 
   cmd->DrawIndexed(submesh.indexCount, submesh.firstIndex, 0);
 }
-
 } // namespace Rodan

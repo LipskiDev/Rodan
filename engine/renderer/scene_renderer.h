@@ -1,20 +1,26 @@
 #pragma once
 
 #include "graphics/material_resource.h"
+#include "graphics/mesh_resource.h"
 #include "renderer/mesh_renderer.h"
 #include "rhi/rhi_command_list.h"
 #include "rhi/rhi_handles.h"
-#include "rhi/rhi_pipeline.h"
 #include "scene/camera.h"
-#include "scene/static_mesh_instance.h"
+#include "scene/render_world.h"
 #include <renderer/graph_renderer.h>
 #include <renderer/line_renderer.h>
+#include <renderer/mesh_renderer.h>
+
+#include <scene/render_world.h>
+
 namespace Rodan {
 
 struct StaticMeshRenderItem {
-  const StaticMeshInstance *instance = nullptr;
-  const std::vector<MaterialResource> *materials = nullptr;
+  const MeshResource *mesh = nullptr;
+  std::vector<const MaterialResource *> materials;
+
   const MaterialResource *materialOverride = nullptr;
+
   glm::mat4 world = glm::mat4(1.0f);
   uint32_t objectId = 0;
 };
@@ -47,7 +53,8 @@ public:
                   Format colorFormat, Format depthFormat,
                   DescriptorSetLayoutHandle materialLayout);
   void Shutdown(IDevice *device);
-  void Render(ICommandList &cmd, const Camera &camera);
+  void Render(ICommandList &cmd, const RenderWorld &world,
+              const Camera &camera);
 
   void SubmitStaticMesh(StaticMeshRenderItem item);
 

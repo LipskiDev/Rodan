@@ -4,7 +4,7 @@
 #include "rhi/rhi_handles.h"
 #include "rhi/rhi_pipeline.h"
 #include "rhi/rhi_types.h"
-#include "scene/static_mesh_instance.h"
+#include "scene/render_world.h"
 #include <core/path.h>
 #include <renderer/scene_renderer.h>
 #include <stdexcept>
@@ -88,31 +88,40 @@ void SceneRenderer::Shutdown(IDevice *device) {
   device_ = nullptr;
   swapchain_ = {};
 }
+void SceneRenderer::Render(ICommandList &cmd, const RenderWorld &world,
+                           const Camera &camera) {
+  staticMeshes_.clear();
 
-void SceneRenderer::Render(ICommandList &cmd, const Camera &camera) {
-
-  for (const StaticMeshRenderItem &item : staticMeshes_) {
-    if (!item.instance || !item.instance->mesh || !item.materials) {
+  for (const RenderObject &object : world.GetObjects()) {
+    if (!object.visible) {
       continue;
     }
 
-    const StaticMeshInstance &instance = *item.instance;
-    const MeshResource &mesh = *instance.mesh;
+    const MeshResource &mesh = world.GetMesh(object.mesh);
 
-    MVPPushConstants push{};
-    push.model = item.world;
-    push.view = camera.GetView();
-    push.proj = camera.GetProjection();
-    push.showMode = 4;
+    StaticMeshRenderItem item{};
+    item.mesh = &mesh;
+    item.world = object.world;
+    item.objectId = object.objectId;
 
-    for (const Submesh &submesh : mesh.submeshes) {
-      const MaterialResource *material = item.materialOverride;
-      if (!material) {
-        if (submesh.materialSlot >= 0 &
-            static_cast<size_t>(submesh.materialSlot) <
-                item.materials->size()) {
-          material = &(*item.materials)[submesh.materialSlot];
-        }
+    item.materials.reserve(object.materials.size());
+    for (MaterialHandle materialHandle : object.materials) {
+      item.materials.push_back(&world.GetMaterial(materialHandle));
+    }
+
+    staticMeshes_.push_back(std::move(item));
+  }
+
+  for (const StaticMeshRenderItem &item : staticMeshes_) {
+    if (!item.mesh) {
+      continue;
+    }
+
+    for (const Submesh &submesh : item.mesh->submeshes) {
+      const MaterialResource *material = nullptr;
+
+      if (submesh.materialSlot < item.materials.size()) {
+        material = item.materials[submesh.materialSlot];
       }
 
       MeshPipelineKey key{};
@@ -123,17 +132,24 @@ void SceneRenderer::Render(ICommandList &cmd, const Camera &camera) {
 
       PipelineHandle pipeline = GetOrCreatePipeline(key);
 
+      // Bind first
       cmd.BindPipeline(pipeline);
-      cmd.PushConstants(ShaderStage::Vertex | ShaderStage::Fragment, 0,
-                        sizeof(MVPPushConstants), &push);
 
-      meshRenderer_.DrawSubmesh(&cmd, instance, submesh, material, pipeline);
+      // Then push constants
+      MVPPushConstants mvpPc{};
+      mvpPc.model = item.world;
+      mvpPc.view = camera.GetView();
+      mvpPc.proj = camera.GetProjection();
+      mvpPc.showMode = 4;
+
+      cmd.PushConstants(ShaderStage::Vertex | ShaderStage::Fragment, 0,
+                        sizeof(MVPPushConstants), &mvpPc);
+
+      meshRenderer_.DrawSubmesh(&cmd, *item.mesh, submesh, material, pipeline);
     }
   }
-
   staticMeshes_.clear();
 }
-
 void SceneRenderer::SubmitStaticMesh(StaticMeshRenderItem item) {
   staticMeshes_.push_back(item);
 }

@@ -40,6 +40,7 @@ void MetalRoughnessSpheresNoTexScene::Shutdown(IDevice *device) {
     return;
   }
 
+  materialPtrs_.clear();
   instances_.clear();
 
   if (asset_) {
@@ -135,10 +136,9 @@ void MetalRoughnessSpheresNoTexScene::Render(ICommandList &cmd) {
     const MeshResource &mesh = *instance.mesh;
     drawSubmeshCount_ += static_cast<u32>(mesh.submeshes.size());
 
-    meshRenderer_.Draw(&cmd, instance, asset_->GetMaterials(), pipeline_);
+    meshRenderer_.Draw(&cmd, mesh, materialPtrs_, pipeline_);
   }
 }
-
 void MetalRoughnessSpheresNoTexScene::RenderImGui() {
   ImGui::Begin("Metal Roughness Scene");
   ImGui::Text("Static glTF scene test");
@@ -229,6 +229,7 @@ void MetalRoughnessSpheresNoTexScene::CreatePipeline(IDevice *device) {
 void MetalRoughnessSpheresNoTexScene::LoadScene(IDevice *device) {
   auto upload = device->CreateUploadContext(64 * 1024 * 1024);
   upload->Begin();
+
   asset_ = StaticGltfAsset::Load(
       device, upload.get(),
       Velos::Path::Resolve("assets/models/metal-roughness-spheres-no-textures/"
@@ -242,6 +243,13 @@ void MetalRoughnessSpheresNoTexScene::LoadScene(IDevice *device) {
   if (instances_.empty()) {
     throw std::runtime_error(
         "Metal Roughness scene loaded, but produced no instances");
+  }
+
+  materialPtrs_.clear();
+  materialPtrs_.reserve(asset_->GetMaterials().size());
+
+  for (const MaterialResource &material : asset_->GetMaterials()) {
+    materialPtrs_.push_back(&material);
   }
 }
 

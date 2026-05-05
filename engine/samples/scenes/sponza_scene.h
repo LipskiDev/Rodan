@@ -4,6 +4,7 @@
 #include "rhi/rhi_handles.h"
 #include "samples/scene.h"
 #include "scene/first_person_camera.h"
+#include "scene/render_world.h"
 #include "scene/static_mesh_instance.h"
 #include <assets/gltf_asset_loader.h>
 #include <renderer/scene_renderer.h>
@@ -41,6 +42,7 @@ private:
   std::vector<StaticMeshInstance> instances_;
 
   SceneRenderer sceneRenderer_;
+  RenderWorld renderWorld_;
   FirstPersonCamera camera_;
 
   bool firstMouse_ = true;

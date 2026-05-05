@@ -91,31 +91,7 @@ void SponzaScene::Update(float deltaSeconds, const SceneUpdateContext &ctx) {
 void SponzaScene::Prepare(ICommandList &cmd) { (void)cmd; }
 
 void SponzaScene::Render(ICommandList &cmd) {
-  drawInstanceCount_ = static_cast<u32>(instances_.size());
-  drawSubmeshCount_ = 0;
-
-  if (!asset_) {
-    return;
-  }
-
-  const auto &materials = asset_->GetMaterials();
-
-  for (const StaticMeshInstance &instance : instances_) {
-    if (!instance.mesh) {
-      continue;
-    }
-
-    drawSubmeshCount_ += static_cast<u32>(instance.mesh->submeshes.size());
-
-    StaticMeshRenderItem item{};
-    item.instance = &instance;
-    item.materials = &asset_->GetMaterials();
-    item.world = instance.localTransform;
-
-    sceneRenderer_.SubmitStaticMesh(item);
-  }
-
-  sceneRenderer_.Render(cmd, camera_);
+  sceneRenderer_.Render(cmd, renderWorld_, camera_);
 }
 
 void SponzaScene::RenderImGui() {
@@ -156,6 +132,29 @@ void SponzaScene::LoadScene(IDevice *device) {
 
   if (instances_.empty()) {
     throw std::runtime_error("Sponza scene loaded, but produced no instances");
+  }
+
+  std::vector<MaterialHandle> materialHandles;
+  materialHandles.reserve(asset_->GetMaterials().size());
+
+  for (const MaterialResource &material : asset_->GetMaterials()) {
+    materialHandles.push_back(renderWorld_.AddMaterial(material));
+  }
+
+  for (const StaticMeshInstance &instance : instances_) {
+    if (!instance.mesh) {
+      continue;
+    }
+
+    MeshHandle meshHandle = renderWorld_.AddMesh(*instance.mesh);
+
+    RenderObjectDesc desc{};
+    desc.mesh = meshHandle;
+    desc.materials = materialHandles;
+    desc.world = instance.localTransform;
+    desc.visible = true;
+
+    renderWorld_.CreateObject(desc);
   }
 }
 
