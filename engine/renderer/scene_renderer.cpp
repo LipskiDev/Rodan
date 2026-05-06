@@ -232,6 +232,10 @@ void SceneRenderer::Shutdown(IDevice *device) {
   device_->DestroyImageView(directionalShadow_.texture.view);
   device_->DestroyImage(directionalShadow_.texture.image);
 
+  device->DestroyBuffer(frameUBO_);
+  device->DestroyDescriptorSetLayout(frameLayout_);
+  device->DestroyDescriptorPool(frameDescriptorPool_);
+
   graphRenderer_.reset();
   lineRenderer3D_.reset();
   lineRenderer2D_.reset();
