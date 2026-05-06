@@ -10,6 +10,11 @@ struct MVPPushConstants {
   int pad[3];
 };
 
+struct ShadowPushConstants {
+  glm::mat4 model;
+  glm::mat4 lightViewProj;
+};
+
 struct MaterialPushConstants {
   glm::vec4 baseColorFactor;
 

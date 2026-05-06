@@ -1,5 +1,6 @@
 #include "sponza_scene.h"
 
+#include "glm/geometric.hpp"
 #include "imgui.h"
 #include "rhi/rhi_types.h"
 #include "shader/shader_compiler.h"
@@ -24,12 +25,21 @@ void SponzaScene::Initialize(IDevice *device, SwapchainHandle swapchain,
 
   sceneRenderer_.Initialize(device_, swapchain_, colorFormat, depthFormat,
                             asset_->GetMaterialLayout());
+
+  sunLight_ = renderWorld_.AddDirectionalLight({
+      .direction = glm::normalize(glm::vec3(0.4f, -1.0f, 0.3f)),
+      .color = glm::vec3(1.0f),
+      .intensity = 4.0f,
+      .castsShadow = true,
+  });
 }
 
 void SponzaScene::Shutdown(IDevice *device) {
   if (!device) {
     return;
   }
+
+  sceneRenderer_.Shutdown(device);
 
   instances_.clear();
 
@@ -90,8 +100,8 @@ void SponzaScene::Update(float deltaSeconds, const SceneUpdateContext &ctx) {
 
 void SponzaScene::Prepare(ICommandList &cmd) { (void)cmd; }
 
-void SponzaScene::Render(ICommandList &cmd) {
-  sceneRenderer_.Render(cmd, renderWorld_, camera_);
+void SponzaScene::Render(ICommandList &cmd, const FrameRenderContext &frame) {
+  sceneRenderer_.Render(cmd, renderWorld_, camera_, frame);
 }
 
 void SponzaScene::RenderImGui() {
@@ -115,6 +125,19 @@ void SponzaScene::RenderImGui() {
   ImGui::Text("Mode: %s", items[mode]);
 
   ImGui::Text("Hold RMB to look around");
+
+  DirectionalLight &sun = renderWorld_.GetDirectionalLight(sunLight_);
+
+  glm::vec3 dir = sun.direction;
+
+  if (ImGui::DragFloat3("Sun Direction", &dir.x, 0.01f, -1.0f, 1.0f)) {
+    if (glm::length(dir) > 0.0001f) {
+      sun.direction = glm::normalize(dir);
+    }
+  }
+
+  ImGui::DragFloat("Sun Intensity", &sun.intensity, 0.1f, 0.0f, 20.0f);
+  ImGui::Checkbox("Cast Shadows", &sun.castsShadow);
   ImGui::End();
 }
 

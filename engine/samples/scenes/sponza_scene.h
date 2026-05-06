@@ -4,6 +4,7 @@
 #include "rhi/rhi_handles.h"
 #include "samples/scene.h"
 #include "scene/first_person_camera.h"
+#include "scene/handles.h"
 #include "scene/render_world.h"
 #include "scene/static_mesh_instance.h"
 #include <assets/gltf_asset_loader.h>
@@ -26,7 +27,8 @@ public:
                 Velos::u32 height) override;
   void Update(float deltaSeconds, const SceneUpdateContext &ctx) override;
   void Prepare(Velos::RHI::ICommandList &cmd) override;
-  void Render(Velos::RHI::ICommandList &cmd) override;
+  void Render(Velos::RHI::ICommandList &cmd,
+              const FrameRenderContext &frame) override;
   void RenderImGui() override;
 
 private:
@@ -62,6 +64,8 @@ private:
     Final = 4
   };
   Show showMode_ = Final;
+
+  DirectionalLightHandle sunLight_;
 };
 
 } // namespace Rodan

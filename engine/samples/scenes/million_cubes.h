@@ -27,7 +27,8 @@ public:
   void Update(float deltaSeconds, const SceneUpdateContext &ctx) override;
 
   void Prepare(Velos::RHI::ICommandList &cmd) override;
-  void Render(Velos::RHI::ICommandList &cmd) override;
+  void Render(Velos::RHI::ICommandList &cmd,
+              const FrameRenderContext &frame) override;
 
   void RenderImGui() override;
 

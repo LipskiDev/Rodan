@@ -117,7 +117,7 @@ void DuckScene::Update(float deltaSeconds, const SceneUpdateContext &ctx) {
 
 void DuckScene::Prepare(ICommandList &cmd) { UploadTextureIfNeeded(cmd); }
 
-void DuckScene::Render(ICommandList &cmd) {
+void DuckScene::Render(ICommandList &cmd, const FrameRenderContext &frame) {
 
   RenderDuckInstance(cmd, leftDuckModel_, duck_.indexBuffer, duck_.indexCount);
   RenderDuckInstance(cmd, rightDuckModel_, duck_.lodIndexBuffer,

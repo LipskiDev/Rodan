@@ -14,5 +14,6 @@ public:
   void DrawSubmesh(ICommandList *cmd, const MeshResource &mesh,
                    const Submesh &submesh, const MaterialResource *material,
                    PipelineHandle pipeline);
+  void DrawDepthOnly(ICommandList *cmd, const MeshResource &mesh);
 };
 } // namespace Rodan

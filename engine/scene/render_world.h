@@ -1,6 +1,8 @@
 #pragma once
 
 #include "graphics/material_resource.h"
+#include "scene/handles.h"
+#include "scene/light.h"
 #include "scene/render_object.h"
 #include <vector>
 
@@ -9,6 +11,7 @@ class RenderWorld {
 public:
   MeshHandle AddMesh(MeshResource mesh);
   MaterialHandle AddMaterial(MaterialResource material);
+  DirectionalLightHandle AddDirectionalLight(const DirectionalLight &light);
 
   RenderObjectHandle CreateObject(const RenderObjectDesc &desc);
 
@@ -18,6 +21,11 @@ public:
   const std::vector<RenderObject> &GetObjects() const;
   const MeshResource &GetMesh(MeshHandle handle) const;
   const MaterialResource &GetMaterial(MaterialHandle handle) const;
+  const std::vector<DirectionalLight> &GetDirectionalLights() const;
+  DirectionalLight &GetDirectionalLight(DirectionalLightHandle handle);
+
+private:
+  void RenderDirectionalShadowMap(DirectionalLight light);
 
 private:
   uint32_t nextMeshIndex_ = 1;
@@ -25,6 +33,8 @@ private:
 
   uint32_t nextMaterialIndex_ = 1;
   std::unordered_map<uint32_t, MaterialResource> materials_;
+
+  std::vector<DirectionalLight> directionalLights_;
 
   std::vector<RenderObject> objects_;
 };

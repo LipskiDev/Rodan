@@ -262,71 +262,17 @@ void Application::RenderFrame() {
 
   if (currentScene_) {
     currentScene_->Prepare(cmd);
+
+    FrameRenderContext frameCtx{};
+    frameCtx.backbufferImage = frame.backbufferImage;
+    frameCtx.backbufferView = frame.backbuffer;
+    frameCtx.depthImage = depthImage_;
+    frameCtx.depthView = depthImageView_;
+    frameCtx.extent = dims;
+    frameCtx.renderUi = [this](ICommandList &cmd) { RenderImGui(cmd); };
+
+    currentScene_->Render(cmd, frameCtx);
   }
-
-  cmd.Barrier({
-      .image = frame.backbufferImage,
-      .newLayout = ImageLayout::ColorAttachment,
-      .aspect = ImageAspect::Color,
-  });
-
-  cmd.Barrier({
-      .image = depthImage_,
-      .newLayout = ImageLayout::DepthAttachment,
-      .aspect = ImageAspect::Depth,
-  });
-
-  ColorAttachmentDesc colorAttachment{};
-  colorAttachment.view = frame.backbuffer;
-  colorAttachment.loadOp = LoadOp::Clear;
-  colorAttachment.storeOp = StoreOp::Store;
-  colorAttachment.clearValue = {
-      .r = 0.1f,
-      .g = 0.1f,
-      .b = 0.1f,
-      .a = 1.0f,
-  };
-
-  DepthAttachmentDesc depthAttachment{};
-  depthAttachment.view = depthImageView_;
-  depthAttachment.loadOp = LoadOp::Clear;
-  depthAttachment.storeOp = StoreOp::Store;
-  depthAttachment.clearDepth = 1.0f;
-  depthAttachment.clearStencil = 0;
-
-  Rect2D renderArea{};
-  renderArea.offset = {0, 0};
-  renderArea.extent = {dims.width, dims.height};
-
-  RenderingInfo renderingInfo{};
-  renderingInfo.renderArea = renderArea;
-  renderingInfo.colorAttachments = &colorAttachment;
-  renderingInfo.colorAttachmentCount = 1;
-  renderingInfo.depthAttachment = &depthAttachment;
-
-  cmd.BeginRendering(renderingInfo);
-
-  cmd.SetViewport({
-      .x = 0.0f,
-      .y = 0.0f,
-      .width = static_cast<float>(dims.width),
-      .height = static_cast<float>(dims.height),
-      .minDepth = 0.0f,
-      .maxDepth = 1.0f,
-  });
-
-  cmd.SetScissor({
-      .offset = {0, 0},
-      .extent = {dims.width, dims.height},
-  });
-
-  if (currentScene_) {
-    currentScene_->Render(cmd);
-  }
-
-  RenderImGui(cmd);
-
-  cmd.EndRendering();
 
   cmd.Barrier({
       .image = frame.backbufferImage,

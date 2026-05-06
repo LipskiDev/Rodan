@@ -98,7 +98,8 @@ void MillionCubesScene::Update(float deltaSeconds,
 void MillionCubesScene::Prepare(Velos::RHI::ICommandList &cmd) {
   UploadTextureIfNeeded(cmd);
 }
-void MillionCubesScene::Render(Velos::RHI::ICommandList &cmd) {
+void MillionCubesScene::Render(Velos::RHI::ICommandList &cmd,
+                               const FrameRenderContext &frame) {
   RenderMillionCubes(cmd);
 }
 

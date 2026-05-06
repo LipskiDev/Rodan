@@ -15,6 +15,16 @@ MaterialHandle RenderWorld::AddMaterial(MaterialResource material) {
   return MaterialHandle{id};
 }
 
+DirectionalLightHandle
+RenderWorld::AddDirectionalLight(const DirectionalLight &light) {
+  directionalLights_.push_back({.direction = light.direction,
+                                .color = light.color,
+                                .intensity = light.intensity,
+                                .castsShadow = light.castsShadow});
+
+  return static_cast<uint32_t>(directionalLights_.size() - 1);
+}
+
 RenderObjectHandle RenderWorld::CreateObject(const RenderObjectDesc &desc) {
   assert(desc.mesh.IsValid());
 
@@ -59,5 +69,14 @@ const MeshResource &RenderWorld::GetMesh(MeshHandle handle) const {
 const MaterialResource &RenderWorld::GetMaterial(MaterialHandle handle) const {
   assert(handle.IsValid());
   return materials_.at(handle.id);
+}
+
+const std::vector<DirectionalLight> &RenderWorld::GetDirectionalLights() const {
+  return directionalLights_;
+}
+
+DirectionalLight &
+RenderWorld::GetDirectionalLight(DirectionalLightHandle handle) {
+  return directionalLights_[handle];
 }
 } // namespace Rodan

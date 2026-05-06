@@ -9,6 +9,11 @@ layout(set = 0, binding = 0) uniform sampler2D u_BaseColor;
 layout(set = 0, binding = 1) uniform sampler2D u_Normal;
 layout(set = 0, binding = 2) uniform sampler2D u_MetallicRoughness;
 
+layout(set = 1, binding = 0) uniform sampler2D u_ShadowMap;
+layout(set = 1, binding = 1) uniform FrameData {
+  mat4 lightViewProj;
+} u_Frame;
+
 layout(location = 0) out vec4 outColor;
 
 layout(push_constant) uniform PushConstants {
@@ -35,6 +40,27 @@ layout(push_constant) uniform PushConstants {
 } pc;
 
 const float PI = 3.14159265359;
+
+float ComputeShadow(vec3 worldPos, vec3 normal, vec3 lightDir) {
+    vec4 lightSpace = u_Frame.lightViewProj * vec4(worldPos, 1.0);
+
+    vec3 projCoords = lightSpace.xyz / lightSpace.w;
+    projCoords.xy = projCoords.xy * 0.5 + 0.5;
+
+    if (projCoords.x < 0.0 || projCoords.x > 1.0 ||
+        projCoords.y < 0.0 || projCoords.y > 1.0 ||
+        projCoords.z < 0.0 || projCoords.z > 1.0) {
+        return 1.0;
+    }
+
+    float closestDepth = texture(u_ShadowMap, projCoords.xy).r;
+    float currentDepth = projCoords.z;
+
+    float NdotL = max(dot(normal, lightDir), 0.0);
+    float bias = max(0.02 * (1.0 - NdotL), 0.002);
+
+    return currentDepth - bias > closestDepth ? 0.0 : 1.0;
+}
 
 float DistributionGGX(vec3 N, vec3 H, float roughness) {
     float a = roughness * roughness;
@@ -87,7 +113,7 @@ void main() {
     vec3 camPos = vec3(inverse(pc.view)[3]);
     vec3 V = normalize(camPos - vWorldPos);
 
-    vec3 L = normalize(vec3(0.4, 1.0, 0.3));
+    vec3 L = normalize(vec3(0.0, 1.0, 0.0));
     vec3 H = normalize(V + L);
 
     vec3 radiance = vec3(4.0);
@@ -110,7 +136,8 @@ void main() {
     vec3 kD = (vec3(1.0) - kS) * (1.0 - metallic);
 
     vec3 diffuse = kD * baseColor / PI;
-    vec3 direct = (diffuse + specular) * radiance * NdotL;
+    float shadow = ComputeShadow(vWorldPos, N, L);
+    vec3 direct = (diffuse + specular) * radiance * NdotL * shadow;
     vec3 ambient = vec3(0.03) * baseColor;
 
     vec3 color = ambient + direct;

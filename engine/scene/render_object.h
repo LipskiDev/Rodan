@@ -2,15 +2,9 @@
 #include <core/types.h>
 #include <graphics/material_resource.h>
 #include <graphics/mesh_resource.h>
+#include <scene/handles.h>
 
 namespace Rodan {
-struct MeshTag {};
-struct MaterialTag {};
-struct RenderObjectTag {};
-
-using MeshHandle = Handle<MeshTag>;
-using MaterialHandle = Handle<MaterialTag>;
-using RenderObjectHandle = Handle<RenderObjectTag>;
 
 struct RenderObjectDesc {
   MeshHandle mesh;

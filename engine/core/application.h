@@ -12,6 +12,8 @@ namespace Rodan {
 class InputSystem;
 class GlfwWindow;
 
+using namespace Velos::RHI;
+
 class Application {
 public:
   Application();

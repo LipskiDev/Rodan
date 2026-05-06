@@ -114,7 +114,8 @@ void MetalRoughnessSpheresNoTexScene::Prepare(ICommandList &cmd) {
   }
 }
 
-void MetalRoughnessSpheresNoTexScene::Render(ICommandList &cmd) {
+void MetalRoughnessSpheresNoTexScene::Render(ICommandList &cmd,
+                                             const FrameRenderContext &frame) {
   drawInstanceCount_ = static_cast<u32>(instances_.size());
   drawSubmeshCount_ = 0;
 

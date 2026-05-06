@@ -1,10 +1,12 @@
 #pragma once
 
+#include "core/frame_render_context.h"
 #include "graphics/material_resource.h"
 #include "graphics/mesh_resource.h"
 #include "renderer/mesh_renderer.h"
 #include "rhi/rhi_command_list.h"
 #include "rhi/rhi_handles.h"
+#include "rhi/rhi_types.h"
 #include "scene/camera.h"
 #include "scene/render_world.h"
 #include <renderer/graph_renderer.h>
@@ -14,6 +16,10 @@
 #include <scene/render_world.h>
 
 namespace Rodan {
+
+struct FrameDataGPU {
+  glm::mat4 lightViewProj;
+};
 
 struct StaticMeshRenderItem {
   const MeshResource *mesh = nullptr;
@@ -47,19 +53,36 @@ struct MeshPipelineKeyHasher {
   }
 };
 
+struct ShadowMapResources {
+  Texture texture;
+  PipelineHandle pipeline;
+  glm::mat4 lightViewProj;
+
+  uint32_t resolution = 2048;
+};
+
 class SceneRenderer {
 public:
   void Initialize(IDevice *device, SwapchainHandle swapchain,
                   Format colorFormat, Format depthFormat,
                   DescriptorSetLayoutHandle materialLayout);
   void Shutdown(IDevice *device);
-  void Render(ICommandList &cmd, const RenderWorld &world,
-              const Camera &camera);
+  void Render(ICommandList &cmd, const RenderWorld &world, const Camera &camera,
+              const FrameRenderContext &frame);
 
   void SubmitStaticMesh(StaticMeshRenderItem item);
 
 private:
   PipelineHandle GetOrCreatePipeline(const MeshPipelineKey &key);
+  PipelineHandle GetOrCreateShadowPipeline();
+
+  void RenderShadowMaps(ICommandList &cmd, const RenderWorld &world);
+  void BuildStaticMeshRenderList(const RenderWorld &world);
+  void RenderStaticMeshes(ICommandList &cmd, const Camera &camera);
+
+  void BeginMainPass(ICommandList &cmd, const FrameRenderContext &frame);
+
+  void EndMainPass(ICommandList &cmd);
 
 private:
   IDevice *device_ = nullptr;
@@ -68,10 +91,21 @@ private:
   Format colorFormat_ = Format::Undefined;
   Format depthFormat_ = Format::Undefined;
 
+  ImageLayout shadowLayout_ = ImageLayout::Undefined;
+
   ShaderHandle staticMeshVS_;
   ShaderHandle staticMeshFS_;
 
+  ShaderHandle shadowVS_;
+  ShaderHandle shadowFS_;
+
   DescriptorSetLayoutHandle materialLayout_{};
+  DescriptorSetLayoutHandle frameLayout_{};
+
+  DescriptorPoolHandle frameDescriptorPool_{};
+  DescriptorSetHandle frameSet_{};
+
+  BufferHandle frameUBO_;
 
   MeshRenderer meshRenderer_;
 
@@ -83,6 +117,9 @@ private:
 
   std::unordered_map<MeshPipelineKey, PipelineHandle, MeshPipelineKeyHasher>
       pipelines_;
+
+  // Only one shadow map as of right now
+  ShadowMapResources directionalShadow_;
 };
 
 } // namespace Rodan
