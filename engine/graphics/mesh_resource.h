@@ -11,6 +11,7 @@ struct Submesh {
   uint32_t firstIndex;
   uint32_t indexCount;
   uint32_t materialSlot;
+  bool hasTangents = false;
 };
 
 struct MeshVertex {

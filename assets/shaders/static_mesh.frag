@@ -3,7 +3,9 @@
 layout(location = 0) in vec3 vWorldNormal;
 layout(location = 1) in vec3 vWorldPos;
 layout(location = 2) in vec2 vUV;
-layout(location = 3) in mat3 vTBN;
+layout(location = 3) in vec3 vTangent;
+layout(location = 4) in vec3 vBitangent;
+layout(location = 5) in vec3 vNormal;
 
 layout(set = 0, binding = 0) uniform sampler2D u_BaseColor;
 layout(set = 0, binding = 1) uniform sampler2D u_Normal;
@@ -11,32 +13,30 @@ layout(set = 0, binding = 2) uniform sampler2D u_MetallicRoughness;
 
 layout(set = 1, binding = 0) uniform sampler2D u_ShadowMap;
 layout(set = 1, binding = 1) uniform FrameData {
+  mat4 view;
+  mat4 proj;
+
   mat4 lightViewProj;
+  vec4 lightDirection;
+  vec4 lightColor;
+  float lightIntensity;
+  float shadowsEnabled;
 } u_Frame;
 
 layout(location = 0) out vec4 outColor;
 
 layout(push_constant) uniform PushConstants {
-    mat4 model;
-    mat4 view;
-    mat4 proj;
+    mat4 model;              // offset 0,   size 64
+    vec4 baseColorFactor;    // offset 64,  size 16
 
-    int showMode;
-    int _pad0;
-    int _pad1;
-    int _pad2;
+    float metallicFactor;    // offset 80
+    float roughnessFactor;   // offset 84
+    float alphaCutoff;       // offset 88
 
-    vec4 baseColorFactor;
-
-    float metallicFactor;
-    float roughnessFactor;
-    int hasMaterial;
-    int alphaMode;
-
-    float alphaCutoff;
-    float _pad3;
-    float _pad4;
-    float _pad5;
+    int showMode;            // offset 92
+    int hasMaterial;         // offset 96
+    int alphaMode;           // offset 100
+    int hasTangents;         // offset 104
 } pc;
 
 const float PI = 3.14159265359;
@@ -95,7 +95,16 @@ void main() {
     vec4 baseTex = texture(u_BaseColor, vUV);
     vec4 mrTex   = texture(u_MetallicRoughness, vUV);
     vec3 nTex = texture(u_Normal, vUV).xyz * 2.0 - 1.0;
-    vec3 N = normalize(vTBN * nTex);
+
+    vec3 N = normalize(vWorldNormal);
+
+    if (pc.hasTangents != 0 && length(vTangent) > 0.001)
+        N = normalize(
+            nTex.x * normalize(vTangent) +
+            nTex.y * normalize(vBitangent) +
+            nTex.z * normalize(vNormal)
+        );
+
     vec3 baseColor = pc.baseColorFactor.rgb * baseTex.rgb;
     float alpha = pc.baseColorFactor.a * baseTex.a;
 
@@ -108,15 +117,15 @@ void main() {
     }
 
     metallic = clamp(metallic, 0.0, 1.0);
-    roughness = clamp(roughness, 0.045, 1.0);
+    roughness = clamp(roughness, 0.08, 1.0);
 
-    vec3 camPos = vec3(inverse(pc.view)[3]);
+    vec3 camPos = vec3(inverse(u_Frame.view)[3]);
     vec3 V = normalize(camPos - vWorldPos);
 
-    vec3 L = normalize(vec3(0.0, 1.0, 0.0));
+    vec3 L = normalize(-u_Frame.lightDirection.xyz);
     vec3 H = normalize(V + L);
 
-    vec3 radiance = vec3(4.0);
+    vec3 radiance = u_Frame.lightColor.rgb * u_Frame.lightIntensity;
 
     float NdotL = max(dot(N, L), 0.0);
     float NdotV = max(dot(N, V), 0.0);
@@ -136,11 +145,21 @@ void main() {
     vec3 kD = (vec3(1.0) - kS) * (1.0 - metallic);
 
     vec3 diffuse = kD * baseColor / PI;
-    float shadow = ComputeShadow(vWorldPos, N, L);
-    vec3 direct = (diffuse + specular) * radiance * NdotL * shadow;
-    vec3 ambient = vec3(0.03) * baseColor;
 
-    vec3 color = ambient + direct;
+    float shadow = 1.0;
+
+    if (u_Frame.shadowsEnabled > 0.5) {
+        shadow = ComputeShadow(vWorldPos, N, L);
+    }
+
+    vec3 direct = (diffuse + specular) * radiance * NdotL * shadow;
+
+    vec3 ambientDiffuse = baseColor * (1.0 - metallic) * 0.08;
+    vec3 ambientSpecular = F0 * mix(0.25, 0.04, roughness);
+
+    vec3 ambient = ambientDiffuse + ambientSpecular;
+
+    vec3 color = direct + ambient;
     color = color / (color + vec3(1.0));
     color = pow(color, vec3(1.0 / 2.2));
 
@@ -160,12 +179,6 @@ void main() {
 
     if (pc.showMode == 2) {
         outColor = vec4(mrTex.rgb, 1.0);
-        return;
-    }
-
-    if (pc.showMode == 3) {
-        vec3 T = normalize(vTBN[0]); 
-        outColor = vec4(T * 0.5 + 0.5, 1.0);
         return;
     }
 

@@ -8,17 +8,33 @@ layout(location = 3) in vec4 inTangent;
 layout(location = 0) out vec3 vWorldNormal;
 layout(location = 1) out vec3 vWorldPos;
 layout(location = 2) out vec2 vUV;
-layout(location = 3) out mat3 vTBN;
+layout(location = 3) out vec3 vTangent;
+layout(location = 4) out vec3 vBitangent;
+layout(location = 5) out vec3 vNormal;
+
+layout(set = 1, binding = 1) uniform FrameData {
+  mat4 view;
+  mat4 proj;
+
+  mat4 lightViewProj;
+  vec4 lightDirection;
+  vec4 lightColor;
+  float lightIntensity;
+  float shadowsEnabled;
+} u_Frame;
 
 layout(push_constant) uniform PushConstants {
-    mat4 model;
-    mat4 view;
-    mat4 proj;
+    mat4 model;              // offset 0,   size 64
+    vec4 baseColorFactor;    // offset 64,  size 16
 
-    vec4 baseColorFactor;
-    float metallicFactor;
-    float roughnessFactor;
-    int hasMaterial;
+    float metallicFactor;    // offset 80
+    float roughnessFactor;   // offset 84
+    float alphaCutoff;       // offset 88
+
+    int showMode;            // offset 92
+    int hasMaterial;         // offset 96
+    int alphaMode;           // offset 100
+    int hasTangents;         // offset 104
 } pc;
 
 void main() {
@@ -31,12 +47,14 @@ void main() {
 
     T = normalize(T - dot(T, N) * N);
 
-    vec3 B = cross(N, T) * inTangent.w;
+    vec3 B = normalize(cross(N, T)) * inTangent.w;
 
-    vTBN = mat3(T, B, N);
+    vTangent = T;
+    vBitangent = B;
+    vNormal = N;
     vWorldNormal = N;
     vWorldPos = worldPos.xyz;
     vUV = inUV;
 
-    gl_Position = pc.proj * pc.view * worldPos;
+    gl_Position = u_Frame.proj * u_Frame.view * worldPos;
 }

@@ -1,12 +1,14 @@
 #pragma once
 
-#include "assets/gltf_loader.h"
-#include "core/input_system.h"
 #include "renderer/mesh_renderer.h"
+#include "rhi/rhi_handles.h"
 #include "samples/scene.h"
 #include "scene/first_person_camera.h"
+#include "scene/handles.h"
+#include "scene/render_world.h"
 #include "scene/static_mesh_instance.h"
 #include <assets/gltf_asset_loader.h>
+#include <renderer/scene_renderer.h>
 
 #include <glm/glm.hpp>
 #include <vector>
@@ -30,26 +32,19 @@ public:
   void RenderImGui() override;
 
 private:
-  void CreatePipeline(Velos::RHI::IDevice *device);
   void LoadScene(Velos::RHI::IDevice *device);
   void SpawnNodeRecursive(int nodeIndex, const glm::mat4 &parentTransform);
 
 private:
   Velos::RHI::IDevice *device_ = nullptr;
   Velos::RHI::SwapchainHandle swapchain_{};
-  Velos::RHI::Format colorFormat_{};
-  Velos::RHI::Format depthFormat_{};
 
-  Velos::RHI::ShaderHandle vertexShader_{};
-  Velos::RHI::ShaderHandle fragmentShader_{};
-  Velos::RHI::PipelineHandle pipeline_{};
-
-  std::unique_ptr<StaticGltfAsset> asset_;
   ImportedScene importedScene_;
   std::vector<std::shared_ptr<MeshResource>> uploadedMeshes_;
   std::vector<StaticMeshInstance> instances_;
 
-  MeshRenderer meshRenderer_;
+  SceneRenderer sceneRenderer_;
+  RenderWorld renderWorld_;
   FirstPersonCamera camera_;
 
   bool firstMouse_ = true;
@@ -59,7 +54,18 @@ private:
   Velos::u32 drawInstanceCount_ = 0;
   Velos::u32 drawSubmeshCount_ = 0;
 
-  std::vector<const MaterialResource *> materialPtrs_;
+  std::unique_ptr<StaticGltfAsset> asset_;
+
+  enum Show {
+    BaseColor = 0,
+    Normal = 1,
+    MetallicRoughness = 2,
+    Tangent = 3,
+    Final = 4
+  };
+  Show showMode_ = Final;
+
+  DirectionalLightHandle sunLight_;
 };
 
 } // namespace Rodan

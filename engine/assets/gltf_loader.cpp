@@ -74,7 +74,7 @@ size_t GetAccessorStride(const tinygltf::Model &model,
 void ReadVec4Attribute(const tinygltf::Model &model, int accessorIndex,
                        std::vector<glm::vec4> &out, size_t expectedCount) {
   if (accessorIndex < 0) {
-    out.assign(expectedCount, glm::vec4(1.0f, 0.0f, 0.0f, 1.0f));
+    out.assign(expectedCount, glm::vec4(0.0f));
     return;
   }
 
@@ -213,11 +213,13 @@ ImportedPrimitive LoadPrimitive(const tinygltf::Model &model,
                     vertexCount);
 
   auto tangentIt = primitive.attributes.find("TANGENT");
-  ReadVec4Attribute(
-      model, tangentIt != primitive.attributes.end() ? tangentIt->second : -1,
-      tangents, vertexCount);
+  const bool hasTangents = tangentIt != primitive.attributes.end();
+
+  ReadVec4Attribute(model, hasTangents ? tangentIt->second : -1, tangents,
+                    vertexCount);
 
   ImportedPrimitive out;
+  out.hasTangents = hasTangents;
   out.vertices.resize(vertexCount);
 
   for (size_t i = 0; i < vertexCount; ++i) {

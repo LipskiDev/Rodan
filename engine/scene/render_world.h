@@ -4,6 +4,7 @@
 #include "scene/handles.h"
 #include "scene/light.h"
 #include "scene/render_object.h"
+#include <iterator>
 #include <vector>
 
 namespace Rodan {
@@ -17,6 +18,8 @@ public:
 
   void SetTransform(RenderObjectHandle handle, const glm::mat4 &world);
   void SetVisible(RenderObjectHandle handle, bool visible);
+
+  void SetShadows(bool renderShadows) { renderShadows_ = renderShadows; }
 
   const std::vector<RenderObject> &GetObjects() const;
   const MeshResource &GetMesh(MeshHandle handle) const;
@@ -37,5 +40,7 @@ private:
   std::vector<DirectionalLight> directionalLights_;
 
   std::vector<RenderObject> objects_;
+
+  bool renderShadows_ = true;
 };
 } // namespace Rodan

@@ -72,6 +72,7 @@ void StaticGltfAsset::Destroy(IDevice *device) {
   materials_.clear();
 
   DestroyTexture(device, fallbackTexture_);
+  DestroyTexture(device, neutralNormalFallbackTexture_);
 
   if (descriptorPool_.IsValid()) {
     device->DestroyDescriptorPool(descriptorPool_);
@@ -229,7 +230,7 @@ void StaticGltfAsset::UploadMaterials(IDevice *device, IUploadContext *upload,
           static_cast<uint64_t>(img.pixelsRGBA8.size()));
       gpuMat.ownsNormalResources = true;
     } else {
-      gpuMat.normalTexture = fallbackTexture_;
+      gpuMat.normalTexture = neutralNormalFallbackTexture_;
       gpuMat.ownsNormalResources = false;
     }
 
@@ -379,5 +380,22 @@ void StaticGltfAsset::CreateFallbackResources(IDevice *device,
                                          .debugName = "Fallback White Texture",
                                      },
                                      whitePixel, 4);
+
+  const std::uint8_t neutralNormal[4] = {128, 128, 255, 255};
+
+  neutralNormalFallbackTexture_ =
+      CreateTexture2D(device, upload,
+                      TextureDesc{
+                          .width = 1,
+                          .height = 1,
+                          .format = Format::RGBA8_UNORM,
+                          .minFilter = Filter::Linear,
+                          .magFilter = Filter::Linear,
+                          .addressU = SamplerAddressMode::Repeat,
+                          .addressV = SamplerAddressMode::Repeat,
+                          .addressW = SamplerAddressMode::Repeat,
+                          .debugName = "Fallback Neutral Normal Texture",
+                      },
+                      neutralNormal, 4);
 }
 } // namespace Rodan

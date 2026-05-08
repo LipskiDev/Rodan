@@ -16,6 +16,7 @@ struct ImportedPrimitive {
   std::vector<ImportedVertex> vertices;
   std::vector<uint32_t> indices;
   int materialIndex = -1;
+  bool hasTangents;
 };
 
 struct ImportedTextureRef {

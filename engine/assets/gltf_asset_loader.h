@@ -47,6 +47,7 @@ private:
   DescriptorPoolHandle descriptorPool_{};
 
   Texture fallbackTexture_{};
+  Texture neutralNormalFallbackTexture_{};
 
 private:
   void CreateMaterialLayout(IDevice *device);

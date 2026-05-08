@@ -39,6 +39,7 @@ std::shared_ptr<MeshResource> MeshUploader::Upload(IDevice *device,
     submesh.materialSlot = primitive.materialIndex >= 0
                                ? static_cast<uint32_t>(primitive.materialIndex)
                                : 0;
+    submesh.hasTangents = primitive.hasTangents;
 
     submeshes.push_back(submesh);
   }

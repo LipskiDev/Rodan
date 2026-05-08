@@ -253,7 +253,7 @@ void SceneRenderer::Render(ICommandList &cmd, const RenderWorld &world,
 
   RenderShadowMaps(cmd, world);
 
-  BeginMainPass(cmd, frame);
+  BeginMainPass(cmd, frame, camera);
 
   RenderStaticMeshes(cmd, camera);
 
@@ -362,15 +362,46 @@ PipelineHandle SceneRenderer::GetOrCreateShadowPipeline() {
   return directionalShadow_.pipeline;
 }
 
+void SceneRenderer::EnsureShadowMapReadable(ICommandList &cmd) {
+  if (shadowLayout_ != ImageLayout::ShaderReadOnly) {
+    cmd.Barrier({
+        .image = directionalShadow_.texture.image,
+        .oldLayout = shadowLayout_,
+        .newLayout = ImageLayout::ShaderReadOnly,
+        .aspect = ImageAspect::Depth,
+    });
+
+    shadowLayout_ = ImageLayout::ShaderReadOnly;
+  }
+}
+
 void SceneRenderer::RenderShadowMaps(ICommandList &cmd,
                                      const RenderWorld &world) {
+  directionalShadow_.enabled = false;
+
   const auto &lights = world.GetDirectionalLights();
-  if (lights.empty())
+  if (lights.empty()) {
+    EnsureShadowMapReadable(cmd);
     return;
+  }
 
   const DirectionalLight &light = lights[0];
-  if (!light.castsShadow)
+
+  if (!light.castsShadow) {
+    EnsureShadowMapReadable(cmd);
     return;
+  }
+
+  directionalShadow_.enabled = true;
+
+  cmd.Barrier({
+      .image = directionalShadow_.texture.image,
+      .oldLayout = shadowLayout_,
+      .newLayout = ImageLayout::DepthAttachment,
+      .aspect = ImageAspect::Depth,
+  });
+
+  shadowLayout_ = ImageLayout::DepthAttachment;
 
   glm::vec3 lightDir = glm::normalize(light.direction);
 
@@ -387,15 +418,6 @@ void SceneRenderer::RenderShadowMaps(ICommandList &cmd,
   glm::mat4 lightViewProj = lightProj * lightView;
 
   directionalShadow_.lightViewProj = lightViewProj;
-
-  cmd.Barrier({
-      .image = directionalShadow_.texture.image,
-      .oldLayout = shadowLayout_,
-      .newLayout = ImageLayout::DepthAttachment,
-      .aspect = ImageAspect::Depth,
-  });
-
-  shadowLayout_ = ImageLayout::DepthAttachment;
 
   DepthAttachmentDesc dDesc = {
       .view = directionalShadow_.texture.view,
@@ -444,11 +466,9 @@ void SceneRenderer::RenderShadowMaps(ICommandList &cmd,
 
   cmd.EndRendering();
 
-  shadowLayout_ = ImageLayout::ShaderReadOnly;
-
   cmd.Barrier({
       .image = directionalShadow_.texture.image,
-      .oldLayout = shadowLayout_,
+      .oldLayout = ImageLayout::DepthAttachment,
       .newLayout = ImageLayout::ShaderReadOnly,
       .aspect = ImageAspect::Depth,
   });
@@ -475,6 +495,13 @@ void SceneRenderer::BuildStaticMeshRenderList(const RenderWorld &world) {
     }
 
     staticMeshes_.push_back(std::move(item));
+  }
+
+  if (!world.GetDirectionalLights().empty()) {
+    DirectionalLight light = world.GetDirectionalLights()[0];
+    directionalShadow_.direction = light.direction;
+    directionalShadow_.color = light.color;
+    directionalShadow_.intensity = light.intensity;
   }
 }
 
@@ -503,14 +530,20 @@ void SceneRenderer::RenderStaticMeshes(ICommandList &cmd,
       cmd.BindPipeline(pipeline);
       cmd.BindDescriptorSet(pipeline, 1, frameSet_);
 
-      MVPPushConstants mvpPc{};
-      mvpPc.model = item.world;
-      mvpPc.view = camera.GetView();
-      mvpPc.proj = camera.GetProjection();
-      mvpPc.showMode = 4;
+      StaticMeshPushConstants pc{};
+      pc.model = item.world;
+      pc.baseColorFactor =
+          material ? material->baseColorFactor : glm::vec4(1.0f);
+      pc.metallicFactor = material ? material->metallicFactor : 0.0f;
+      pc.roughnessFactor = material ? material->roughnessFactor : 1.0f;
+      pc.alphaCutoff = material ? material->alphaCutoff : 0.5f;
+      pc.showMode = 4;
+      pc.hasMaterial = material ? 1 : 0;
+      pc.alphaMode = material ? static_cast<int>(material->alphaMode) : 0;
+      pc.hasTangents = submesh.hasTangents ? 1 : 0;
 
       cmd.PushConstants(ShaderStage::Vertex | ShaderStage::Fragment, 0,
-                        sizeof(MVPPushConstants), &mvpPc);
+                        sizeof(StaticMeshPushConstants), &pc);
 
       meshRenderer_.DrawSubmesh(&cmd, *item.mesh, submesh, material, pipeline);
     }
@@ -518,10 +551,18 @@ void SceneRenderer::RenderStaticMeshes(ICommandList &cmd,
 }
 
 void SceneRenderer::BeginMainPass(ICommandList &cmd,
-                                  const FrameRenderContext &frame) {
+                                  const FrameRenderContext &frame,
+                                  const Camera &camera) {
 
   FrameDataGPU frameData{};
   frameData.lightViewProj = directionalShadow_.lightViewProj;
+  frameData.lightDirection = directionalShadow_.direction;
+  frameData.lightColor = directionalShadow_.color;
+  frameData.lightIntensity = directionalShadow_.intensity;
+  frameData.renderShadows = directionalShadow_.enabled ? 1.0f : 0.0f;
+
+  frameData.proj = camera.GetProjection();
+  frameData.view = camera.GetView();
 
   cmd.UpdateBuffer(
       {.buffer = frameUBO_, .data = &frameData, .size = sizeof(FrameDataGPU)});

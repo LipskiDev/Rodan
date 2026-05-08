@@ -3,6 +3,7 @@
 #include "graphics/mesh_resource.h"
 #include "graphics/shaders_types.h"
 #include "imgui.h"
+#include "renderer/scene_renderer.h"
 
 #include <assimp/cimport.h>
 #include <assimp/postprocess.h>
@@ -506,16 +507,15 @@ void DuckScene::UploadTextureIfNeeded(ICommandList &cmd) {
 
 void DuckScene::RenderDuckInstance(ICommandList &cmd, const glm::mat4 &model,
                                    BufferHandle indexBuffer, u32 indexCount) {
-  MVPPushConstants push{};
+  StaticMeshPushConstants push{};
   push.model = model;
-  push.view = camera_.GetView();
-  push.proj = camera_.GetProjection();
 
   cmd.BindPipeline(duck_.pipeline);
   cmd.BindDescriptorSet(duck_.pipeline, 0, duck_.descriptorSet);
   cmd.BindVertexBuffer(0, duck_.vertexBuffer, 0);
   cmd.BindIndexBuffer(indexBuffer, IndexType::U32, 0);
-  cmd.PushConstants(ShaderStage::Vertex, 0, sizeof(MVPPushConstants), &push);
+  cmd.PushConstants(ShaderStage::Vertex, 0, sizeof(StaticMeshPushConstants),
+                    &push);
   cmd.DrawIndexed(indexCount);
 }
 

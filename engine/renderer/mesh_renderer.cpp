@@ -30,42 +30,20 @@ void MeshRenderer::DrawSubmesh(ICommandList *cmd, const MeshResource &mesh,
                                const Submesh &submesh,
                                const MaterialResource *material,
                                PipelineHandle pipeline) {
-  if (!cmd) {
+  if (!cmd)
     return;
-  }
 
   cmd->BindPipeline(pipeline);
+
+  if (material) {
+    cmd->BindDescriptorSet(pipeline, 0, material->descriptorSet);
+  }
 
   cmd->BindVertexBuffer(0, mesh.vertexBuffer, 0);
   cmd->BindIndexBuffer(mesh.indexBuffer, IndexType::U32, 0);
 
-  MaterialPushConstants matPc{};
-
-  if (material) {
-    cmd->BindDescriptorSet(pipeline, 0, material->descriptorSet);
-
-    matPc.baseColorFactor = material->baseColorFactor;
-    matPc.metallicFactor = material->metallicFactor;
-    matPc.roughnessFactor = material->roughnessFactor;
-    matPc.hasMaterial = 1;
-    matPc.alphaMode = static_cast<int>(material->alphaMode);
-    matPc.alphaCutoff = material->alphaCutoff;
-  } else {
-    matPc.baseColorFactor = glm::vec4(1.0f);
-    matPc.metallicFactor = 0.0f;
-    matPc.roughnessFactor = 1.0f;
-    matPc.hasMaterial = 0;
-    matPc.alphaMode = static_cast<int>(AlphaMode::Opaque);
-    matPc.alphaCutoff = 0.5f;
-  }
-
-  cmd->PushConstants(ShaderStage::Vertex | ShaderStage::Fragment,
-                     sizeof(MVPPushConstants), sizeof(MaterialPushConstants),
-                     &matPc);
-
   cmd->DrawIndexed(submesh.indexCount, submesh.firstIndex, 0);
 }
-
 void MeshRenderer::DrawDepthOnly(ICommandList *cmd, const MeshResource &mesh) {
   cmd->BindVertexBuffer(0, mesh.vertexBuffer, 0);
   cmd->BindIndexBuffer(mesh.indexBuffer, IndexType::U32, 0);

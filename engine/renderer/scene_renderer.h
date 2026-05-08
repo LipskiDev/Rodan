@@ -17,8 +17,20 @@
 
 namespace Rodan {
 
-struct FrameDataGPU {
+struct alignas(16) FrameDataGPU {
+  glm::mat4 view;
+  glm::mat4 proj;
   glm::mat4 lightViewProj;
+
+  glm::vec3 lightDirection;
+  float _padD;
+  glm::vec3 lightColor;
+  float _padC;
+
+  float lightIntensity;
+  bool renderShadows;
+  float _pad1;
+  float _pad2;
 };
 
 struct StaticMeshRenderItem {
@@ -58,6 +70,12 @@ struct ShadowMapResources {
   PipelineHandle pipeline;
   glm::mat4 lightViewProj;
 
+  glm::vec3 direction;
+  glm::vec3 color;
+  float intensity;
+
+  bool enabled;
+
   uint32_t resolution = 2048;
 };
 
@@ -80,9 +98,12 @@ private:
   void BuildStaticMeshRenderList(const RenderWorld &world);
   void RenderStaticMeshes(ICommandList &cmd, const Camera &camera);
 
-  void BeginMainPass(ICommandList &cmd, const FrameRenderContext &frame);
+  void BeginMainPass(ICommandList &cmd, const FrameRenderContext &frame,
+                     const Camera &camera);
 
   void EndMainPass(ICommandList &cmd);
+
+  void EnsureShadowMapReadable(ICommandList &cmd);
 
 private:
   IDevice *device_ = nullptr;
