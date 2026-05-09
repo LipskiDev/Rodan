@@ -16,34 +16,31 @@ namespace Rodan {
 
 namespace {
 
-glm::mat4 GetNodeTransform(const tinygltf::Node &node) {
-  glm::mat4 transform(1.0f);
-
-  if (node.matrix.size() == 16) {
-    transform = glm::make_mat4(node.matrix.data());
-    return transform;
-  }
+Transform GetNodeTransform(const tinygltf::Node &node) {
+  Transform transform{};
 
   if (node.translation.size() == 3) {
-    transform = glm::translate(
-        transform, glm::vec3(static_cast<float>(node.translation[0]),
-                             static_cast<float>(node.translation[1]),
-                             static_cast<float>(node.translation[2])));
+    transform.position = glm::vec3(static_cast<float>(node.translation[0]),
+                                   static_cast<float>(node.translation[1]),
+                                   static_cast<float>(node.translation[2]));
   }
 
   if (node.rotation.size() == 4) {
-    glm::quat q(static_cast<float>(node.rotation[3]),
-                static_cast<float>(node.rotation[0]),
-                static_cast<float>(node.rotation[1]),
-                static_cast<float>(node.rotation[2]));
-    transform *= glm::mat4_cast(q);
+    transform.rotation = glm::quat(static_cast<float>(node.rotation[3]),
+                                   static_cast<float>(node.rotation[0]),
+                                   static_cast<float>(node.rotation[1]),
+                                   static_cast<float>(node.rotation[2]));
   }
 
   if (node.scale.size() == 3) {
-    transform =
-        glm::scale(transform, glm::vec3(static_cast<float>(node.scale[0]),
-                                        static_cast<float>(node.scale[1]),
-                                        static_cast<float>(node.scale[2])));
+    transform.scale = glm::vec3(static_cast<float>(node.scale[0]),
+                                static_cast<float>(node.scale[1]),
+                                static_cast<float>(node.scale[2]));
+  }
+
+  if (node.matrix.size() == 16) {
+    throw std::runtime_error(
+        "glTF node.matrix is not supported in TRS-only import path yet");
   }
 
   return transform;

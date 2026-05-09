@@ -43,7 +43,7 @@ RenderObjectHandle RenderWorld::CreateObject(const RenderObjectDesc &desc) {
   RenderObject object{};
   object.mesh = desc.mesh;
   object.materials = desc.materials;
-  object.world = desc.world;
+  object.transform = desc.transform;
   object.visible = desc.visible;
   object.objectId = desc.objectId;
 
@@ -53,11 +53,12 @@ RenderObjectHandle RenderWorld::CreateObject(const RenderObjectDesc &desc) {
 }
 
 void RenderWorld::SetTransform(RenderObjectHandle handle,
-                               const glm::mat4 &world) {
+                               const Transform transform) {
+
   assert(handle.IsValid());
   assert(handle.id < objects_.size());
 
-  objects_[handle.id].world = world;
+  objects_[handle.id].transform = transform;
 }
 
 void RenderWorld::SetVisible(RenderObjectHandle handle, bool visible) {

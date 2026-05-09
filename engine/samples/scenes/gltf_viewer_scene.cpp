@@ -253,12 +253,13 @@ void GltfViewerScene::LoadScene(IDevice *device, std::string path) {
     desc.materials = materialHandles;
     desc.visible = true;
 
-    glm::mat4 world = instance.localTransform;
+    Transform transform = instance.localTransform;
 
     if (autoScaleModel_) {
-      world = glm::scale(glm::mat4(1.0f), glm::vec3(modelScale_)) * world;
+      transform.scale *= modelScale_;
     }
-    desc.world = world;
+
+    desc.transform = transform;
 
     renderWorld_.CreateObject(desc);
   }

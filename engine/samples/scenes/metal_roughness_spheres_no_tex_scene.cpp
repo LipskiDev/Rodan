@@ -173,12 +173,10 @@ void MetalRoughnessSpheresNoTexScene::LoadScene(IDevice *device) {
 
     MeshHandle meshHandle = renderWorld_.AddMesh(*instance.mesh);
 
-    glm::mat4 assetScale = glm::scale(glm::mat4(1.0f), glm::vec3(100.0f));
-
     RenderObjectDesc desc{};
     desc.mesh = meshHandle;
     desc.materials = materialHandles;
-    desc.world = assetScale * instance.localTransform;
+    desc.transform = instance.localTransform;
     desc.visible = true;
 
     renderWorld_.CreateObject(desc);

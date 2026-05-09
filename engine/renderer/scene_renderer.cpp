@@ -456,7 +456,7 @@ void SceneRenderer::RenderShadowMaps(ICommandList &cmd,
     }
 
     ShadowPushConstants pc{};
-    pc.model = item.world;
+    pc.model = item.transform.ToMatrix();
     pc.lightViewProj = lightViewProj;
 
     cmd.PushConstants(ShaderStage::Vertex, 0, sizeof(ShadowPushConstants), &pc);
@@ -486,7 +486,7 @@ void SceneRenderer::BuildStaticMeshRenderList(const RenderWorld &world) {
 
     StaticMeshRenderItem item{};
     item.mesh = &world.GetMesh(object.mesh);
-    item.world = object.world;
+    item.transform = object.transform;
     item.objectId = object.objectId;
 
     item.materials.reserve(object.materials.size());
@@ -531,7 +531,7 @@ void SceneRenderer::RenderStaticMeshes(ICommandList &cmd,
       cmd.BindDescriptorSet(pipeline, 1, frameSet_);
 
       StaticMeshPushConstants pc{};
-      pc.model = item.world;
+      pc.model = item.transform.ToMatrix();
       pc.baseColorFactor =
           material ? material->baseColorFactor : glm::vec4(1.0f);
       pc.metallicFactor = material ? material->metallicFactor : 0.0f;

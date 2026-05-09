@@ -39,7 +39,7 @@ struct StaticMeshRenderItem {
 
   const MaterialResource *materialOverride = nullptr;
 
-  glm::mat4 world = glm::mat4(1.0f);
+  Transform transform;
   uint32_t objectId = 0;
 };
 

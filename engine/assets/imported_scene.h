@@ -1,5 +1,6 @@
 #pragma once
 
+#include "scene/transform.h"
 #include <glm/glm.hpp>
 #include <graphics/material_types.h>
 #include <string>
@@ -60,7 +61,7 @@ struct ImportedMesh {
 };
 
 struct ImportedNode {
-  glm::mat4 transform{1.0f};
+  Transform transform;
   int meshIndex = -1;
   std::vector<int> children;
 };

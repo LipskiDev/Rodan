@@ -1,4 +1,5 @@
 #pragma once
+#include "scene/transform.h"
 #include <core/types.h>
 #include <graphics/material_resource.h>
 #include <graphics/mesh_resource.h>
@@ -9,7 +10,9 @@ namespace Rodan {
 struct RenderObjectDesc {
   MeshHandle mesh;
   std::vector<MaterialHandle> materials;
-  glm::mat4 world = glm::mat4(1.0f);
+
+  Transform transform;
+
   bool visible = true;
   uint32_t objectId = 0;
 };
@@ -18,7 +21,7 @@ struct RenderObject {
   MeshHandle mesh;
   std::vector<MaterialHandle> materials;
 
-  glm::mat4 world = glm::mat4(1.0f);
+  Transform transform;
 
   bool visible = true;
   uint32_t objectId = 0;

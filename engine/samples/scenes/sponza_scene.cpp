@@ -174,7 +174,7 @@ void SponzaScene::LoadScene(IDevice *device) {
     RenderObjectDesc desc{};
     desc.mesh = meshHandle;
     desc.materials = materialHandles;
-    desc.world = instance.localTransform;
+    desc.transform = instance.localTransform;
     desc.visible = true;
 
     renderWorld_.CreateObject(desc);

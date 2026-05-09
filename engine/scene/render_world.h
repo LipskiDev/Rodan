@@ -16,7 +16,7 @@ public:
 
   RenderObjectHandle CreateObject(const RenderObjectDesc &desc);
 
-  void SetTransform(RenderObjectHandle handle, const glm::mat4 &world);
+  void SetTransform(RenderObjectHandle handle, const Transform transform);
   void SetVisible(RenderObjectHandle handle, bool visible);
 
   void SetShadows(bool renderShadows) { renderShadows_ = renderShadows; }

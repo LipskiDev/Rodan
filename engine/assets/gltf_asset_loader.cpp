@@ -315,12 +315,13 @@ void StaticGltfAsset::UploadMaterials(IDevice *device, IUploadContext *upload,
 }
 
 void StaticGltfAsset::BuildInstances(ImportedScene importedScene) {
-
   std::function<void(int, const glm::mat4 &)> spawn;
-  spawn = [&](int nodeIndex, const glm::mat4 &parent) {
+
+  spawn = [&](int nodeIndex, const glm::mat4 &parentWorld) {
     const auto &node = importedScene.nodes[nodeIndex];
 
-    glm::mat4 world = parent * node.transform;
+    const glm::mat4 localMatrix = node.transform.ToMatrix();
+    const glm::mat4 worldMatrix = parentWorld * localMatrix;
 
     if (node.meshIndex >= 0) {
       if (node.meshIndex >= static_cast<int>(meshes_.size())) {
@@ -329,13 +330,14 @@ void StaticGltfAsset::BuildInstances(ImportedScene importedScene) {
 
       StaticMeshInstance instance{};
       instance.mesh = meshes_[node.meshIndex];
-      instance.localTransform = world;
+      instance.localTransform = node.transform;
+      instance.worldMatrix = worldMatrix;
 
       instances_.push_back(instance);
     }
 
     for (int child : node.children) {
-      spawn(child, world);
+      spawn(child, worldMatrix);
     }
   };
 
