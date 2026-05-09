@@ -1,4 +1,5 @@
 #include "samples/scenes/duck_scene.h"
+#include "samples/scenes/gltf_viewer_scene.h"
 #include "samples/scenes/metal_roughness_spheres_no_tex_scene.h"
 #include "samples/scenes/million_cubes.h"
 #include "samples/scenes/sponza_scene.h"
@@ -17,6 +18,8 @@ inline std::unique_ptr<IScene> CreateSceneByType(SceneType type) {
     return std::make_unique<SponzaScene>();
   case SceneType::MetalRoughnessSpheresNoTex:
     return std::make_unique<MetalRoughnessSpheresNoTexScene>();
+  case SceneType::GltfViewer:
+    return std::make_unique<GltfViewerScene>();
   default:
     return nullptr;
   }

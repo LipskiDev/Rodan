@@ -11,7 +11,13 @@
 
 namespace Rodan {
 
-enum class SceneType { Duck, MillionCubes, Sponza, MetalRoughnessSpheresNoTex };
+enum class SceneType {
+  Duck,
+  MillionCubes,
+  Sponza,
+  MetalRoughnessSpheresNoTex,
+  GltfViewer
+};
 
 struct SceneUpdateContext {
   InputSystem *input = nullptr;

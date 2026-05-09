@@ -25,6 +25,16 @@ RenderWorld::AddDirectionalLight(const DirectionalLight &light) {
   return static_cast<uint32_t>(directionalLights_.size() - 1);
 }
 
+void RenderWorld::Clear() {
+  objects_.clear();
+  directionalLights_.clear();
+  meshes_.clear();
+  materials_.clear();
+
+  nextMeshIndex_ = 1;
+  nextMaterialIndex_ = 1;
+}
+
 RenderObjectHandle RenderWorld::CreateObject(const RenderObjectDesc &desc) {
   assert(desc.mesh.IsValid());
 

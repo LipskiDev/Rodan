@@ -13,3 +13,6 @@
 [submodule "external/meshoptimizer"]
 	path = external/meshoptimizer
 	url = https://github.com/zeux/meshoptimizer.git
+[submodule "external/nfd"]
+	path = external/nfd
+	url = https://github.com/btzy/nativefiledialog-extended.git

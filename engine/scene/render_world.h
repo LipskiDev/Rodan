@@ -27,6 +27,8 @@ public:
   const std::vector<DirectionalLight> &GetDirectionalLights() const;
   DirectionalLight &GetDirectionalLight(DirectionalLightHandle handle);
 
+  void Clear();
+
 private:
   void RenderDirectionalShadowMap(DirectionalLight light);
 

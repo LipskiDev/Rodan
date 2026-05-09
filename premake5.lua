@@ -54,7 +54,8 @@ project "Rodan"
 		"external/implot",
 		"external/meshoptimizer/src",
 		"external/tinygltf",
-    "external/velos/external/tracy/public"
+    "external/velos/external/tracy/public",
+    "external/nfd/src/include"
 	}
 
 	links
@@ -62,7 +63,8 @@ project "Rodan"
 		"Velos",
 		"imgui",
 		"implot",
-		"meshoptimizer"
+		"meshoptimizer",
+    "nfd"
 	}
 
 	filter "system:windows"
@@ -184,7 +186,8 @@ project "Runtime"
 		"Velos",
 		"imgui",
 		"implot",
-		"meshoptimizer"
+		"meshoptimizer",
+    "nfd"
 	}
 
 	filter "system:windows"
@@ -235,7 +238,8 @@ project "Runtime"
 			"Xxf86vm",
 			"Xinerama",
 			"Xcursor",
-			"z"
+			"z",
+      "dbus-1"
 		}
 
 	-- Debug
@@ -354,5 +358,52 @@ project "meshoptimizer"
 	filter "configurations:Release"
 		runtime "Release"
 		optimize "Speed"
+
+	filter {}
+
+
+project "nfd"
+	location "build/nfd"
+	kind "StaticLib"
+	language "C++"
+	cppdialect "C++17"
+
+	targetdir ("bin/" .. outputdir .. "/%{prj.name}")
+	objdir ("bin-int/" .. outputdir .. "/%{prj.name}")
+
+	includedirs
+	{
+		"external/nfd/src/include"
+	}
+
+	filter "system:linux"
+		files
+		{
+			"external/nfd/src/nfd_portal.cpp"
+			-- OR "external/nfd/src/nfd_gtk.cpp"
+		}
+
+		links
+		{
+			"dbus-1"
+		}
+
+		includedirs
+		{
+			"/usr/include/dbus-1.0",
+			"/usr/lib/dbus-1.0/include"
+		}
+
+	filter "system:windows"
+		files
+		{
+			"external/nfd/src/nfd_win.cpp"
+		}
+
+	filter "system:macosx"
+		files
+		{
+			"external/nfd/src/nfd_cocoa.m"
+		}
 
 	filter {}
