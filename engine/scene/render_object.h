@@ -14,7 +14,7 @@ struct RenderObjectDesc {
   Transform transform;
 
   bool visible = true;
-  uint32_t objectId = 0;
+  uint32_t objectId = 1;
 };
 
 struct RenderObject {
@@ -24,6 +24,6 @@ struct RenderObject {
   Transform transform;
 
   bool visible = true;
-  uint32_t objectId = 0;
+  uint32_t objectId = 1;
 };
 } // namespace Rodan

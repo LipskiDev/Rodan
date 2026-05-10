@@ -83,6 +83,11 @@ private:
 
   bool autoScaleModel_ = true;
   float modelScale_ = 50.0f;
+
+  Transform currentTransform_;
+  RenderObjectHandle currentRenderTarget_;
+  bool lockUniformScale_ = true;
+  bool changed = false;
 };
 
 } // namespace Rodan

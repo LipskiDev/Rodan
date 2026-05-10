@@ -77,6 +77,7 @@ void GltfViewerScene::Update(float deltaSeconds,
 
   if (pendingReload_) {
     pendingReload_ = false;
+    renderWorld_.Clear();
 
     try {
       ReloadScene(pendingScenePath_);
@@ -87,6 +88,10 @@ void GltfViewerScene::Update(float deltaSeconds,
     } catch (const std::exception &e) {
       std::cerr << "Failed to load scene: " << e.what() << std::endl;
     }
+  }
+
+  if (changed) {
+    renderWorld_.SetTransform(currentRenderTarget_, currentTransform_);
   }
 
   camera_.SetPerspective(60.0f,
@@ -168,20 +173,36 @@ void GltfViewerScene::RenderImGui() {
   }
 
   ImGui::Separator();
-  ImGui::Text("Model Import");
+  ImGui::Text("Model Transform");
 
-  ImGui::Checkbox("Auto Scale", &autoScaleModel_);
+  changed |=
+      ImGui::DragFloat3("Position", &currentTransform_.position.x, 0.01f);
 
-  if (autoScaleModel_) {
-    ImGui::DragFloat("Target Size", &modelScale_,
-                     0.1f,  // drag speed
-                     0.1f,  // min
-                     100.0f // max
-    );
+  glm::vec3 euler = glm::degrees(glm::eulerAngles(currentTransform_.rotation));
+
+  if (ImGui::DragFloat3("Rotation", &euler.x, 0.5f, -360.0f, 360.0f)) {
+    currentTransform_.rotation = glm::quat(glm::radians(euler));
+    changed = true;
   }
 
-  if (ImGui::Button("Reload Model")) {
-    pendingReload_ = true;
+  ImGui::Checkbox("Lock Uniform Scale", &lockUniformScale_);
+
+  if (lockUniformScale_) {
+    float uniformScale = currentTransform_.scale.x;
+
+    if (ImGui::DragFloat("Scale", &uniformScale, 0.01f, 0.001f, 100.0f)) {
+      currentTransform_.scale = glm::vec3(uniformScale);
+
+      changed = true;
+    }
+  } else {
+    changed |= ImGui::DragFloat3("Scale", &currentTransform_.scale.x, 0.01f,
+                                 0.001f, 100.0f);
+  }
+
+  if (ImGui::Button("Reset Transform")) {
+    currentTransform_ = Rodan::Transform{};
+    changed = true;
   }
 
   ImGui::Separator();
@@ -255,13 +276,10 @@ void GltfViewerScene::LoadScene(IDevice *device, std::string path) {
 
     Transform transform = instance.localTransform;
 
-    if (autoScaleModel_) {
-      transform.scale *= modelScale_;
-    }
-
     desc.transform = transform;
 
-    renderWorld_.CreateObject(desc);
+    currentRenderTarget_ = renderWorld_.CreateObject(desc);
+    printf("NEW RENDER TARGET: %d\n", currentRenderTarget_.id);
   }
 }
 

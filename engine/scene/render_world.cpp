@@ -54,15 +54,12 @@ RenderObjectHandle RenderWorld::CreateObject(const RenderObjectDesc &desc) {
 
 void RenderWorld::SetTransform(RenderObjectHandle handle,
                                const Transform transform) {
-
-  assert(handle.IsValid());
   assert(handle.id < objects_.size());
 
   objects_[handle.id].transform = transform;
 }
 
 void RenderWorld::SetVisible(RenderObjectHandle handle, bool visible) {
-  assert(handle.IsValid());
   assert(handle.id < objects_.size());
 
   objects_[handle.id].visible = visible;
@@ -73,7 +70,6 @@ const std::vector<RenderObject> &RenderWorld::GetObjects() const {
 }
 
 const MeshResource &RenderWorld::GetMesh(MeshHandle handle) const {
-  assert(handle.IsValid());
   return meshes_.at(handle.id);
 }
 
