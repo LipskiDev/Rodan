@@ -91,7 +91,8 @@ void GltfViewerScene::Update(float deltaSeconds,
   }
 
   if (changed) {
-    renderWorld_.SetTransform(currentRenderTarget_, currentTransform_);
+    for (RenderObjectHandle handle : currentRenderTargets_)
+      renderWorld_.SetTransform(handle, currentTransform_);
   }
 
   camera_.SetPerspective(60.0f,
@@ -278,8 +279,7 @@ void GltfViewerScene::LoadScene(IDevice *device, std::string path) {
 
     desc.transform = transform;
 
-    currentRenderTarget_ = renderWorld_.CreateObject(desc);
-    printf("NEW RENDER TARGET: %d\n", currentRenderTarget_.id);
+    currentRenderTargets_.push_back(renderWorld_.CreateObject(desc));
   }
 }
 

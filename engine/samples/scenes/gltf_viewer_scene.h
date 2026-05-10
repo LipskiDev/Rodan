@@ -85,7 +85,7 @@ private:
   float modelScale_ = 50.0f;
 
   Transform currentTransform_;
-  RenderObjectHandle currentRenderTarget_;
+  std::vector<RenderObjectHandle> currentRenderTargets_;
   bool lockUniformScale_ = true;
   bool changed = false;
 };

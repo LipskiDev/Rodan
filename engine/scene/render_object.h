@@ -21,7 +21,8 @@ struct RenderObject {
   MeshHandle mesh;
   std::vector<MaterialHandle> materials;
 
-  Transform transform;
+  Transform localTransform;
+  Transform worldTransform;
 
   bool visible = true;
   uint32_t objectId = 1;

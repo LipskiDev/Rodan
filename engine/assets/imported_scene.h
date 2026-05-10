@@ -1,5 +1,6 @@
 #pragma once
 
+#include "scene/bounding_box.h"
 #include "scene/transform.h"
 #include <glm/glm.hpp>
 #include <graphics/material_types.h>
@@ -18,6 +19,8 @@ struct ImportedPrimitive {
   std::vector<uint32_t> indices;
   int materialIndex = -1;
   bool hasTangents;
+
+  AABB localBounds;
 };
 
 struct ImportedTextureRef {
@@ -58,6 +61,8 @@ struct ImportedSampler {
 struct ImportedMesh {
   std::string name;
   std::vector<ImportedPrimitive> primitives;
+
+  AABB localBounds;
 };
 
 struct ImportedNode {
@@ -73,6 +78,7 @@ struct ImportedScene {
   std::vector<ImportedMaterial> materials;
   std::vector<ImportedImage> images;
   std::vector<ImportedSampler> samplers;
+  AABB worldBounds;
 };
 
 } // namespace Rodan

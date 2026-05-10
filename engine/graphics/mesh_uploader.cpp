@@ -92,6 +92,8 @@ std::shared_ptr<MeshResource> MeshUploader::Upload(IDevice *device,
       .data = combinedIndices.data(),
   });
 
+  resource->aabb = mesh.localBounds;
+
   return resource;
 }
 } // namespace Rodan

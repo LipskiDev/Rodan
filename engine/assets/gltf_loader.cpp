@@ -224,6 +224,10 @@ ImportedPrimitive LoadPrimitive(const tinygltf::Model &model,
     out.vertices[i].normal = normals[i];
     out.vertices[i].uv = uvs[i];
     out.vertices[i].tangent = tangents[i];
+
+    const glm::vec3 &p = positions[i];
+
+    out.localBounds.Expand(p);
   }
 
   out.indices = ReadIndices(model, primitive.indices);
@@ -238,7 +242,11 @@ ImportedMesh LoadMesh(const tinygltf::Model &model,
   out.name = mesh.name;
 
   for (const tinygltf::Primitive &primitive : mesh.primitives) {
-    out.primitives.push_back(LoadPrimitive(model, primitive));
+    ImportedPrimitive importedPrimitive = LoadPrimitive(model, primitive);
+    out.localBounds.Expand(importedPrimitive.localBounds.lower);
+    out.localBounds.Expand(importedPrimitive.localBounds.upper);
+
+    out.primitives.push_back(std::move(importedPrimitive));
   }
 
   return out;
@@ -366,6 +374,58 @@ static ImportedSampler LoadSampler(const tinygltf::Sampler &sampler) {
   return out;
 }
 
+static void ExpandAABB(AABB &aabb, const glm::vec3 &p) {
+  aabb.lower = glm::min(aabb.lower, p);
+  aabb.upper = glm::max(aabb.upper, p);
+}
+
+static AABB ComputeSceneAABB(const ImportedScene &scene) {
+  AABB aabb{};
+  bool hasAnyPoint = false;
+
+  std::function<void(int, const glm::mat4 &)> visit;
+
+  visit = [&](int nodeIndex, const glm::mat4 &parentWorld) {
+    const ImportedNode &node = scene.nodes.at(nodeIndex);
+
+    const glm::mat4 world = parentWorld * node.transform.ToMatrix();
+
+    if (node.meshIndex >= 0) {
+      const ImportedMesh &mesh = scene.meshes.at(node.meshIndex);
+
+      for (const ImportedPrimitive &primitive : mesh.primitives) {
+        for (const ImportedVertex &vertex : primitive.vertices) {
+          const glm::vec3 worldPos =
+              glm::vec3(world * glm::vec4(vertex.position, 1.0f));
+
+          if (!hasAnyPoint) {
+            aabb.lower = worldPos;
+            aabb.upper = worldPos;
+            hasAnyPoint = true;
+          } else {
+            ExpandAABB(aabb, worldPos);
+          }
+        }
+      }
+    }
+
+    for (int child : node.children) {
+      visit(child, world);
+    }
+  };
+
+  for (int rootNode : scene.rootNodes) {
+    visit(rootNode, glm::mat4(1.0f));
+  }
+
+  if (!hasAnyPoint) {
+    aabb.lower = glm::vec3(0.0f);
+    aabb.upper = glm::vec3(0.0f);
+  }
+
+  return aabb;
+}
+
 } // namespace
 
 ImportedScene GltfLoader::Load(const std::string &path) {
@@ -432,6 +492,8 @@ ImportedScene GltfLoader::Load(const std::string &path) {
       scene.rootNodes.push_back(rootNode);
     }
   }
+
+  scene.worldBounds = ComputeSceneAABB(scene);
 
   return scene;
 }

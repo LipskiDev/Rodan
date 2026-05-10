@@ -4,6 +4,7 @@
 #include "glm/ext/vector_float4.hpp"
 #include "rhi/rhi_handles.h"
 #include "rhi/rhi_pipeline.h"
+#include "scene/bounding_box.h"
 #include <cstdint>
 #include <vector>
 namespace Rodan {
@@ -29,6 +30,8 @@ public:
   Velos::RHI::BufferHandle indexBuffer;
 
   std::vector<Submesh> submeshes;
+
+  AABB aabb;
 };
 
 } // namespace Rodan

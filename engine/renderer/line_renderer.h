@@ -21,6 +21,7 @@ public:
   void plane(const vec3 &orig, const vec3 &v1, const vec3 &v2, int n1, int n2,
              float s1, float s2, const vec4 &color, const vec4 &outlineColor);
   void box(const mat4 &m, const vec3 &size, const vec4 &color);
+  void aabb(vec3 lower, vec3 upper, const vec4 &color);
   void frustum(const mat4 &camView, const mat4 &camProj, const vec4 &color);
 
   void render(Velos::RHI::ICommandList &cmd, const mat4 &viewProj);

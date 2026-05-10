@@ -39,7 +39,8 @@ struct StaticMeshRenderItem {
 
   const MaterialResource *materialOverride = nullptr;
 
-  Transform transform;
+  Transform localTransform;
+  Transform worldTransform;
   uint32_t objectId = 0;
 };
 

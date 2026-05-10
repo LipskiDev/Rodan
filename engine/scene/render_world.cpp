@@ -43,7 +43,8 @@ RenderObjectHandle RenderWorld::CreateObject(const RenderObjectDesc &desc) {
   RenderObject object{};
   object.mesh = desc.mesh;
   object.materials = desc.materials;
-  object.transform = desc.transform;
+  object.localTransform = desc.transform;
+  object.worldTransform = Transform{};
   object.visible = desc.visible;
   object.objectId = desc.objectId;
 
@@ -56,7 +57,7 @@ void RenderWorld::SetTransform(RenderObjectHandle handle,
                                const Transform transform) {
   assert(handle.id < objects_.size());
 
-  objects_[handle.id].transform = transform;
+  objects_[handle.id].worldTransform = transform;
 }
 
 void RenderWorld::SetVisible(RenderObjectHandle handle, bool visible) {

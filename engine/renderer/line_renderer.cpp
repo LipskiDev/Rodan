@@ -150,6 +150,34 @@ void LineRenderer3D::box(const mat4 &m, const vec3 &size, const vec4 &color) {
   line(c[3], c[7], color);
 }
 
+void LineRenderer3D::aabb(glm::vec3 lower, glm::vec3 upper, const vec4 &color) {
+  const vec3 c[8] = {
+      {lower.x, lower.y, lower.z}, {upper.x, lower.y, lower.z},
+      {upper.x, upper.y, lower.z}, {lower.x, upper.y, lower.z},
+
+      {lower.x, lower.y, upper.z}, {upper.x, lower.y, upper.z},
+      {upper.x, upper.y, upper.z}, {lower.x, upper.y, upper.z},
+  };
+
+  // Bottom face
+  line(c[0], c[1], color);
+  line(c[1], c[2], color);
+  line(c[2], c[3], color);
+  line(c[3], c[0], color);
+
+  // Top face
+  line(c[4], c[5], color);
+  line(c[5], c[6], color);
+  line(c[6], c[7], color);
+  line(c[7], c[4], color);
+
+  // Vertical edges
+  line(c[0], c[4], color);
+  line(c[1], c[5], color);
+  line(c[2], c[6], color);
+  line(c[3], c[7], color);
+}
+
 void LineRenderer3D::frustum(const mat4 &camView, const mat4 &camProj,
                              const vec4 &color) {
   const mat4 invViewProj = glm::inverse(camProj * camView);
