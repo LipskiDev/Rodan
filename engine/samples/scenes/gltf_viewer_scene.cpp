@@ -295,9 +295,7 @@ void GltfViewerScene::ReloadScene(const std::string &path) {
   device_->WaitIdle();
 
   renderWorld_.Clear();
-
   currentRenderTargets_.clear();
-
   instances_.clear();
 
   if (asset_) {
@@ -307,11 +305,22 @@ void GltfViewerScene::ReloadScene(const std::string &path) {
 
   LoadScene(device_, path);
 
+  currentBounds_ = ComputeCurrentBounds();
+
   const float scale = autoScaleModel_ ? RescaleScene(5.0f) : 1.0f;
-  const glm::vec3 center = autoCenterModel_ ? CenterScene() : glm::vec3(0.0);
+  const glm::vec3 center = currentBounds_.Center();
 
   currentTransform_.scale = glm::vec3(scale);
-  currentTransform_.position = center * scale;
+  currentTransform_.position =
+      autoCenterModel_ ? -center * scale : glm::vec3(0.0f);
+
+  for (RenderObjectHandle handle : currentRenderTargets_) {
+    renderWorld_.SetTransform(handle, currentTransform_);
+  }
+
+  changed = false;
+
+  FrameCamera();
 
   sunLight_ = renderWorld_.AddDirectionalLight({
       .direction = glm::normalize(glm::vec3(0.4f, -1.0f, 0.3f)),
@@ -343,20 +352,7 @@ static AABB TransformAABB(const AABB &local, const glm::mat4 &m) {
 }
 
 float GltfViewerScene::RescaleScene(float targetSize) {
-  AABB aabb;
-
-  for (const auto &obj : renderWorld_.GetObjects()) {
-    const MeshResource &mesh = renderWorld_.GetMesh(obj.mesh);
-
-    glm::mat4 model =
-        obj.worldTransform.ToMatrix() * obj.localTransform.ToMatrix();
-
-    AABB worldAABB = TransformAABB(mesh.aabb, model);
-
-    aabb.Expand(worldAABB.lower);
-    aabb.Expand(worldAABB.upper);
-  }
-
+  AABB aabb = currentBounds_;
   const glm::vec3 size = aabb.upper - aabb.lower;
   const float maxExtent = std::max(size.x, std::max(size.y, size.z));
 
@@ -368,8 +364,25 @@ float GltfViewerScene::RescaleScene(float targetSize) {
   return targetSize / maxExtent;
 }
 
-glm::vec3 GltfViewerScene::CenterScene() {
+glm::vec3 GltfViewerScene::CenterScene() { return -currentBounds_.Center(); }
 
+void GltfViewerScene::FrameCamera() {
+  AABB bounds = ComputeCurrentBounds();
+
+  glm::vec3 center = bounds.Center();
+  glm::vec3 size = bounds.upper - bounds.lower;
+
+  float radius = glm::length(size) * 0.5f;
+  float fovY = glm::radians(60.0f);
+
+  float distance = radius / std::tan(fovY * 0.5f);
+  distance *= 1.5f;
+
+  camera_.SetPosition(center + glm::vec3(0.0f, 0.0f, distance));
+  camera_.LookAt(center);
+}
+
+AABB GltfViewerScene::ComputeCurrentBounds() {
   AABB aabb;
 
   for (const auto &obj : renderWorld_.GetObjects()) {
@@ -384,7 +397,7 @@ glm::vec3 GltfViewerScene::CenterScene() {
     aabb.Expand(worldAABB.upper);
   }
 
-  return -aabb.Center();
+  return aabb;
 }
 
 } // namespace Rodan

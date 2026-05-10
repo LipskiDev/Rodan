@@ -99,4 +99,19 @@ void FirstPersonCamera::SetPerspective(float fovDegrees, float aspect,
   UpdateProjectionMatrix();
 }
 
+void FirstPersonCamera::SetPosition(glm::vec3 position) {
+  position_ = position;
+}
+
+void FirstPersonCamera::LookAt(glm::vec3 target) {
+  glm::vec3 dir = glm::normalize(target - position_);
+
+  pitch_ = glm::degrees(std::asin(dir.y));
+  yaw_ = glm::degrees(std::atan2(dir.z, dir.x));
+
+  pitch_ = glm::clamp(pitch_, -89.0f, 89.0f);
+
+  UpdateViewMatrix();
+}
+
 } // namespace Rodan

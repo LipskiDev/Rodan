@@ -15,6 +15,9 @@ public:
   void SetPerspective(float fovDegrees, float aspect, float nearPlane,
                       float farPlane);
 
+  void SetPosition(glm::vec3 position) override;
+  void LookAt(glm::vec3 lookAt) override;
+
 private:
   glm::vec3 position_;
   float yaw_;

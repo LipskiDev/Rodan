@@ -46,6 +46,8 @@ private:
   void ReloadScene(const std::string &path);
   float RescaleScene(float targetSize);
   glm::vec3 CenterScene();
+  void FrameCamera();
+  AABB ComputeCurrentBounds();
 
 private:
   Velos::RHI::IDevice *device_ = nullptr;
@@ -90,6 +92,8 @@ private:
   std::vector<RenderObjectHandle> currentRenderTargets_;
   bool lockUniformScale_ = true;
   bool changed = false;
+
+  AABB currentBounds_ = {};
 };
 
 } // namespace Rodan
