@@ -9,6 +9,7 @@
 #include "imgui_internal.h"
 #include "rhi/rhi_types.h"
 #include "scene/handles.h"
+#include "scene/orbit_camera.h"
 
 #include <glm/gtc/matrix_transform.hpp>
 #include <path.h>
@@ -28,8 +29,8 @@ void GltfViewerScene::Initialize(IDevice *device, SwapchainHandle swapchain,
   if (NFD_Init() != NFD_OKAY) {
     std::cerr << "Failed to initialize NFD: " << NFD_GetError() << std::endl;
   }
-
-  camera_.SetPerspective(60.0f, 16.0f / 9.0f, 0.1f, 500.0f);
+  camera_ = std::make_unique<OrbitCamera>();
+  camera_->SetPerspective(60.0f, 16.0f / 9.0f, 0.1f, 500.0f);
 
   LoadScene(device_, currentScenePath_);
 
@@ -96,16 +97,16 @@ void GltfViewerScene::Update(float deltaSeconds,
       renderWorld_.SetTransform(handle, currentTransform_);
   }
 
-  camera_.SetPerspective(60.0f,
-                         static_cast<float>(ctx.framebufferWidth) /
-                             static_cast<float>(ctx.framebufferHeight),
-                         0.1f, 500.0f);
+  camera_->SetPerspective(60.0f,
+                          static_cast<float>(ctx.framebufferWidth) /
+                              static_cast<float>(ctx.framebufferHeight),
+                          0.1f, 500.0f);
 
   if (ctx.input) {
     for (const InputEvent &event : ctx.input->GetEvents()) {
       if (event.type == InputEventType::KeyDown ||
           event.type == InputEventType::KeyUp) {
-        camera_.OnKeyboard(event);
+        camera_->OnKeyboard(event);
       } else if (event.type == InputEventType::MouseMove) {
         float dx = 0.0f;
         float dy = 0.0f;
@@ -122,20 +123,20 @@ void GltfViewerScene::Update(float deltaSeconds,
         }
 
         if (ctx.input->IsMouseDown(MouseButton::Right)) {
-          camera_.OnMouseMove(dx, dy);
+          camera_->OnMouseMove(dx, dy);
         }
       }
     }
   }
 
-  camera_.Update(deltaSeconds);
+  camera_->Update(deltaSeconds);
 }
 
 void GltfViewerScene::Prepare(ICommandList &cmd) { (void)cmd; }
 
 void GltfViewerScene::Render(ICommandList &cmd,
                              const FrameRenderContext &frame) {
-  sceneRenderer_.Render(cmd, renderWorld_, camera_, frame);
+  sceneRenderer_.Render(cmd, renderWorld_, *camera_, frame);
 }
 
 void GltfViewerScene::RenderImGui() {
@@ -210,8 +211,29 @@ void GltfViewerScene::RenderImGui() {
     changed = true;
   }
 
+  ImGui::Separator();
+  ImGui::Text("Camera");
+
+  const char *cameraModes[] = {
+      "First Person",
+      "Orbit",
+  };
+
+  int currentMode = static_cast<int>(cameraMode_);
+
+  if (ImGui::Combo("Camera Mode", &currentMode, cameraModes,
+                   IM_ARRAYSIZE(cameraModes))) {
+    SetCameraMode(static_cast<CameraMode>(currentMode));
+  }
+
   if (ImGui::Button("Reset Camera")) {
-    camera_.Reset();
+    camera_->Reset();
+  }
+
+  ImGui::SameLine();
+
+  if (ImGui::Button("Frame Camera")) {
+    FrameCamera();
   }
 
   ImGui::Separator();
@@ -382,8 +404,8 @@ void GltfViewerScene::FrameCamera() {
   float distance = radius / std::tan(fovY * 0.5f);
   distance *= 1.5f;
 
-  camera_.SetPosition(center + glm::vec3(0.0f, 0.0f, distance));
-  camera_.LookAt(center);
+  camera_->SetPosition(center + glm::vec3(0.0f, 0.0f, distance));
+  camera_->LookAt(center);
 }
 
 AABB GltfViewerScene::ComputeCurrentBounds() {
@@ -402,6 +424,26 @@ AABB GltfViewerScene::ComputeCurrentBounds() {
   }
 
   return aabb;
+}
+
+void GltfViewerScene::SetCameraMode(CameraMode mode) {
+  cameraMode_ = mode;
+
+  switch (cameraMode_) {
+  case CameraMode::FirstPerson:
+    camera_ = std::make_unique<FirstPersonCamera>();
+    break;
+
+  case CameraMode::Orbit:
+    camera_ = std::make_unique<OrbitCamera>();
+    break;
+  }
+
+  camera_->SetPerspective(60.0f, 16.0f / 9.0f, 0.1f, 500.0f);
+
+  FrameCamera();
+
+  firstMouse_ = true;
 }
 
 } // namespace Rodan

@@ -5,6 +5,7 @@
 #include "samples/scene.h"
 #include "scene/first_person_camera.h"
 #include "scene/handles.h"
+#include "scene/orbit_camera.h"
 #include "scene/render_world.h"
 #include "scene/static_mesh_instance.h"
 #include <assets/gltf_asset_loader.h>
@@ -26,6 +27,12 @@ static bool IsGltfPath(const std::string &path) {
 }
 
 class GltfViewerScene : public IScene {
+private:
+  enum class CameraMode {
+    FirstPerson = 0,
+    Orbit = 1,
+  };
+
 public:
   void Initialize(Velos::RHI::IDevice *device,
                   Velos::RHI::SwapchainHandle swapchain,
@@ -48,6 +55,7 @@ private:
   glm::vec3 CenterScene();
   void FrameCamera();
   AABB ComputeCurrentBounds();
+  void SetCameraMode(CameraMode mode);
 
 private:
   Velos::RHI::IDevice *device_ = nullptr;
@@ -59,7 +67,10 @@ private:
 
   SceneRenderer sceneRenderer_;
   RenderWorld renderWorld_;
-  FirstPersonCamera camera_;
+
+  CameraMode cameraMode_ = CameraMode::Orbit;
+
+  std::unique_ptr<Camera> camera_;
 
   bool firstMouse_ = true;
   float lastMouseX_ = 0.0f;
