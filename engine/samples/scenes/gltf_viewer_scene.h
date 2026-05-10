@@ -45,6 +45,7 @@ private:
   void LoadScene(Velos::RHI::IDevice *device, std::string path);
   void ReloadScene(const std::string &path);
   float RescaleScene(float targetSize);
+  glm::vec3 CenterScene();
 
 private:
   Velos::RHI::IDevice *device_ = nullptr;

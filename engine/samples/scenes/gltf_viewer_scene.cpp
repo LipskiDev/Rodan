@@ -308,8 +308,10 @@ void GltfViewerScene::ReloadScene(const std::string &path) {
   LoadScene(device_, path);
 
   const float scale = autoScaleModel_ ? RescaleScene(5.0f) : 1.0f;
+  const glm::vec3 center = autoCenterModel_ ? CenterScene() : glm::vec3(0.0);
 
   currentTransform_.scale = glm::vec3(scale);
+  currentTransform_.position = center * scale;
 
   sunLight_ = renderWorld_.AddDirectionalLight({
       .direction = glm::normalize(glm::vec3(0.4f, -1.0f, 0.3f)),
@@ -364,6 +366,25 @@ float GltfViewerScene::RescaleScene(float targetSize) {
 
   changed = true;
   return targetSize / maxExtent;
+}
+
+glm::vec3 GltfViewerScene::CenterScene() {
+
+  AABB aabb;
+
+  for (const auto &obj : renderWorld_.GetObjects()) {
+    const MeshResource &mesh = renderWorld_.GetMesh(obj.mesh);
+
+    glm::mat4 model =
+        obj.worldTransform.ToMatrix() * obj.localTransform.ToMatrix();
+
+    AABB worldAABB = TransformAABB(mesh.aabb, model);
+
+    aabb.Expand(worldAABB.lower);
+    aabb.Expand(worldAABB.upper);
+  }
+
+  return -aabb.Center();
 }
 
 } // namespace Rodan
