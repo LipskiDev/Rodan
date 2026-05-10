@@ -11,6 +11,8 @@ public:
   virtual void SetPosition(glm::vec3 position) = 0;
   virtual void LookAt(glm::vec3 lookAt) = 0;
 
+  virtual void Reset() = 0;
+
 protected:
   glm::mat4 view_;
   glm::mat4 projection_;

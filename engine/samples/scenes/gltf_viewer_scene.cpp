@@ -210,6 +210,10 @@ void GltfViewerScene::RenderImGui() {
     changed = true;
   }
 
+  if (ImGui::Button("Reset Camera")) {
+    camera_.Reset();
+  }
+
   ImGui::Separator();
 
   if (asset_) {

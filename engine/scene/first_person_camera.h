@@ -18,6 +18,8 @@ public:
   void SetPosition(glm::vec3 position) override;
   void LookAt(glm::vec3 lookAt) override;
 
+  void Reset() override;
+
 private:
   glm::vec3 position_;
   float yaw_;

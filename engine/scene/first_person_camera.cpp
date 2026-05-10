@@ -114,4 +114,15 @@ void FirstPersonCamera::LookAt(glm::vec3 target) {
   UpdateViewMatrix();
 }
 
+void FirstPersonCamera::Reset() {
+  position_ = glm::vec3(0.0f, 0.0f, 5.0f);
+
+  yaw_ = -90.0f;
+  pitch_ = 0.0f;
+
+  movement_ = {};
+
+  UpdateViewMatrix();
+}
+
 } // namespace Rodan
