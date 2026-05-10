@@ -8,6 +8,7 @@
 #include "imgui.h"
 #include "imgui_internal.h"
 #include "rhi/rhi_types.h"
+#include "scene/handles.h"
 
 #include <glm/gtc/matrix_transform.hpp>
 #include <path.h>
@@ -201,6 +202,9 @@ void GltfViewerScene::RenderImGui() {
                                  0.001f, 100.0f);
   }
 
+  ImGui::Checkbox("Auto Scale Imported Models", &autoScaleModel_);
+  ImGui::Checkbox("Auto Center Imported Models", &autoCenterModel_);
+
   if (ImGui::Button("Reset Transform")) {
     currentTransform_ = Rodan::Transform{};
     changed = true;
@@ -288,9 +292,11 @@ void GltfViewerScene::ReloadScene(const std::string &path) {
     return;
   }
 
-  device_->WaitIdle(); // or your RHI equivalent
+  device_->WaitIdle();
 
   renderWorld_.Clear();
+
+  currentRenderTargets_.clear();
 
   instances_.clear();
 
@@ -301,12 +307,63 @@ void GltfViewerScene::ReloadScene(const std::string &path) {
 
   LoadScene(device_, path);
 
+  const float scale = autoScaleModel_ ? RescaleScene(5.0f) : 1.0f;
+
+  currentTransform_.scale = glm::vec3(scale);
+
   sunLight_ = renderWorld_.AddDirectionalLight({
       .direction = glm::normalize(glm::vec3(0.4f, -1.0f, 0.3f)),
       .color = glm::vec3(1.0f),
       .intensity = 4.0f,
       .castsShadow = true,
   });
+}
+
+static AABB TransformAABB(const AABB &local, const glm::mat4 &m) {
+  AABB out;
+
+  glm::vec3 corners[8] = {
+      {local.lower.x, local.lower.y, local.lower.z},
+      {local.upper.x, local.lower.y, local.lower.z},
+      {local.lower.x, local.upper.y, local.lower.z},
+      {local.upper.x, local.upper.y, local.lower.z},
+      {local.lower.x, local.lower.y, local.upper.z},
+      {local.upper.x, local.lower.y, local.upper.z},
+      {local.lower.x, local.upper.y, local.upper.z},
+      {local.upper.x, local.upper.y, local.upper.z},
+  };
+
+  for (const glm::vec3 &c : corners) {
+    out.Expand(glm::vec3(m * glm::vec4(c, 1.0f)));
+  }
+
+  return out;
+}
+
+float GltfViewerScene::RescaleScene(float targetSize) {
+  AABB aabb;
+
+  for (const auto &obj : renderWorld_.GetObjects()) {
+    const MeshResource &mesh = renderWorld_.GetMesh(obj.mesh);
+
+    glm::mat4 model =
+        obj.worldTransform.ToMatrix() * obj.localTransform.ToMatrix();
+
+    AABB worldAABB = TransformAABB(mesh.aabb, model);
+
+    aabb.Expand(worldAABB.lower);
+    aabb.Expand(worldAABB.upper);
+  }
+
+  const glm::vec3 size = aabb.upper - aabb.lower;
+  const float maxExtent = std::max(size.x, std::max(size.y, size.z));
+
+  if (maxExtent <= 0.0000001f) {
+    return 1.0f;
+  }
+
+  changed = true;
+  return targetSize / maxExtent;
 }
 
 } // namespace Rodan

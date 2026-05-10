@@ -44,6 +44,7 @@ public:
 private:
   void LoadScene(Velos::RHI::IDevice *device, std::string path);
   void ReloadScene(const std::string &path);
+  float RescaleScene(float targetSize);
 
 private:
   Velos::RHI::IDevice *device_ = nullptr;
@@ -82,7 +83,7 @@ private:
   std::string pendingScenePath_;
 
   bool autoScaleModel_ = true;
-  float modelScale_ = 50.0f;
+  bool autoCenterModel_ = true;
 
   Transform currentTransform_;
   std::vector<RenderObjectHandle> currentRenderTargets_;
