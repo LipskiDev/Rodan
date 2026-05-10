@@ -33,7 +33,6 @@ public:
 
 private:
   void LoadScene(Velos::RHI::IDevice *device);
-  void SpawnNodeRecursive(int nodeIndex, const glm::mat4 &parentTransform);
 
 private:
   Velos::RHI::IDevice *device_ = nullptr;

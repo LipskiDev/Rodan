@@ -1,5 +1,6 @@
 #include "rhi/rhi_types.h"
 #include "rhi/rhi_upload_context.h"
+#include "scene/transform.h"
 #include <assets/gltf_asset_loader.h>
 #include <assets/gltf_loader.h>
 #include <graphics/mesh_uploader.h>
@@ -315,13 +316,14 @@ void StaticGltfAsset::UploadMaterials(IDevice *device, IUploadContext *upload,
 }
 
 void StaticGltfAsset::BuildInstances(ImportedScene importedScene) {
-  std::function<void(int, const glm::mat4 &)> spawn;
+  std::function<void(int, const Transform &)> spawn;
 
-  spawn = [&](int nodeIndex, const glm::mat4 &parentWorld) {
+  spawn = [&](int nodeIndex, const Transform &parentTransform) {
     const auto &node = importedScene.nodes[nodeIndex];
 
-    const glm::mat4 localMatrix = node.transform.ToMatrix();
-    const glm::mat4 worldMatrix = parentWorld * localMatrix;
+    const Transform localTransform = node.transform;
+    const Transform worldTransform = Transform::FromMatrix(
+        parentTransform.ToMatrix() * localTransform.ToMatrix());
 
     if (node.meshIndex >= 0) {
       if (node.meshIndex >= static_cast<int>(meshes_.size())) {
@@ -331,18 +333,18 @@ void StaticGltfAsset::BuildInstances(ImportedScene importedScene) {
       StaticMeshInstance instance{};
       instance.mesh = meshes_[node.meshIndex];
       instance.localTransform = node.transform;
-      instance.worldMatrix = worldMatrix;
+      instance.worldTransform = worldTransform;
 
       instances_.push_back(instance);
     }
 
     for (int child : node.children) {
-      spawn(child, worldMatrix);
+      spawn(child, worldTransform);
     }
   };
 
   for (int root : importedScene.rootNodes) {
-    spawn(root, glm::mat4(1.0f));
+    spawn(root, Transform{});
   }
 
   if (instances_.empty()) {

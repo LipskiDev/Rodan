@@ -3,6 +3,9 @@
 #include "glm/ext/vector_float3.hpp"
 #include "glm/fwd.hpp"
 #include "glm/gtc/quaternion.hpp"
+#define GLM_ENABLE_EXPERIMENTAL
+#include <glm/gtx/matrix_decompose.hpp>
+#include <glm/gtx/quaternion.hpp>
 
 namespace Rodan {
 struct Transform {
@@ -16,6 +19,20 @@ struct Transform {
     glm::mat4 S = glm::scale(glm::mat4(1.0f), scale);
 
     return T * R * S;
+  }
+
+  static Transform FromMatrix(glm::mat4 matrix) {
+    Transform transform{};
+
+    glm::vec3 skew;
+    glm::vec4 perspective;
+
+    glm::decompose(matrix, transform.scale, transform.rotation,
+                   transform.position, skew, perspective);
+
+    transform.rotation = glm::conjugate(transform.rotation);
+
+    return transform;
   }
 };
 } // namespace Rodan
