@@ -242,13 +242,6 @@ void GltfViewerScene::RenderImGui() {
 
   ImGui::Separator();
 
-  if (asset_) {
-    ImGui::Text("Instances: %u", drawInstanceCount_);
-    ImGui::Text("Submeshes drawn: %u", drawSubmeshCount_);
-    ImGui::Text("Materials: %u",
-                static_cast<u32>(asset_->GetMaterials().size()));
-  }
-
   const char *items[] = {"BaseColor", "Normal", "MetallicRoughness", "Tangent",
                          "Final"};
   int mode = static_cast<int>(showMode_);
