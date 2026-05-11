@@ -129,6 +129,7 @@ void ImGuiRenderer::Initialize(VRHI::IDevice *device,
   int w = 0;
   int h = 0;
   io.Fonts->GetTexDataAsRGBA32(&pixels, &w, &h);
+  io.FontGlobalScale = 1.6f;
 
   if (!pixels || w <= 0 || h <= 0) {
     throw std::runtime_error(

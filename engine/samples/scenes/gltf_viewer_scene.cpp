@@ -29,11 +29,13 @@ void GltfViewerScene::Initialize(IDevice *device, SwapchainHandle swapchain,
   if (NFD_Init() != NFD_OKAY) {
     std::cerr << "Failed to initialize NFD: " << NFD_GetError() << std::endl;
   }
-  camera_ = std::make_unique<OrbitCamera>();
-  camera_->SetPerspective(60.0f, 16.0f / 9.0f, 0.1f, 500.0f);
+
+  SetCameraMode(CameraMode::Orbit);
 
   LoadScene(device_, currentScenePath_);
-
+  currentBounds_ = ComputeCurrentBounds();
+  ComputeStats();
+  FrameCamera();
   sceneRenderer_.Initialize(device_, swapchain_, colorFormat, depthFormat,
                             asset_->GetMaterialLayout());
 
@@ -93,8 +95,10 @@ void GltfViewerScene::Update(float deltaSeconds,
   }
 
   if (changed) {
-    for (RenderObjectHandle handle : currentRenderTargets_)
+    for (RenderObjectHandle handle : currentRenderTargets_) {
       renderWorld_.SetTransform(handle, currentTransform_);
+    }
+    changed = false;
   }
 
   camera_->SetPerspective(60.0f,
@@ -268,6 +272,18 @@ void GltfViewerScene::RenderImGui() {
   ImGui::DragFloat("Sun Intensity", &sun.intensity, 0.1f, 0.0f, 20.0f);
   ImGui::Checkbox("Cast Shadows", &sun.castsShadow);
   ImGui::End();
+
+  ImGui::Begin("glTF Stats");
+
+  ImGui::Text("Mesh count: %u", stats_.meshCount);
+  ImGui::Text("Instance count: %u", stats_.instanceCount);
+  ImGui::Text("Vertex count: %u", stats_.vertexCount);
+  ImGui::Text("Index count: %u", stats_.indexCount);
+  ImGui::Text("Triangle count: %u", stats_.triangleCount);
+  ImGui::Text("Material count: %u", stats_.materialCount);
+  ImGui::Text("Texture count: %u", stats_.textureCount);
+
+  ImGui::End();
 }
 
 void GltfViewerScene::LoadScene(IDevice *device, std::string path) {
@@ -354,6 +370,8 @@ void GltfViewerScene::ReloadScene(const std::string &path) {
       .intensity = 4.0f,
       .castsShadow = true,
   });
+
+  ComputeStats();
 }
 
 static AABB TransformAABB(const AABB &local, const glm::mat4 &m) {
@@ -386,11 +404,8 @@ float GltfViewerScene::RescaleScene(float targetSize) {
     return 1.0f;
   }
 
-  changed = true;
   return targetSize / maxExtent;
 }
-
-glm::vec3 GltfViewerScene::CenterScene() { return -currentBounds_.Center(); }
 
 void GltfViewerScene::FrameCamera() {
   AABB bounds = ComputeCurrentBounds();
@@ -444,6 +459,23 @@ void GltfViewerScene::SetCameraMode(CameraMode mode) {
   FrameCamera();
 
   firstMouse_ = true;
+}
+void GltfViewerScene::ComputeStats() {
+  stats_ = {};
+
+  if (!asset_) {
+    return;
+  }
+
+  const auto &assetStats = asset_->GetStats();
+
+  stats_.meshCount = assetStats.meshCount;
+  stats_.instanceCount = assetStats.instanceCount;
+  stats_.vertexCount = assetStats.vertexCount;
+  stats_.indexCount = assetStats.indexCount;
+  stats_.triangleCount = assetStats.triangleCount;
+  stats_.materialCount = assetStats.materialCount;
+  stats_.textureCount = assetStats.textureCount;
 }
 
 } // namespace Rodan

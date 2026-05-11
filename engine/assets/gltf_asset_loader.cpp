@@ -29,6 +29,7 @@ StaticGltfAsset::Load(IDevice *device, IUploadContext *upload,
   asset->UploadMeshes(device, upload, importedScene);
   asset->UploadMaterials(device, upload, importedScene);
   asset->BuildInstances(importedScene);
+  asset->ComputeStats(importedScene);
 
   return asset;
 }
@@ -401,5 +402,27 @@ void StaticGltfAsset::CreateFallbackResources(IDevice *device,
                           .debugName = "Fallback Neutral Normal Texture",
                       },
                       neutralNormal, 4);
+}
+
+void StaticGltfAsset::ComputeStats(const ImportedScene &importedScene) {
+  stats_ = {};
+
+  stats_.meshCount = static_cast<uint32_t>(meshes_.size());
+  stats_.instanceCount = static_cast<uint32_t>(instances_.size());
+  stats_.materialCount = static_cast<uint32_t>(materials_.size());
+  stats_.textureCount = static_cast<uint32_t>(importedScene.images.size());
+
+  for (const auto &mesh : meshes_) {
+    if (!mesh) {
+      continue;
+    }
+
+    stats_.vertexCount += mesh->vertexCount;
+    stats_.indexCount += mesh->indexCount;
+
+    for (const Submesh &submesh : mesh->submeshes) {
+      stats_.triangleCount += submesh.indexCount / 3;
+    }
+  }
 }
 } // namespace Rodan

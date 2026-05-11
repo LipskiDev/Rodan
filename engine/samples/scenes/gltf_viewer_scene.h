@@ -33,6 +33,16 @@ private:
     Orbit = 1,
   };
 
+  struct SceneStats {
+    uint32_t meshCount = 0;
+    uint32_t vertexCount = 0;
+    uint32_t indexCount = 0;
+    uint32_t instanceCount = 0;
+    uint32_t triangleCount = 0;
+    uint32_t materialCount = 0;
+    uint32_t textureCount = 0;
+  };
+
 public:
   void Initialize(Velos::RHI::IDevice *device,
                   Velos::RHI::SwapchainHandle swapchain,
@@ -56,6 +66,7 @@ private:
   void FrameCamera();
   AABB ComputeCurrentBounds();
   void SetCameraMode(CameraMode mode);
+  void ComputeStats();
 
 private:
   Velos::RHI::IDevice *device_ = nullptr;
@@ -105,6 +116,8 @@ private:
   bool changed = false;
 
   AABB currentBounds_ = {};
+
+  SceneStats stats_;
 };
 
 } // namespace Rodan

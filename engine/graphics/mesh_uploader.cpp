@@ -93,6 +93,8 @@ std::shared_ptr<MeshResource> MeshUploader::Upload(IDevice *device,
   });
 
   resource->aabb = mesh.localBounds;
+  resource->vertexCount = vertexBufferSize;
+  resource->indexCount = indexBufferSize;
 
   return resource;
 }

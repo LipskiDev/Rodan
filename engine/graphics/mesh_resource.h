@@ -29,6 +29,9 @@ public:
   Velos::RHI::BufferHandle vertexBuffer;
   Velos::RHI::BufferHandle indexBuffer;
 
+  uint32_t vertexCount = 0;
+  uint32_t indexCount = 0;
+
   std::vector<Submesh> submeshes;
 
   AABB aabb;

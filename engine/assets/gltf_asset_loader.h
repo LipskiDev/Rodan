@@ -15,6 +15,17 @@ namespace Rodan {
 using namespace Velos::RHI;
 
 class StaticGltfAsset {
+private:
+  struct StaticGltfAssetStats {
+    uint32_t meshCount = 0;
+    uint32_t instanceCount = 0;
+    uint32_t vertexCount = 0;
+    uint32_t indexCount = 0;
+    uint32_t triangleCount = 0;
+    uint32_t materialCount = 0;
+    uint32_t textureCount = 0;
+  };
+
 public:
   static std::unique_ptr<StaticGltfAsset>
   Load(IDevice *device, IUploadContext *upload, const std::string &path);
@@ -34,6 +45,8 @@ public:
     return materialLayout_;
   }
 
+  const StaticGltfAssetStats &GetStats() const { return stats_; }
+
 private:
   IDevice *device_ = nullptr;
   bool fallbackUploaded_ = false;
@@ -49,6 +62,8 @@ private:
   Texture fallbackTexture_{};
   Texture neutralNormalFallbackTexture_{};
 
+  StaticGltfAssetStats stats_;
+
 private:
   void CreateMaterialLayout(IDevice *device);
   void CreateDescriptorPool(IDevice *device, ImportedScene importedScene);
@@ -59,5 +74,7 @@ private:
   void BuildInstances(ImportedScene importedScene);
 
   void CreateFallbackResources(IDevice *device, IUploadContext *upload);
+
+  void ComputeStats(const ImportedScene &importedScene);
 };
 } // namespace Rodan
