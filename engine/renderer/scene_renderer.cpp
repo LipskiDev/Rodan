@@ -248,7 +248,8 @@ void SceneRenderer::Shutdown(IDevice *device) {
 
 void SceneRenderer::Render(ICommandList &cmd, const RenderWorld &world,
                            const Camera &camera,
-                           const FrameRenderContext &frame) {
+                           const FrameRenderContext &frame,
+                           DebugContext dbgCtx) {
   BuildStaticMeshRenderList(world);
 
   RenderShadowMaps(cmd, world);
@@ -256,6 +257,8 @@ void SceneRenderer::Render(ICommandList &cmd, const RenderWorld &world,
   BeginMainPass(cmd, frame, camera);
 
   RenderStaticMeshes(cmd, camera);
+
+  RenderDebug(cmd, camera, dbgCtx);
 
   if (frame.renderUi) {
     frame.renderUi(cmd);
@@ -548,6 +551,23 @@ void SceneRenderer::RenderStaticMeshes(ICommandList &cmd,
                         sizeof(StaticMeshPushConstants), &pc);
 
       meshRenderer_.DrawSubmesh(&cmd, *item.mesh, submesh, material, pipeline);
+    }
+  }
+}
+
+void SceneRenderer::RenderDebug(ICommandList &cmd, const Camera &camera,
+                                DebugContext dbgCtx) {
+  for (auto mesh : staticMeshes_) {
+    if (dbgCtx.drawSceneBounds) {
+      Transform localTransform = mesh.localTransform;
+      Transform worldTransform = mesh.worldTransform;
+      auto aabb = mesh.mesh->aabb.Transform(worldTransform.ToMatrix() *
+                                            localTransform.ToMatrix());
+
+      lineRenderer3D_->aabb(aabb.lower, aabb.upper,
+                            glm::vec4(1.0f, 1.0f, 1.0f, 0.8f));
+      lineRenderer3D_->render(cmd, camera.GetProjection() * camera.GetView());
+      lineRenderer3D_->clear();
     }
   }
 }

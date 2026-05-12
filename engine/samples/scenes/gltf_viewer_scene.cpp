@@ -140,7 +140,7 @@ void GltfViewerScene::Prepare(ICommandList &cmd) { (void)cmd; }
 
 void GltfViewerScene::Render(ICommandList &cmd,
                              const FrameRenderContext &frame) {
-  sceneRenderer_.Render(cmd, renderWorld_, *camera_, frame);
+  sceneRenderer_.Render(cmd, renderWorld_, *camera_, frame, dbgCtx_);
 }
 
 void GltfViewerScene::RenderImGui() {
@@ -277,6 +277,12 @@ void GltfViewerScene::RenderImGui() {
   ImGui::Text("Material count: %u", stats_.materialCount);
   ImGui::Text("Texture count: %u", stats_.textureCount);
 
+  ImGui::SeparatorText("Bounding Boxes");
+
+  ImGui::Checkbox("Scene", &dbgCtx_.drawSceneBounds);
+  ImGui::Checkbox("Submeshes", &dbgCtx_.drawMeshBounds);
+  ImGui::Checkbox("Light direction", &dbgCtx_.drawLightDirection);
+
   ImGui::End();
 }
 
@@ -368,27 +374,6 @@ void GltfViewerScene::ReloadScene(const std::string &path) {
   ComputeStats();
 }
 
-static AABB TransformAABB(const AABB &local, const glm::mat4 &m) {
-  AABB out;
-
-  glm::vec3 corners[8] = {
-      {local.lower.x, local.lower.y, local.lower.z},
-      {local.upper.x, local.lower.y, local.lower.z},
-      {local.lower.x, local.upper.y, local.lower.z},
-      {local.upper.x, local.upper.y, local.lower.z},
-      {local.lower.x, local.lower.y, local.upper.z},
-      {local.upper.x, local.lower.y, local.upper.z},
-      {local.lower.x, local.upper.y, local.upper.z},
-      {local.upper.x, local.upper.y, local.upper.z},
-  };
-
-  for (const glm::vec3 &c : corners) {
-    out.Expand(glm::vec3(m * glm::vec4(c, 1.0f)));
-  }
-
-  return out;
-}
-
 float GltfViewerScene::RescaleScene(float targetSize) {
   AABB aabb = currentBounds_;
   const glm::vec3 size = aabb.upper - aabb.lower;
@@ -426,7 +411,7 @@ AABB GltfViewerScene::ComputeCurrentBounds() {
     glm::mat4 model =
         obj.worldTransform.ToMatrix() * obj.localTransform.ToMatrix();
 
-    AABB worldAABB = TransformAABB(mesh.aabb, model);
+    AABB worldAABB = mesh.aabb.Transform(model);
 
     aabb.Expand(worldAABB.lower);
     aabb.Expand(worldAABB.upper);

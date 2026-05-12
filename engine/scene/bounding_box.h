@@ -1,5 +1,6 @@
 #pragma once
 
+#include "glm/ext/matrix_float4x4.hpp"
 #include "glm/ext/vector_float3.hpp"
 #include <glm/common.hpp>
 #include <unistd.h>
@@ -21,6 +22,23 @@ struct AABB {
   void Expand(glm::vec3 p) {
     lower = glm::min(lower, p);
     upper = glm::max(upper, p);
+  }
+
+  AABB Transform(const glm::mat4 &m) const {
+    AABB out;
+
+    glm::vec3 corners[8] = {
+        {lower.x, lower.y, lower.z}, {upper.x, lower.y, lower.z},
+        {lower.x, upper.y, lower.z}, {upper.x, upper.y, lower.z},
+        {lower.x, lower.y, upper.z}, {upper.x, lower.y, upper.z},
+        {lower.x, upper.y, upper.z}, {upper.x, upper.y, upper.z},
+    };
+
+    for (const glm::vec3 &c : corners) {
+      out.Expand(glm::vec3(m * glm::vec4(c, 1.0f)));
+    }
+
+    return out;
   }
 };
 } // namespace Rodan

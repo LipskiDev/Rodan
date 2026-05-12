@@ -120,9 +120,7 @@ private:
 
   SceneStats stats_;
 
-  bool drawMeshBounds_;
-  bool drawSceneBounds_;
-  bool drawLightDirection_;
+  DebugContext dbgCtx_;
 };
 
 } // namespace Rodan

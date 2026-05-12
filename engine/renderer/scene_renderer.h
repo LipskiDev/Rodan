@@ -80,6 +80,12 @@ struct ShadowMapResources {
   uint32_t resolution = 2048;
 };
 
+struct DebugContext {
+  bool drawMeshBounds;
+  bool drawSceneBounds;
+  bool drawLightDirection;
+};
+
 class SceneRenderer {
 public:
   void Initialize(IDevice *device, SwapchainHandle swapchain,
@@ -87,7 +93,8 @@ public:
                   DescriptorSetLayoutHandle materialLayout);
   void Shutdown(IDevice *device);
   void Render(ICommandList &cmd, const RenderWorld &world, const Camera &camera,
-              const FrameRenderContext &frame);
+              const FrameRenderContext &frame,
+              DebugContext dbgCtx = {false, false, false});
 
   void SubmitStaticMesh(StaticMeshRenderItem item);
 
@@ -98,6 +105,9 @@ private:
   void RenderShadowMaps(ICommandList &cmd, const RenderWorld &world);
   void BuildStaticMeshRenderList(const RenderWorld &world);
   void RenderStaticMeshes(ICommandList &cmd, const Camera &camera);
+
+  void RenderDebug(ICommandList &cmd, const Camera &camera,
+                   DebugContext dbgCtx);
 
   void BeginMainPass(ICommandList &cmd, const FrameRenderContext &frame,
                      const Camera &camera);
