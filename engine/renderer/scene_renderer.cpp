@@ -557,19 +557,34 @@ void SceneRenderer::RenderStaticMeshes(ICommandList &cmd,
 
 void SceneRenderer::RenderDebug(ICommandList &cmd, const Camera &camera,
                                 DebugContext dbgCtx) {
-  for (auto mesh : staticMeshes_) {
-    if (dbgCtx.drawSceneBounds) {
-      Transform localTransform = mesh.localTransform;
-      Transform worldTransform = mesh.worldTransform;
-      auto aabb = mesh.mesh->aabb.Transform(worldTransform.ToMatrix() *
-                                            localTransform.ToMatrix());
+  if (!lineRenderer3D_) {
+    return;
+  }
 
-      lineRenderer3D_->aabb(aabb.lower, aabb.upper,
-                            glm::vec4(1.0f, 1.0f, 1.0f, 0.8f));
-      lineRenderer3D_->render(cmd, camera.GetProjection() * camera.GetView());
-      lineRenderer3D_->clear();
+  lineRenderer3D_->clear();
+
+  const glm::vec4 sceneBoundsColor{1.0f, 1.0f, 1.0f, 0.8f};
+  const glm::vec4 submeshBoundsColor{1.0f, 1.0f, 0.0f, 0.8f};
+
+  for (const auto &mesh : staticMeshes_) {
+    const glm::mat4 model =
+        mesh.worldTransform.ToMatrix() * mesh.localTransform.ToMatrix();
+
+    if (dbgCtx.drawSceneBounds) {
+      AABB aabb = mesh.mesh->aabb.Transform(model);
+      lineRenderer3D_->aabb(aabb.lower, aabb.upper, sceneBoundsColor);
+    }
+
+    if (dbgCtx.drawMeshBounds) {
+      for (const auto &submesh : mesh.mesh->submeshes) {
+        AABB aabb = submesh.aabb.Transform(model);
+        lineRenderer3D_->aabb(aabb.lower, aabb.upper, submeshBoundsColor);
+      }
     }
   }
+
+  lineRenderer3D_->render(cmd, camera.GetProjection() * camera.GetView());
+  lineRenderer3D_->clear();
 }
 
 void SceneRenderer::BeginMainPass(ICommandList &cmd,

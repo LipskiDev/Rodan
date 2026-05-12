@@ -20,6 +20,12 @@ struct AABB {
   }
 
   void Expand(glm::vec3 p) {
+    if (first) {
+      lower = p;
+      upper = p;
+      first = false;
+      return;
+    }
     lower = glm::min(lower, p);
     upper = glm::max(upper, p);
   }
@@ -40,5 +46,8 @@ struct AABB {
 
     return out;
   }
+
+private:
+  bool first = true;
 };
 } // namespace Rodan
