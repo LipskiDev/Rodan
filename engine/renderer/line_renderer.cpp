@@ -2,6 +2,7 @@
 #include "imgui.h"
 #include "rhi/rhi_pipeline.h"
 #include "rhi/rhi_types.h"
+#include "scene/transform.h"
 #include "shader/shader_compiler.h"
 #include <renderer/line_renderer.h>
 
@@ -216,6 +217,43 @@ void LineRenderer3D::frustum(const mat4 &camView, const mat4 &camProj,
   line(nbr, fbr, color);
   line(ntr, ftr, color);
   line(ntl, ftl, color);
+}
+
+void LineRenderer3D::arrow(const vec3 &start, const vec3 &end,
+                           const vec4 &color, float headSize) {
+  const vec3 dir = glm::normalize(end - start);
+
+  if (glm::length2(end - start) < 0.000001f) {
+    return;
+  }
+
+  // Main shaft
+  line(start, end, color);
+
+  // Build a stable perpendicular basis
+  vec3 up = std::abs(glm::dot(dir, vec3(0.0f, 1.0f, 0.0f))) > 0.99f
+                ? vec3(1.0f, 0.0f, 0.0f)
+                : vec3(0.0f, 1.0f, 0.0f);
+
+  const vec3 right = glm::normalize(glm::cross(dir, up));
+  const vec3 arrowUp = glm::normalize(glm::cross(right, dir));
+
+  // Arrowhead points
+  const vec3 back = end - dir * headSize;
+
+  const vec3 leftWing = back + right * headSize * 0.5f;
+
+  const vec3 rightWing = back - right * headSize * 0.5f;
+
+  const vec3 topWing = back + arrowUp * headSize * 0.5f;
+
+  const vec3 bottomWing = back - arrowUp * headSize * 0.5f;
+
+  // 3D arrowhead (cross style)
+  line(end, leftWing, color);
+  line(end, rightWing, color);
+  line(end, topWing, color);
+  line(end, bottomWing, color);
 }
 
 void LineRenderer3D::render(Velos::RHI::ICommandList &cmd,

@@ -106,8 +106,8 @@ private:
   void BuildStaticMeshRenderList(const RenderWorld &world);
   void RenderStaticMeshes(ICommandList &cmd, const Camera &camera);
 
-  void RenderDebug(ICommandList &cmd, const Camera &camera,
-                   DebugContext dbgCtx);
+  void RenderDebug(ICommandList &cmd, const RenderWorld &world,
+                   const Camera &camera, DebugContext dbgCtx);
 
   void BeginMainPass(ICommandList &cmd, const FrameRenderContext &frame,
                      const Camera &camera);

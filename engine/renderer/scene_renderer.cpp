@@ -258,7 +258,7 @@ void SceneRenderer::Render(ICommandList &cmd, const RenderWorld &world,
 
   RenderStaticMeshes(cmd, camera);
 
-  RenderDebug(cmd, camera, dbgCtx);
+  RenderDebug(cmd, world, camera, dbgCtx);
 
   if (frame.renderUi) {
     frame.renderUi(cmd);
@@ -555,31 +555,65 @@ void SceneRenderer::RenderStaticMeshes(ICommandList &cmd,
   }
 }
 
-void SceneRenderer::RenderDebug(ICommandList &cmd, const Camera &camera,
-                                DebugContext dbgCtx) {
+void SceneRenderer::RenderDebug(ICommandList &cmd, const RenderWorld &world,
+                                const Camera &camera, DebugContext dbgCtx) {
   if (!lineRenderer3D_) {
     return;
   }
 
   lineRenderer3D_->clear();
 
-  const glm::vec4 sceneBoundsColor{1.0f, 1.0f, 1.0f, 0.8f};
+  const glm::vec4 objectBoundsColor{1.0f, 1.0f, 1.0f, 0.8f};
   const glm::vec4 submeshBoundsColor{1.0f, 1.0f, 0.0f, 0.8f};
+  const glm::vec4 lightColor{1.0f, 1.0f, 0.0f, 1.0f};
+
+  AABB sceneBounds;
 
   for (const auto &mesh : staticMeshes_) {
     const glm::mat4 model =
         mesh.worldTransform.ToMatrix() * mesh.localTransform.ToMatrix();
 
+    AABB objectBounds = mesh.mesh->aabb.Transform(model);
+
+    sceneBounds.Expand(objectBounds.lower);
+    sceneBounds.Expand(objectBounds.upper);
+
     if (dbgCtx.drawSceneBounds) {
-      AABB aabb = mesh.mesh->aabb.Transform(model);
-      lineRenderer3D_->aabb(aabb.lower, aabb.upper, sceneBoundsColor);
+      lineRenderer3D_->aabb(objectBounds.lower, objectBounds.upper,
+                            objectBoundsColor);
     }
 
     if (dbgCtx.drawMeshBounds) {
       for (const auto &submesh : mesh.mesh->submeshes) {
-        AABB aabb = submesh.aabb.Transform(model);
-        lineRenderer3D_->aabb(aabb.lower, aabb.upper, submeshBoundsColor);
+        AABB submeshBounds = submesh.aabb.Transform(model);
+        lineRenderer3D_->aabb(submeshBounds.lower, submeshBounds.upper,
+                              submeshBoundsColor);
       }
+    }
+  }
+
+  if (dbgCtx.drawLightDirection) {
+    const auto &lights = world.GetDirectionalLights();
+
+    if (!lights.empty()) {
+      const DirectionalLight &light = lights[0];
+
+      glm::vec3 center = sceneBounds.Center();
+      glm::vec3 size = sceneBounds.upper - sceneBounds.lower;
+
+      float sceneRadius = glm::length(size) * 0.5f;
+      float arrowLength = sceneRadius * 0.35f;
+      float headSize = arrowLength * 0.15f;
+
+      glm::vec3 dir = glm::normalize(light.direction);
+
+      glm::vec3 anchor =
+          center + glm::vec3(0.0f, size.y * 0.5f + sceneRadius * 0.1f, 0.0f);
+
+      glm::vec3 start = anchor - dir * arrowLength;
+      glm::vec3 end = anchor;
+
+      lineRenderer3D_->arrow(start, end, lightColor, headSize);
     }
   }
 

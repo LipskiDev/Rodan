@@ -23,6 +23,8 @@ public:
   void box(const mat4 &m, const vec3 &size, const vec4 &color);
   void aabb(vec3 lower, vec3 upper, const vec4 &color);
   void frustum(const mat4 &camView, const mat4 &camProj, const vec4 &color);
+  void arrow(const vec3 &start, const vec3 &end, const vec4 &color,
+             float headSize = 0.1f);
 
   void render(Velos::RHI::ICommandList &cmd, const mat4 &viewProj);
 
