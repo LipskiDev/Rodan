@@ -39,8 +39,13 @@ Transform GetNodeTransform(const tinygltf::Node &node) {
   }
 
   if (node.matrix.size() == 16) {
-    throw std::runtime_error(
-        "glTF node.matrix is not supported in TRS-only import path yet");
+    glm::mat4 m(1.0f);
+
+    for (int i = 0; i < 16; i++) {
+      m[i / 4][i % 4] = static_cast<float>(node.matrix[i]);
+    }
+
+    transform = Transform::FromMatrix(m);
   }
 
   return transform;
