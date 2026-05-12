@@ -18,6 +18,7 @@ class StaticGltfAsset {
 private:
   struct StaticGltfAssetStats {
     uint32_t meshCount = 0;
+    uint32_t submeshCount = 0;
     uint32_t instanceCount = 0;
     uint32_t vertexCount = 0;
     uint32_t indexCount = 0;

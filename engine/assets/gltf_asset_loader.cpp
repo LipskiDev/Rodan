@@ -422,6 +422,7 @@ void StaticGltfAsset::ComputeStats(const ImportedScene &importedScene) {
 
     for (const Submesh &submesh : mesh->submeshes) {
       stats_.triangleCount += submesh.indexCount / 3;
+      stats_.submeshCount++;
     }
   }
 }

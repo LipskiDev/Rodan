@@ -269,6 +269,7 @@ void GltfViewerScene::RenderImGui() {
   ImGui::Begin("glTF Stats");
 
   ImGui::Text("Mesh count: %u", stats_.meshCount);
+  ImGui::Text("Submesh count: %u", stats_.submeshCount);
   ImGui::Text("Instance count: %u", stats_.instanceCount);
   ImGui::Text("Vertex count: %u", stats_.vertexCount);
   ImGui::Text("Index count: %u", stats_.indexCount);
@@ -463,6 +464,7 @@ void GltfViewerScene::ComputeStats() {
   const auto &assetStats = asset_->GetStats();
 
   stats_.meshCount = assetStats.meshCount;
+  stats_.submeshCount = assetStats.submeshCount;
   stats_.instanceCount = assetStats.instanceCount;
   stats_.vertexCount = assetStats.vertexCount;
   stats_.indexCount = assetStats.indexCount;

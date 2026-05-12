@@ -35,6 +35,7 @@ private:
 
   struct SceneStats {
     uint32_t meshCount = 0;
+    uint32_t submeshCount = 0;
     uint32_t vertexCount = 0;
     uint32_t indexCount = 0;
     uint32_t instanceCount = 0;
@@ -118,6 +119,10 @@ private:
   AABB currentBounds_ = {};
 
   SceneStats stats_;
+
+  bool drawMeshBounds_;
+  bool drawSceneBounds_;
+  bool drawLightDirection_;
 };
 
 } // namespace Rodan
