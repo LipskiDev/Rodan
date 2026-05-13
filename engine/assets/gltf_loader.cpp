@@ -181,6 +181,60 @@ std::vector<uint32_t> ReadIndices(const tinygltf::Model &model,
   return indices;
 }
 
+void GenerateTangents(std::vector<ImportedVertex> &vertices,
+                      const std::vector<uint32_t> &indices) {
+  std::vector<glm::vec3> tanAccum(vertices.size(), glm::vec3(0.0f));
+
+  for (size_t i = 0; i + 2 < indices.size(); i += 3) {
+    uint32_t i0 = indices[i + 0];
+    uint32_t i1 = indices[i + 1];
+    uint32_t i2 = indices[i + 2];
+
+    const glm::vec3 &p0 = vertices[i0].position;
+    const glm::vec3 &p1 = vertices[i1].position;
+    const glm::vec3 &p2 = vertices[i2].position;
+
+    const glm::vec2 &uv0 = vertices[i0].uv;
+    const glm::vec2 &uv1 = vertices[i1].uv;
+    const glm::vec2 &uv2 = vertices[i2].uv;
+
+    glm::vec3 e1 = p1 - p0;
+    glm::vec3 e2 = p2 - p0;
+
+    glm::vec2 duv1 = uv1 - uv0;
+    glm::vec2 duv2 = uv2 - uv0;
+
+    float denom = duv1.x * duv2.y - duv2.x * duv1.y;
+    if (std::abs(denom) < 1e-8f) {
+      continue;
+    }
+
+    float r = 1.0f / denom;
+
+    glm::vec3 tangent = (e1 * duv2.y - e2 * duv1.y) * r;
+
+    tanAccum[i0] += tangent;
+    tanAccum[i1] += tangent;
+    tanAccum[i2] += tangent;
+  }
+
+  for (size_t i = 0; i < vertices.size(); ++i) {
+    glm::vec3 n = glm::normalize(vertices[i].normal);
+    glm::vec3 t = tanAccum[i];
+
+    // Gram-Schmidt orthogonalize
+    t = t - n * glm::dot(n, t);
+
+    if (glm::length(t) < 1e-6f) {
+      t = glm::vec3(1.0f, 0.0f, 0.0f);
+    } else {
+      t = glm::normalize(t);
+    }
+
+    vertices[i].tangent = glm::vec4(t, 1.0f);
+  }
+}
+
 ImportedPrimitive LoadPrimitive(const tinygltf::Model &model,
                                 const tinygltf::Primitive &primitive) {
   if (primitive.mode != TINYGLTF_MODE_TRIANGLES) {
@@ -237,6 +291,11 @@ ImportedPrimitive LoadPrimitive(const tinygltf::Model &model,
 
   out.indices = ReadIndices(model, primitive.indices);
   out.materialIndex = primitive.material;
+
+  if (!out.hasTangents) {
+    GenerateTangents(out.vertices, out.indices);
+    out.hasTangents = true;
+  }
 
   return out;
 }

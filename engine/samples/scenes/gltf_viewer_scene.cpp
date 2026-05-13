@@ -242,11 +242,11 @@ void GltfViewerScene::RenderImGui() {
 
   ImGui::Separator();
 
-  const char *items[] = {"BaseColor", "Normal", "MetallicRoughness", "Tangent",
-                         "Final"};
-  int mode = static_cast<int>(showMode_);
+  const char *items[] = {"Final", "BaseColor", "Normal", "MetallicRoughness",
+                         "Tangent"};
+  int mode = static_cast<int>(dbgCtx_.mode);
   if (ImGui::Combo("Show", &mode, items, IM_ARRAYSIZE(items))) {
-    showMode_ = static_cast<Show>(mode);
+    dbgCtx_.mode = static_cast<DrawMode>(mode);
   }
   ImGui::Text("Mode: %s", items[mode]);
 

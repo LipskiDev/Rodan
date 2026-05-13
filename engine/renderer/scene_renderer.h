@@ -29,8 +29,8 @@ struct alignas(16) FrameDataGPU {
 
   float lightIntensity;
   bool renderShadows;
+  int showMode;
   float _pad1;
-  float _pad2;
 };
 
 struct StaticMeshRenderItem {
@@ -80,10 +80,13 @@ struct ShadowMapResources {
   uint32_t resolution = 2048;
 };
 
+enum class DrawMode { Final, BaseColor, Normal, MetallicRoughness, Tangent };
+
 struct DebugContext {
   bool drawMeshBounds;
   bool drawSceneBounds;
   bool drawLightDirection;
+  DrawMode mode;
 };
 
 class SceneRenderer {
@@ -104,13 +107,14 @@ private:
 
   void RenderShadowMaps(ICommandList &cmd, const RenderWorld &world);
   void BuildStaticMeshRenderList(const RenderWorld &world);
-  void RenderStaticMeshes(ICommandList &cmd, const Camera &camera);
+  void RenderStaticMeshes(ICommandList &cmd, const Camera &camera,
+                          DebugContext dbgCtx);
 
   void RenderDebug(ICommandList &cmd, const RenderWorld &world,
                    const Camera &camera, DebugContext dbgCtx);
 
   void BeginMainPass(ICommandList &cmd, const FrameRenderContext &frame,
-                     const Camera &camera);
+                     const Camera &camera, const DebugContext &dbgCtx);
 
   void EndMainPass(ICommandList &cmd);
 

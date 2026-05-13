@@ -93,19 +93,13 @@ private:
 
   std::unique_ptr<StaticGltfAsset> asset_;
 
-  enum Show {
-    BaseColor = 0,
-    Normal = 1,
-    MetallicRoughness = 2,
-    Tangent = 3,
-    Final = 4
-  };
-  Show showMode_ = Final;
+  DrawMode drawMode_ = DrawMode::Final;
 
   DirectionalLightHandle sunLight_;
 
   bool pendingReload_ = false;
-  std::string currentScenePath_ = "assets/models/sponza/Sponza.gltf";
+  std::string currentScenePath_ =
+      "assets/models/compare_normals/CompareNormal.glb";
   std::string pendingScenePath_;
 
   bool autoScaleModel_ = true;

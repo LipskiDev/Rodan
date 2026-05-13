@@ -21,6 +21,7 @@ layout(set = 1, binding = 1) uniform FrameData {
   vec4 lightColor;
   float lightIntensity;
   float shadowsEnabled;
+  int showMode;
 } u_Frame;
 
 layout(location = 0) out vec4 outColor;
@@ -94,16 +95,22 @@ vec3 FresnelSchlick(float cosTheta, vec3 F0) {
 void main() {
     vec4 baseTex = texture(u_BaseColor, vUV);
     vec4 mrTex   = texture(u_MetallicRoughness, vUV);
-    vec3 nTex = texture(u_Normal, vUV).xyz * 2.0 - 1.0;
+    vec3 nTex    = texture(u_Normal, vUV).xyz * 2.0 - 1.0;
 
     vec3 N = normalize(vWorldNormal);
 
-    if (pc.hasTangents != 0 && length(vTangent) > 0.001)
-        N = normalize(
-            nTex.x * normalize(vTangent) +
-            nTex.y * normalize(vBitangent) +
-            nTex.z * normalize(vNormal)
+    if (length(vTangent) > 0.001 &&
+        length(vBitangent) > 0.001 &&
+        length(vNormal) > 0.001) {
+
+        mat3 TBN = mat3(
+            normalize(vTangent),
+            normalize(vBitangent),
+            normalize(vNormal)
         );
+
+        N = normalize(TBN * nTex);
+    }
 
     vec3 baseColor = pc.baseColorFactor.rgb * baseTex.rgb;
     float alpha = pc.baseColorFactor.a * baseTex.a;
@@ -167,18 +174,26 @@ void main() {
         discard;
     }
 
-    if (pc.showMode == 0) {
+    if (u_Frame.showMode == 1) {
         outColor = vec4(baseTex.rgb, 1.0);
         return;
     }
 
-    if (pc.showMode == 1) {
-        outColor = vec4(nTex * 0.5 + 0.5, 1.0);
+    if (u_Frame.showMode == 2) {
+        outColor = vec4(N * 0.5 + 0.5, 1.0);
         return;
     }
 
-    if (pc.showMode == 2) {
+    if (u_Frame.showMode == 3) {
         outColor = vec4(mrTex.rgb, 1.0);
+        return;
+    }
+
+    if (u_Frame.showMode == 4) {
+        outColor = vec4(
+            normalize(vTangent) * 0.5 + 0.5,
+            1.0
+        );
         return;
     }
 

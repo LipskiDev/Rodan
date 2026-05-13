@@ -254,9 +254,9 @@ void SceneRenderer::Render(ICommandList &cmd, const RenderWorld &world,
 
   RenderShadowMaps(cmd, world);
 
-  BeginMainPass(cmd, frame, camera);
+  BeginMainPass(cmd, frame, camera, dbgCtx);
 
-  RenderStaticMeshes(cmd, camera);
+  RenderStaticMeshes(cmd, camera, dbgCtx);
 
   RenderDebug(cmd, world, camera, dbgCtx);
 
@@ -509,8 +509,8 @@ void SceneRenderer::BuildStaticMeshRenderList(const RenderWorld &world) {
   }
 }
 
-void SceneRenderer::RenderStaticMeshes(ICommandList &cmd,
-                                       const Camera &camera) {
+void SceneRenderer::RenderStaticMeshes(ICommandList &cmd, const Camera &camera,
+                                       DebugContext dbgCtx) {
   for (const StaticMeshRenderItem &item : staticMeshes_) {
     if (!item.mesh) {
       continue;
@@ -623,7 +623,8 @@ void SceneRenderer::RenderDebug(ICommandList &cmd, const RenderWorld &world,
 
 void SceneRenderer::BeginMainPass(ICommandList &cmd,
                                   const FrameRenderContext &frame,
-                                  const Camera &camera) {
+                                  const Camera &camera,
+                                  const DebugContext &dbgCtx) {
 
   FrameDataGPU frameData{};
   frameData.lightViewProj = directionalShadow_.lightViewProj;
@@ -634,6 +635,8 @@ void SceneRenderer::BeginMainPass(ICommandList &cmd,
 
   frameData.proj = camera.GetProjection();
   frameData.view = camera.GetView();
+
+  frameData.showMode = static_cast<int>(dbgCtx.mode);
 
   cmd.UpdateBuffer(
       {.buffer = frameUBO_, .data = &frameData, .size = sizeof(FrameDataGPU)});

@@ -21,6 +21,7 @@ layout(set = 1, binding = 1) uniform FrameData {
   vec4 lightColor;
   float lightIntensity;
   float shadowsEnabled;
+  int showMode;
 } u_Frame;
 
 layout(push_constant) uniform PushConstants {
