@@ -1,3 +1,4 @@
+#include "rhi/rhi_resources.h"
 #include "rhi/rhi_types.h"
 #include "rhi/rhi_upload_context.h"
 #include "scene/transform.h"
@@ -70,6 +71,10 @@ void StaticGltfAsset::Destroy(IDevice *device) {
     if (mat.ownsMetallicRoughnessResources) {
       DestroyTexture(device, mat.metallicRoughnessTexture);
     }
+
+    if (mat.ownsOcclusionTextureResources) {
+      DestroyTexture(device, mat.occlusionTexture);
+    }
   }
   materials_.clear();
 
@@ -111,11 +116,17 @@ void StaticGltfAsset::CreateMaterialLayout(IDevice *device) {
           .count = 1,
           .visibility = ShaderStage::Fragment,
       },
+      DescriptorBindingDesc{
+          .binding = 3,
+          .type = DescriptorType::CombinedImageSampler,
+          .count = 1,
+          .visibility = ShaderStage::Fragment,
+      },
   };
 
   DescriptorSetLayoutDesc layout{};
   layout.bindings = bindings;
-  layout.bindingCount = 3;
+  layout.bindingCount = 4;
   layout.debugName = "GLTF Material Layout";
 
   materialLayout_ = device->CreateDescriptorSetLayout(layout);
@@ -129,7 +140,7 @@ void StaticGltfAsset::CreateDescriptorPool(IDevice *device,
 
   DescriptorPoolSize poolSize{};
   poolSize.type = DescriptorType::CombinedImageSampler;
-  poolSize.count = materialCount * 3;
+  poolSize.count = materialCount * 4;
 
   DescriptorPoolDesc poolDesc{};
   poolDesc.poolSizes = &poolSize;
@@ -263,6 +274,32 @@ void StaticGltfAsset::UploadMaterials(IDevice *device, IUploadContext *upload,
       gpuMat.ownsMetallicRoughnessResources = false;
     }
 
+    if (mat.occlusionTexture.imageIndex >= 0 &&
+        mat.occlusionTexture.imageIndex <
+            static_cast<int>(importedScene.images.size())) {
+      const ImportedImage &img =
+          importedScene.images[mat.occlusionTexture.imageIndex];
+
+      gpuMat.occlusionTexture = CreateTexture2D(
+          device, upload,
+          TextureDesc{.width = static_cast<uint32_t>(img.width),
+                      .height = static_cast<uint32_t>(img.height),
+                      .format = Format::RGBA8_UNORM,
+                      .minFilter = Filter::Linear,
+                      .magFilter = Filter::Linear,
+                      .addressU = SamplerAddressMode::Repeat,
+                      .addressV = SamplerAddressMode::Repeat,
+                      .addressW = SamplerAddressMode::Repeat,
+                      .debugName = "GLTF Occlusion Texture"},
+          img.pixelsRGBA8.data(),
+          static_cast<uint64_t>(img.pixelsRGBA8.size()));
+
+      gpuMat.ownsOcclusionTextureResources = true;
+    } else {
+      gpuMat.occlusionTexture = fallbackTexture_;
+      gpuMat.ownsOcclusionTextureResources = false;
+    }
+
     gpuMat.descriptorSet =
         device->AllocateDescriptorSet(descriptorPool_, materialLayout_);
 
@@ -281,6 +318,11 @@ void StaticGltfAsset::UploadMaterials(IDevice *device, IUploadContext *upload,
         gpuMat.metallicRoughnessTexture.sampler;
     metallicRoughnessImageInfo.imageView = gpuMat.metallicRoughnessTexture.view;
     metallicRoughnessImageInfo.imageLayout = ImageLayout::ShaderReadOnly;
+
+    DescriptorImageInfo occlusionImageInfo{};
+    occlusionImageInfo.sampler = gpuMat.occlusionTexture.sampler;
+    occlusionImageInfo.imageView = gpuMat.occlusionTexture.view;
+    occlusionImageInfo.imageLayout = ImageLayout::ShaderReadOnly;
 
     device->UpdateDescriptorSet({
         .dstSet = gpuMat.descriptorSet,
@@ -309,6 +351,16 @@ void StaticGltfAsset::UploadMaterials(IDevice *device, IUploadContext *upload,
         .type = DescriptorType::CombinedImageSampler,
         .bufferInfo = nullptr,
         .imageInfo = &metallicRoughnessImageInfo,
+        .descriptorCount = 1,
+    });
+
+    device->UpdateDescriptorSet({
+        .dstSet = gpuMat.descriptorSet,
+        .binding = 3,
+        .arrayElement = 0,
+        .type = DescriptorType::CombinedImageSampler,
+        .bufferInfo = nullptr,
+        .imageInfo = &occlusionImageInfo,
         .descriptorCount = 1,
     });
 

@@ -392,6 +392,25 @@ static ImportedMaterial LoadMaterial(const tinygltf::Model &model,
     }
   }
 
+  if (material.occlusionTexture.index >= 0) {
+    const int textureIndex = material.occlusionTexture.index;
+    if (textureIndex < 0 ||
+        textureIndex >= static_cast<int>(model.textures.size())) {
+      throw std::runtime_error(
+          "glTF material references invalid occlusion texture");
+    }
+
+    const tinygltf::Texture &tex = model.textures[textureIndex];
+    out.occlusionTexture.imageIndex = tex.source;
+    out.occlusionTexture.samplerIndex = tex.sampler;
+    out.occlusionTexture.texCoord = material.occlusionTexture.texCoord;
+
+    if (tex.source < 0 || tex.source >= static_cast<int>(model.images.size())) {
+      throw std::runtime_error(
+          "glTF material references invalid occlusion image");
+    }
+  }
+
   return out;
 }
 

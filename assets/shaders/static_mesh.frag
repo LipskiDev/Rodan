@@ -10,6 +10,7 @@ layout(location = 5) in vec3 vNormal;
 layout(set = 0, binding = 0) uniform sampler2D u_BaseColor;
 layout(set = 0, binding = 1) uniform sampler2D u_Normal;
 layout(set = 0, binding = 2) uniform sampler2D u_MetallicRoughness;
+layout(set = 0, binding = 3) uniform sampler2D u_OcclusionTexture;
 
 layout(set = 1, binding = 0) uniform sampler2D u_ShadowMap;
 layout(set = 1, binding = 1) uniform FrameData {
@@ -96,6 +97,7 @@ void main() {
     vec4 baseTex = texture(u_BaseColor, vUV);
     vec4 mrTex   = texture(u_MetallicRoughness, vUV);
     vec3 nTex    = texture(u_Normal, vUV).xyz * 2.0 - 1.0;
+    float ao = texture(u_OcclusionTexture, vUV).r;
 
     vec3 N = normalize(vWorldNormal);
 
@@ -161,7 +163,7 @@ void main() {
 
     vec3 direct = (diffuse + specular) * radiance * NdotL * shadow;
 
-    vec3 ambientDiffuse = baseColor * (1.0 - metallic) * 0.08;
+    vec3 ambientDiffuse = baseColor * (1.0 - metallic) * 0.20 * ao;
     vec3 ambientSpecular = F0 * mix(0.25, 0.04, roughness);
 
     vec3 ambient = ambientDiffuse + ambientSpecular;
@@ -195,6 +197,11 @@ void main() {
             1.0
         );
         return;
+    }
+
+    if (u_Frame.showMode == 5) {
+      outColor = vec4(ao, 0.0, 0.0, 1.0);
+      return;
     }
 
     outColor = vec4(color, alpha);

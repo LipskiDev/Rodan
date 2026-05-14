@@ -12,6 +12,7 @@ struct MaterialResource {
   Texture baseColorTexture{};
   Texture normalTexture{};
   Texture metallicRoughnessTexture{};
+  Texture occlusionTexture{};
 
   glm::vec4 baseColorFactor{1.0f};
   float metallicFactor = 1.0f;
@@ -22,6 +23,7 @@ struct MaterialResource {
   bool ownsBaseColorResources = false;
   bool ownsNormalResources = false;
   bool ownsMetallicRoughnessResources = false;
+  bool ownsOcclusionTextureResources = false;
 
   bool hasBaseColorTexture = false;
   bool hasNormalTexture = false;

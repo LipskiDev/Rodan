@@ -80,7 +80,14 @@ struct ShadowMapResources {
   uint32_t resolution = 2048;
 };
 
-enum class DrawMode { Final, BaseColor, Normal, MetallicRoughness, Tangent };
+enum class DrawMode {
+  Final,
+  BaseColor,
+  Normal,
+  MetallicRoughness,
+  Tangent,
+  Occlusion
+};
 
 struct DebugContext {
   bool drawMeshBounds;

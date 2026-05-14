@@ -37,6 +37,7 @@ struct ImportedMaterial {
   ImportedTextureRef baseColorTexture;
   ImportedTextureRef normalTexture;
   ImportedTextureRef metallicRoughnessTexture;
+  ImportedTextureRef occlusionTexture;
 
   AlphaMode alphaMode = AlphaMode::Opaque;
   float alphaCutoff = 0.5f;
