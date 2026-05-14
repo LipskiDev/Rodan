@@ -25,6 +25,8 @@ public:
 
   void SetCurrentFrame(uint32_t frameIndex) { currentFrame_ = frameIndex; }
 
+  void SetupStyle();
+
 private:
   struct FrameResources {
     VRHI::BufferHandle vertexBuffer;
