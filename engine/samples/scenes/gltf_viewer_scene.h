@@ -73,6 +73,9 @@ private:
   Velos::RHI::IDevice *device_ = nullptr;
   Velos::RHI::SwapchainHandle swapchain_{};
 
+  Format colorFormat_;
+  Format depthFormat_;
+
   ImportedScene importedScene_;
   std::vector<std::shared_ptr<MeshResource>> uploadedMeshes_;
   std::vector<StaticMeshInstance> instances_;

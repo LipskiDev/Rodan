@@ -195,6 +195,8 @@ void SceneRenderer::Initialize(IDevice *device, SwapchainHandle swapchain,
       .bufferInfo = &frameBuffer,
       .descriptorCount = 1,
   });
+
+  shadowLayout_ = ImageLayout::Undefined;
 }
 
 void SceneRenderer::Shutdown(IDevice *device) {

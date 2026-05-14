@@ -25,6 +25,8 @@ void GltfViewerScene::Initialize(IDevice *device, SwapchainHandle swapchain,
 
   device_ = device;
   swapchain_ = swapchain;
+  colorFormat_ = colorFormat;
+  depthFormat_ = depthFormat;
 
   if (NFD_Init() != NFD_OKAY) {
     std::cerr << "Failed to initialize NFD: " << NFD_GetError() << std::endl;
@@ -336,6 +338,8 @@ void GltfViewerScene::ReloadScene(const std::string &path) {
 
   device_->WaitIdle();
 
+  sceneRenderer_.Shutdown(device_);
+
   renderWorld_.Clear();
   currentRenderTargets_.clear();
   instances_.clear();
@@ -346,6 +350,9 @@ void GltfViewerScene::ReloadScene(const std::string &path) {
   }
 
   LoadScene(device_, path);
+
+  sceneRenderer_.Initialize(device_, swapchain_, colorFormat_, depthFormat_,
+                            asset_->GetMaterialLayout());
 
   currentBounds_ = ComputeCurrentBounds();
 
