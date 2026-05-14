@@ -301,8 +301,7 @@ void Application::BuildApplicationImGui() {
   ImGui::Text("Framebuffer: %u x %u", dims.width, dims.height);
   ImGui::Text("FPS: %.1f", fps);
 
-  const char *sceneNames[] = {"Duck", "Million Cubes", "Sponza",
-                              "MetalRoughnessSpheresNoTex", "GltfViewer"};
+  const char *sceneNames[] = {"GltfViewer", "ComputeTest"};
 
   int currentSceneIndex = static_cast<int>(currentSceneType_);
   if (ImGui::Combo("Scene", &currentSceneIndex, sceneNames,

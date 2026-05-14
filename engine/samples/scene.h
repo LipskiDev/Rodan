@@ -12,11 +12,8 @@
 namespace Rodan {
 
 enum class SceneType {
-  Duck,
-  MillionCubes,
-  Sponza,
-  MetalRoughnessSpheresNoTex,
-  GltfViewer
+  GltfViewer,
+  ComputeTest,
 };
 
 struct SceneUpdateContext {
