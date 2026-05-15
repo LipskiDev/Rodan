@@ -59,6 +59,9 @@ private:
   Velos::RHI::ShaderHandle fullscreenVS_{};
   Velos::RHI::ShaderHandle fullscreenFS_{};
   Velos::RHI::PipelineHandle fullscreenPipeline_{};
+
+  Velos::RHI::BufferHandle patternBuffer_{};
+  static constexpr Velos::u32 kPatternColorCount = 256;
 };
 
 } // namespace Rodan

@@ -40,26 +40,36 @@ void ComputeTestScene::Initialize(VRHI::IDevice *device,
       .debugName = "Compute Test Shader",
   });
 
-  VRHI::DescriptorBindingDesc binding{};
-  binding.binding = 0;
-  binding.type = VRHI::DescriptorType::StorageImage;
-  binding.count = 1;
-  binding.visibility = VRHI::ShaderStage::Compute;
+  VRHI::DescriptorBindingDesc computeBindings[2]{};
+
+  computeBindings[0].binding = 0;
+  computeBindings[0].type = VRHI::DescriptorType::StorageImage;
+  computeBindings[0].count = 1;
+  computeBindings[0].visibility = VRHI::ShaderStage::Compute;
+
+  computeBindings[1].binding = 1;
+  computeBindings[1].type = VRHI::DescriptorType::StorageBuffer;
+  computeBindings[1].count = 1;
+  computeBindings[1].visibility = VRHI::ShaderStage::Compute;
 
   VRHI::DescriptorSetLayoutDesc layoutDesc{};
-  layoutDesc.bindings = &binding;
-  layoutDesc.bindingCount = 1;
+  layoutDesc.bindings = computeBindings;
+  layoutDesc.bindingCount = 2;
   layoutDesc.debugName = "Compute Test Descriptor Set Layout";
 
   descriptorSetLayout_ = device_->CreateDescriptorSetLayout(layoutDesc);
 
-  VRHI::DescriptorPoolSize poolSize{};
-  poolSize.type = VRHI::DescriptorType::StorageImage;
-  poolSize.count = 1;
+  VRHI::DescriptorPoolSize poolSizes[2]{};
+
+  poolSizes[0].type = VRHI::DescriptorType::StorageImage;
+  poolSizes[0].count = 1;
+
+  poolSizes[1].type = VRHI::DescriptorType::StorageBuffer;
+  poolSizes[1].count = 1;
 
   VRHI::DescriptorPoolDesc poolDesc{};
-  poolDesc.poolSizes = &poolSize;
-  poolDesc.poolSizeCount = 1;
+  poolDesc.poolSizes = poolSizes;
+  poolDesc.poolSizeCount = 2;
   poolDesc.maxSets = 1;
   poolDesc.debugName = "Compute Test Descriptor Pool";
 
@@ -67,6 +77,38 @@ void ComputeTestScene::Initialize(VRHI::IDevice *device,
 
   descriptorSet_ = device_->AllocateDescriptorSet(
       descriptorPool_, descriptorSetLayout_, "Compute Test Descriptor Set");
+
+  std::array<glm::vec4, kPatternColorCount> patternColors{};
+
+  for (Velos::u32 i = 0; i < kPatternColorCount; ++i) {
+    float t =
+        static_cast<float>(i) / static_cast<float>(kPatternColorCount - 1);
+
+    patternColors[i] = glm::vec4(1.0f);
+  }
+
+  patternBuffer_ = device_->CreateBuffer({
+      .size = sizeof(glm::vec4) * kPatternColorCount,
+      .usage = VRHI::BufferUsage::Storage,
+      .memoryUsage = VRHI::MemoryUsage::CPUToGPU,
+      .initialData = patternColors.data(),
+      .debugName = "Compute Test Pattern Storage Buffer",
+  });
+
+  VRHI::DescriptorBufferInfo bufferInfo{};
+  bufferInfo.buffer = patternBuffer_;
+  bufferInfo.offset = 0;
+  bufferInfo.range = sizeof(glm::vec4) * kPatternColorCount;
+
+  VRHI::WriteDescriptorDesc bufferWrite{};
+  bufferWrite.dstSet = descriptorSet_;
+  bufferWrite.binding = 1;
+  bufferWrite.arrayElement = 0;
+  bufferWrite.type = VRHI::DescriptorType::StorageBuffer;
+  bufferWrite.bufferInfo = &bufferInfo;
+  bufferWrite.descriptorCount = 1;
+
+  device_->UpdateDescriptorSet(bufferWrite);
 
   VRHI::DescriptorSetLayoutHandle layouts[] = {descriptorSetLayout_};
 
@@ -196,6 +238,11 @@ void ComputeTestScene::Shutdown(VRHI::IDevice *device) {
   device->WaitIdle();
 
   DestroyOutputImage();
+
+  if (patternBuffer_.IsValid()) {
+    device->DestroyBuffer(patternBuffer_);
+    patternBuffer_ = {};
+  }
 
   if (fullscreenPipeline_.IsValid()) {
     device->DestroyPipeline(fullscreenPipeline_);
