@@ -1,105 +1,107 @@
+<div align="center">
+
 # Rodan
 
-Rodan is a real-time rendering engine built on top of the Velos Render Hardware Interface (RHI).  
-It is designed as a modular, modern rendering framework for experimenting with real-time graphics techniques and engine architecture.
+### Real-Time Renderer built with Modern C++ and Vulkan
 
-## Overview
+Rodan is a real-time rendering project focused on modern graphics programming, rendering architecture, and GPU systems.
 
-Rodan sits above the Velos RHI and provides higher-level rendering systems such as:
+Built on top of **Velos**, a custom Rendering Hardware Interface, Rodan explores production-oriented rendering techniques while maintaining clean, engine-like architecture.
 
-- Scene representation (meshes, cameras, lights)
-- Material and shader systems
-- GPU resource management
-- Render pipeline orchestration
-- Rendering techniques (forward, deferred, clustered, etc.)
+<!-- Replace with your own screenshot -->
+<img src="docs/images/sponza.png" width="85%"/>
 
-The project emphasizes **clean separation of concerns**:
+![C++](https://img.shields.io/badge/C%2B%2B-23-blue)
+![Vulkan](https://img.shields.io/badge/API-Vulkan-red)
+![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux-green)
 
-- **Velos** → low-level GPU abstraction (Vulkan backend)
-- **Rodan** → high-level rendering engine
+</div>
 
-This allows Rodan to evolve independently of the underlying graphics API.
+---
+
+## Features
+
+### Rendering
+- Physically Based Rendering (PBR)
+- glTF 2.0 scene loading
+- Normal mapping
+- Directional shadow mapping
+
+### Engine Systems
+- Scene graph
+- Orbit + free camera controls
+- Runtime asset loading
+- Material system
+
+### Velos RHI
+- Vulkan backend
+- Command buffer abstraction
+- Pipeline & descriptor management
+- Explicit resource transitions
+
+---
+
+## Screenshots
+
+### Sponza
+![Sponza](docs/images/sponza.png)
+
+### Occlusion Textures
+![Shadows](docs/images/occlusion_texture.png)
 
 ---
 
 ## Architecture
 
-Rodan follows a layered architecture:
-
-[Runtime / App]
-
-↓
-
-[Renderer / Scene / Assets]
-
-↓
-
-[Graphics Abstraction]
-
-↓
-
-[Velos (RHI)]
-
-↓
-
-[Vulkan]
-
-
-## Relationship to Velos
-
-Rodan depends on Velos as a submodule:
-external/velos/
-
-Velos provides:
-- Device and swapchain management
-- Command lists and submission
-- Buffers, images, pipelines
-- Synchronization primitives
-
-Rodan builds on top of these primitives and does **not** expose backend-specific APIs (e.g., Vulkan) to higher-level systems.
-
----
-
-## Goals
-
-- Build a clean and extensible rendering architecture
-- Explore modern real-time rendering techniques
-- Maintain strict separation between API abstraction and rendering logic
-- Serve as a foundation for experimentation (graphics research, engine design)
-
----
-
-## Current Status
-
-Early development.
-
-Implemented / in progress:
-- Engine structure and module layout
-- Integration with Velos RHI
-- Basic rendering pipeline bootstrap
-
-Planned:
-- Mesh and material system
-- Texture support
-- Depth testing and render targets
-- Camera and scene system
-- Lighting (forward / clustered)
-- Shadow mapping
-- Render graph
+```text
+Rodan Renderer
+      ↓
+Velos RHI
+      ↓
+Vulkan Backend
+      ↓
+GPU
+```
 
 ---
 
 ## Building
 
-Rodan uses Premake for project generation.
+### Requirements
+- Linux
+- C++23 compiler
+- Vulkan SDK
+- Premake5
 
-### Setup
+### Build
 
 ```bash
-git clone https://github.com/LipskiDev/Rodan
-cd rodan
-git submodule update --init --recursive
-
-premake5 gmake
-make
+git clone --recursive https://github.com/LipskiDev/Rodan.git
+cd Rodan
+premake5 gmake2
+make -j$(nproc)
 ```
+
+---
+
+## Roadmap
+
+- [x] PBR materials
+- [x] Shadow mapping
+- [x] glTF loading
+- [ ] Skybox rendering
+- [ ] Image Based Lighting (IBL)
+- [ ] Compute pipelines
+- [ ] GPU-driven rendering
+- [ ] Frame graph
+
+---
+
+## Motivation
+
+Rodan is a long-term graphics engineering project built to deepen expertise in:
+
+- Real-time rendering
+- GPU programming
+- Engine architecture
+- Graphics debugging & profiling
