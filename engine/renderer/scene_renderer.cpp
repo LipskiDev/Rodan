@@ -235,6 +235,7 @@ void SceneRenderer::Shutdown(IDevice *device) {
   }
 
   iblBaker_->Shutdown(device);
+  iblReady_ = false;
 
   skyboxPass_.Shutdown(device);
 
