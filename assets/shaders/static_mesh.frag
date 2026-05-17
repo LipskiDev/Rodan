@@ -25,7 +25,7 @@ layout(set = 1, binding = 1) uniform FrameData {
   int showMode;
 } u_Frame;
 
-layout(set = 2, binding = 0) uniform samplerCube u_Environment;
+layout(set = 2, binding = 0) uniform samplerCube u_IrradianceMap;
 
 layout(location = 0) out vec4 outColor;
 
@@ -95,34 +95,6 @@ vec3 FresnelSchlick(float cosTheta, vec3 F0) {
     return F0 + (1.0 - F0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
 }
 
-vec3 SampleFakeDiffuseIBL(vec3 N, vec3 baseColor, float metallic)
-{
-    vec3 env = texture(u_Environment, normalize(N)).rgb;
-
-    // crude tonemap so HDR does not explode
-    env = env / (env + vec3(1.0));
-
-    return env * baseColor * (1.0 - metallic);
-}
-
-vec3 SampleFakeSpecularIBL(vec3 N, vec3 V, float roughness, vec3 F0, float metallic)
-{
-    vec3 R = normalize(reflect(-V, N));
-
-    float maxMip = float(textureQueryLevels(u_Environment) - 1);
-    float lod = roughness * maxMip;
-
-    vec3 env = textureLod(u_Environment, R, lod).rgb;
-    env = env / (env + vec3(1.0));
-
-    float gloss = pow(1.0 - roughness, 6.0);
-
-    // Debug hack: suppress non-metal mirror reflections.
-    float metalBoost = mix(0.15, 1.0, metallic);
-
-    return env * F0 * gloss * metalBoost;
-}
-
 void main() {
     vec4 baseTex = texture(u_BaseColor, vUV);
     vec4 mrTex   = texture(u_MetallicRoughness, vUV);
@@ -172,9 +144,9 @@ void main() {
 
     vec3 F0 = mix(vec3(0.04), baseColor, metallic);
 
-    vec3 fakeDiffuseIBL = SampleFakeDiffuseIBL(N, baseColor.rgb, metallic);
-    vec3 fakeSpecularIBL =
-        SampleFakeSpecularIBL(N, V, roughness, F0, metallic);
+    vec3 irradiance = texture(u_IrradianceMap, N).rgb;
+    vec3 diffuseIBL = irradiance * baseColor * (1.0 - metallic) * ao;
+    vec3 fakeSpecularIBL = vec3(0.0);
 
     float NDF = DistributionGGX(N, H, roughness);
     float G   = GeometrySmith(N, V, L, roughness);
@@ -200,7 +172,7 @@ void main() {
     vec3 ambientDiffuse = baseColor * (1.0 - metallic) * 0.20 * ao;
     vec3 ambientSpecular = F0 * mix(0.25, 0.04, roughness);
 
-    vec3 ambient = fakeDiffuseIBL + fakeSpecularIBL;
+    vec3 ambient = diffuseIBL + fakeSpecularIBL;
 
     vec3 color = direct + ambient;
     color = color / (color + vec3(1.0));

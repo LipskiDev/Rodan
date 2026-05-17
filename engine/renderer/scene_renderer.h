@@ -2,6 +2,7 @@
 
 #include "core/frame_render_context.h"
 #include "graphics/environment/environment_map.h"
+#include "graphics/environment/ibl_baker.h"
 #include "graphics/material_resource.h"
 #include "graphics/mesh_resource.h"
 #include "renderer/mesh_renderer.h"
@@ -168,6 +169,10 @@ private:
 
   SkyboxPass skyboxPass_;
   std::shared_ptr<EnvironmentMap> environment_;
+
+  std::unique_ptr<IBLBaker> iblBaker_;
+  IBLResources iblResources_;
+  bool iblReady_ = false;
 };
 
 } // namespace Rodan

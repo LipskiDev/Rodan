@@ -1,6 +1,7 @@
 #include "glm/ext/matrix_clip_space.hpp"
 #include "glm/ext/matrix_transform.hpp"
 #include "graphics/environment/environment_map.h"
+#include "graphics/environment/ibl_baker.h"
 #include "graphics/material_types.h"
 #include "graphics/mesh_resource.h"
 #include "graphics/shaders_types.h"
@@ -215,6 +216,9 @@ void SceneRenderer::Initialize(IDevice *device, SwapchainHandle swapchain,
 
   skyboxPass_.Initialize(device, colorFormat,
                          environment_->GetDescriptorSetLayout());
+
+  iblBaker_ = std::make_unique<IBLBaker>();
+  iblBaker_->Initialize(device, environment_->GetDescriptorSetLayout());
 }
 
 void SceneRenderer::Shutdown(IDevice *device) {
@@ -222,6 +226,15 @@ void SceneRenderer::Shutdown(IDevice *device) {
     device->DestroyPipeline(pipeline);
   }
   pipelines_.clear();
+
+  DestroyTexture(device, iblResources_.irradianceTexture);
+  device_->DestroyDescriptorSetLayout(iblResources_.descriptorSetLayout);
+  device_->DestroyDescriptorPool(iblResources_.descriptorPool);
+  for (ImageViewHandle handle : iblResources_.irradianceFaceViews) {
+    device->DestroyImageView(handle);
+  }
+
+  iblBaker_->Shutdown(device);
 
   skyboxPass_.Shutdown(device);
 
@@ -283,6 +296,11 @@ void SceneRenderer::Render(ICommandList &cmd, const RenderWorld &world,
 
   if (environment_ && environment_->NeedsUpload()) {
     environment_->RecordUpload(cmd);
+  }
+
+  if (environment_ && !iblReady_) {
+    iblResources_ = iblBaker_->BakeIrradiance(cmd, *environment_);
+    iblReady_ = true;
   }
 
   BeginMainPass(cmd, frame, camera, dbgCtx);
@@ -583,8 +601,8 @@ void SceneRenderer::RenderStaticMeshes(ICommandList &cmd, const Camera &camera,
       cmd.BindPipeline(pipeline);
       cmd.BindDescriptorSet(pipeline, 1, frameSet_);
 
-      if (environment_) {
-        cmd.BindDescriptorSet(pipeline, 2, environment_->GetDescriptorSet());
+      if (iblReady_) {
+        cmd.BindDescriptorSet(pipeline, 2, iblResources_.descriptorSet);
       }
 
       StaticMeshPushConstants pc{};
