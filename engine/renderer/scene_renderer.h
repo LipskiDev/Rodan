@@ -1,9 +1,11 @@
 #pragma once
 
 #include "core/frame_render_context.h"
+#include "graphics/environment/environment_map.h"
 #include "graphics/material_resource.h"
 #include "graphics/mesh_resource.h"
 #include "renderer/mesh_renderer.h"
+#include "renderer/passes/skybox_pass.h"
 #include "rhi/rhi_command_list.h"
 #include "rhi/rhi_handles.h"
 #include "rhi/rhi_types.h"
@@ -75,9 +77,9 @@ struct ShadowMapResources {
   glm::vec3 color;
   float intensity;
 
-  bool enabled;
+  int enabled = 1;
 
-  uint32_t resolution = 2048;
+  uint32_t resolution = 8 * 1024;
 };
 
 enum class DrawMode {
@@ -163,6 +165,9 @@ private:
 
   // Only one shadow map as of right now
   ShadowMapResources directionalShadow_;
+
+  SkyboxPass skyboxPass_;
+  std::shared_ptr<EnvironmentMap> environment_;
 };
 
 } // namespace Rodan

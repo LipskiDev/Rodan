@@ -1,5 +1,6 @@
 #include "glm/ext/matrix_clip_space.hpp"
 #include "glm/ext/matrix_transform.hpp"
+#include "graphics/environment/environment_map.h"
 #include "graphics/material_types.h"
 #include "graphics/mesh_resource.h"
 #include "graphics/shaders_types.h"
@@ -105,8 +106,8 @@ void SceneRenderer::Initialize(IDevice *device, SwapchainHandle swapchain,
   }
 
   directionalShadow_.texture.image = device->CreateImage({
-      .width = 2048,
-      .height = 2048,
+      .width = directionalShadow_.resolution,
+      .height = directionalShadow_.resolution,
       .format = Format::D32_FLOAT,
       .usage = ImageUsage::DepthStencil | ImageUsage::Sampled,
       .debugName = "Directional Shadow Map",
@@ -126,6 +127,8 @@ void SceneRenderer::Initialize(IDevice *device, SwapchainHandle swapchain,
       .addressW = SamplerAddressMode::ClampToEdge,
   });
 
+  directionalShadow_.enabled = true;
+
   DescriptorBindingDesc frameBindings[] = {
       {
           .binding = 0,
@@ -137,6 +140,15 @@ void SceneRenderer::Initialize(IDevice *device, SwapchainHandle swapchain,
        .type = DescriptorType::UniformBuffer,
        .count = 1,
        .visibility = ShaderStage::Vertex | ShaderStage::Fragment}};
+
+  DescriptorBindingDesc environmentBindings[] = {
+      {
+          .binding = 0,
+          .type = DescriptorType::CombinedImageSampler,
+          .count = 1,
+          .visibility = ShaderStage::Fragment,
+      },
+  };
 
   DescriptorPoolSize poolSizes[] = {
       {
@@ -197,6 +209,12 @@ void SceneRenderer::Initialize(IDevice *device, SwapchainHandle swapchain,
   });
 
   shadowLayout_ = ImageLayout::Undefined;
+
+  environment_ = EnvironmentMap::LoadHDR(
+      device, Velos::Path::Resolve("assets/textures/piazza_bologni_4k.hdr"));
+
+  skyboxPass_.Initialize(device, colorFormat,
+                         environment_->GetDescriptorSetLayout());
 }
 
 void SceneRenderer::Shutdown(IDevice *device) {
@@ -204,6 +222,13 @@ void SceneRenderer::Shutdown(IDevice *device) {
     device->DestroyPipeline(pipeline);
   }
   pipelines_.clear();
+
+  skyboxPass_.Shutdown(device);
+
+  if (environment_) {
+    environment_->Destroy();
+    environment_.reset();
+  }
 
   if (directionalShadow_.pipeline) {
     device_->DestroyPipeline(directionalShadow_.pipeline);
@@ -256,7 +281,16 @@ void SceneRenderer::Render(ICommandList &cmd, const RenderWorld &world,
 
   RenderShadowMaps(cmd, world);
 
+  if (environment_ && environment_->NeedsUpload()) {
+    environment_->RecordUpload(cmd);
+  }
+
   BeginMainPass(cmd, frame, camera, dbgCtx);
+
+  if (environment_) {
+    skyboxPass_.Render(cmd, *environment_, camera.GetView(),
+                       camera.GetProjection());
+  }
 
   RenderStaticMeshes(cmd, camera, dbgCtx);
 
@@ -302,9 +336,14 @@ PipelineHandle SceneRenderer::GetOrCreatePipeline(const MeshPipelineKey &key) {
   desc.vertexLayouts = GetMeshVertexLayout();
 
   // Descriptor set layouts
-  DescriptorSetLayoutHandle setLayouts[] = {materialLayout_, frameLayout_};
+  DescriptorSetLayoutHandle setLayouts[] = {
+      materialLayout_,
+      frameLayout_,
+      environment_->GetDescriptorSetLayout(),
+  };
+
   desc.layout.descriptorSetLayouts = setLayouts;
-  desc.layout.descriptorSetLayoutCount = 2;
+  desc.layout.descriptorSetLayoutCount = 3;
 
   // Raster state
   desc.raster.cullBackFaces = false;
@@ -382,15 +421,20 @@ void SceneRenderer::EnsureShadowMapReadable(ICommandList &cmd) {
 
 void SceneRenderer::RenderShadowMaps(ICommandList &cmd,
                                      const RenderWorld &world) {
+  const auto &lights = world.GetDirectionalLights();
+
   directionalShadow_.enabled = false;
 
-  const auto &lights = world.GetDirectionalLights();
   if (lights.empty()) {
     EnsureShadowMapReadable(cmd);
     return;
   }
 
   const DirectionalLight &light = lights[0];
+
+  directionalShadow_.direction = light.direction;
+  directionalShadow_.color = light.color;
+  directionalShadow_.intensity = light.intensity;
 
   if (!light.castsShadow) {
     EnsureShadowMapReadable(cmd);
@@ -410,15 +454,16 @@ void SceneRenderer::RenderShadowMaps(ICommandList &cmd,
 
   glm::vec3 lightDir = glm::normalize(light.direction);
 
-  glm::vec3 up = glm::vec3(0, 1, 0);
+  glm::vec3 up = glm::vec3(0.0f, 1.0f, 0.0f);
 
   if (std::abs(glm::dot(lightDir, up)) > 0.99f) {
-    up = glm::vec3(0, 0, 1);
+    up = glm::vec3(0.0f, 0.0f, 1.0f);
   }
 
   glm::mat4 lightView = glm::lookAtRH(-lightDir * 50.0f, glm::vec3(0.0f), up);
 
-  glm::mat4 lightProj = glm::orthoRH_ZO(-15.f, 15.f, -15.f, 15.f, 1.f, 80.f);
+  glm::mat4 lightProj =
+      glm::orthoRH_ZO(-15.0f, 15.0f, -15.0f, 15.0f, 1.0f, 80.0f);
 
   glm::mat4 lightViewProj = lightProj * lightView;
 
@@ -431,8 +476,10 @@ void SceneRenderer::RenderShadowMaps(ICommandList &cmd,
       .clearDepth = 1.0f,
   };
 
+  const uint32_t resolution = directionalShadow_.resolution;
+
   cmd.BeginRendering({
-      .renderArea = {.offset = {0, 0}, .extent = {2048, 2048}},
+      .renderArea = {.offset = {0, 0}, .extent = {resolution, resolution}},
       .colorAttachments = nullptr,
       .colorAttachmentCount = 0,
       .depthAttachment = &dDesc,
@@ -441,15 +488,15 @@ void SceneRenderer::RenderShadowMaps(ICommandList &cmd,
   cmd.SetViewport({
       .x = 0.0f,
       .y = 0.0f,
-      .width = 2048.0f,
-      .height = 2048.0f,
+      .width = static_cast<float>(resolution),
+      .height = static_cast<float>(resolution),
       .minDepth = 0.0f,
       .maxDepth = 1.0f,
   });
 
   cmd.SetScissor({
       .offset = {0, 0},
-      .extent = {2048, 2048},
+      .extent = {resolution, resolution},
   });
 
   PipelineHandle pipeline = GetOrCreateShadowPipeline();
@@ -535,6 +582,10 @@ void SceneRenderer::RenderStaticMeshes(ICommandList &cmd, const Camera &camera,
 
       cmd.BindPipeline(pipeline);
       cmd.BindDescriptorSet(pipeline, 1, frameSet_);
+
+      if (environment_) {
+        cmd.BindDescriptorSet(pipeline, 2, environment_->GetDescriptorSet());
+      }
 
       StaticMeshPushConstants pc{};
       pc.model =
@@ -633,7 +684,7 @@ void SceneRenderer::BeginMainPass(ICommandList &cmd,
   frameData.lightDirection = directionalShadow_.direction;
   frameData.lightColor = directionalShadow_.color;
   frameData.lightIntensity = directionalShadow_.intensity;
-  frameData.renderShadows = directionalShadow_.enabled ? 1.0f : 0.0f;
+  frameData.renderShadows = directionalShadow_.enabled;
 
   frameData.proj = camera.GetProjection();
   frameData.view = camera.GetView();

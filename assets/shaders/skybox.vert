@@ -1,21 +1,19 @@
 #version 450
 
-layout(location = 0) in vec3 inPos;
+layout(location = 0) in vec3 aPosition;
 
-layout(location = 0) out vec3 vDir;
+layout(location = 0) out vec3 vDirection;
 
-layout(push_constant) uniform Push {
+layout(push_constant) uniform PushConstants {
     mat4 view;
     mat4 proj;
 } pc;
 
-void main()
-{
-    mat4 view = mat4(mat3(pc.view));
+void main() {
+    vDirection = aPosition;
 
-    vec4 pos = pc.proj * view * vec4(inPos, 1.0);
-    
-    gl_Position = pos.xyww;
+    vec4 clip = pc.proj * pc.view * vec4(aPosition, 1.0);
 
-    vDir = inPos;
+    // Force skybox to far plane.
+    gl_Position = clip.xyww;
 }

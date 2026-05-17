@@ -1,10 +1,12 @@
 #pragma once
 
+#include "graphics/environment/environment_map.h"
 #include "graphics/material_resource.h"
 #include "scene/handles.h"
 #include "scene/light.h"
 #include "scene/render_object.h"
 #include <iterator>
+#include <memory>
 #include <vector>
 
 namespace Rodan {
@@ -18,6 +20,7 @@ public:
 
   void SetTransform(RenderObjectHandle handle, const Transform transform);
   void SetVisible(RenderObjectHandle handle, bool visible);
+  void SetEnvironment(std::shared_ptr<EnvironmentMap> env);
 
   void SetShadows(bool renderShadows) { renderShadows_ = renderShadows; }
 
@@ -44,5 +47,7 @@ private:
   std::vector<RenderObject> objects_;
 
   bool renderShadows_ = true;
+
+  std::shared_ptr<EnvironmentMap> environment_;
 };
 } // namespace Rodan
