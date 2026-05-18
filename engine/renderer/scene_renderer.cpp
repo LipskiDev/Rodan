@@ -212,7 +212,7 @@ void SceneRenderer::Initialize(IDevice *device, SwapchainHandle swapchain,
   shadowLayout_ = ImageLayout::Undefined;
 
   environment_ = EnvironmentMap::LoadHDR(
-      device, Velos::Path::Resolve("assets/textures/piazza_bologni_4k.hdr"));
+      device, Velos::Path::Resolve("assets/hdr/piazza_bologni_4k.hdr"));
 
   skyboxPass_.Initialize(device, colorFormat,
                          environment_->GetDescriptorSetLayout());
@@ -325,6 +325,41 @@ void SceneRenderer::Render(ICommandList &cmd, const RenderWorld &world,
 
 void SceneRenderer::SubmitStaticMesh(StaticMeshRenderItem item) {
   staticMeshes_.push_back(item);
+}
+
+void SceneRenderer::LoadEnvironment(IDevice *device, const std::string &path) {
+  if (!device) {
+    return;
+  }
+
+  device->WaitIdle();
+
+  iblReady_ = false;
+
+  DestroyTexture(device, iblResources_.irradianceTexture);
+
+  for (ImageViewHandle handle : iblResources_.irradianceFaceViews) {
+    if (handle.IsValid()) {
+      device->DestroyImageView(handle);
+    }
+  }
+
+  if (iblResources_.descriptorSetLayout.IsValid()) {
+    device->DestroyDescriptorSetLayout(iblResources_.descriptorSetLayout);
+  }
+
+  if (iblResources_.descriptorPool.IsValid()) {
+    device->DestroyDescriptorPool(iblResources_.descriptorPool);
+  }
+
+  iblResources_ = {};
+
+  if (environment_) {
+    environment_->Destroy();
+    environment_.reset();
+  }
+
+  environment_ = EnvironmentMap::LoadHDR(device, Velos::Path::Resolve(path));
 }
 
 PipelineHandle SceneRenderer::GetOrCreatePipeline(const MeshPipelineKey &key) {

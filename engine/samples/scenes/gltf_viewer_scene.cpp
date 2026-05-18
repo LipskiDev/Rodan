@@ -96,6 +96,19 @@ void GltfViewerScene::Update(float deltaSeconds,
     }
   }
 
+  if (pendingSkyboxReload_) {
+    pendingSkyboxReload_ = false;
+    try {
+      device_->WaitIdle();
+      sceneRenderer_.LoadEnvironment(device_, pendingSkyboxPath_);
+      currentSkyboxPath_ = pendingSkyboxPath_;
+
+      std::cout << "Loaded skybox: " << currentSkyboxPath_ << std::endl;
+    } catch (const std::exception &e) {
+      std::cerr << "Failed to load skybox: " << e.what() << std::endl;
+    }
+  }
+
   if (changed) {
     for (RenderObjectHandle handle : currentRenderTargets_) {
       renderWorld_.SetTransform(handle, currentTransform_);
@@ -177,6 +190,33 @@ void GltfViewerScene::RenderImGui() {
     } else if (result == NFD_CANCEL) {
       // User cancelled; do nothing.
     } else {
+      std::cerr << "NFD error: " << NFD_GetError() << std::endl;
+    }
+  }
+
+  ImGui::SeparatorText("Environment");
+
+  ImGui::Text("Skybox:");
+  ImGui::TextWrapped("%s", currentSkyboxPath_.c_str());
+
+  if (ImGui::Button("Open HDR / Skybox")) {
+    nfdu8char_t *outPath = nullptr;
+
+    nfdu8filteritem_t filters[] = {
+        {"Environment maps", "hdr,exr,ktx,ktx2,png,jpg,jpeg"},
+    };
+
+    nfdopendialogu8args_t args = {};
+    args.filterList = filters;
+    args.filterCount = 1;
+
+    nfdresult_t result = NFD_OpenDialogU8_With(&outPath, &args);
+
+    if (result == NFD_OKAY) {
+      pendingSkyboxPath_ = outPath;
+      NFD_FreePathU8(outPath);
+      pendingSkyboxReload_ = true;
+    } else if (result != NFD_CANCEL) {
       std::cerr << "NFD error: " << NFD_GetError() << std::endl;
     }
   }
@@ -353,6 +393,8 @@ void GltfViewerScene::ReloadScene(const std::string &path) {
 
   sceneRenderer_.Initialize(device_, swapchain_, colorFormat_, depthFormat_,
                             asset_->GetMaterialLayout());
+
+  sceneRenderer_.LoadEnvironment(device_, currentSkyboxPath_);
 
   currentBounds_ = ComputeCurrentBounds();
 

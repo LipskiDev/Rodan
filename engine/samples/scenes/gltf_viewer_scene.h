@@ -104,6 +104,9 @@ private:
   std::string currentScenePath_ =
       "assets/models/compare_normals/CompareNormal.glb";
   std::string pendingScenePath_;
+  std::string currentSkyboxPath_ = "assets/hdr/piazza_bologni_4k.hdr";
+  std::string pendingSkyboxPath_;
+  bool pendingSkyboxReload_ = false;
 
   bool autoScaleModel_ = true;
   bool autoCenterModel_ = true;

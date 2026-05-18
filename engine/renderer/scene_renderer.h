@@ -110,6 +110,7 @@ public:
               DebugContext dbgCtx = {false, false, false});
 
   void SubmitStaticMesh(StaticMeshRenderItem item);
+  void LoadEnvironment(IDevice *device, const std::string &path);
 
 private:
   PipelineHandle GetOrCreatePipeline(const MeshPipelineKey &key);
