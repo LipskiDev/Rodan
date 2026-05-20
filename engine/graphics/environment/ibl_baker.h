@@ -30,6 +30,8 @@ private:
                         IBLResources &resources);
   void RenderPrefilter(Velos::RHI::ICommandList &cmd,
                        const EnvironmentMap &environment, IBLResources &result);
+  void RenderBRDFLut(Velos::RHI::ICommandList &cmd,
+                     const EnvironmentMap &environment, IBLResources &result);
   void CreateIBLDescriptorSet(IBLResources &resources);
 
 private:
@@ -37,12 +39,18 @@ private:
 
   Velos::RHI::PipelineHandle irradiancePipeline_{};
   Velos::RHI::PipelineHandle prefilterPipeline_{};
+  Velos::RHI::PipelineHandle brdfLutPipeline_{};
 
   Velos::RHI::ShaderHandle irradianceVS_{};
   Velos::RHI::ShaderHandle irradianceFS_{};
 
   Velos::RHI::ShaderHandle prefilterVS_{};
   Velos::RHI::ShaderHandle prefilterFS_{};
+
+  Velos::RHI::ShaderHandle brdfLutCS_{};
+  Velos::RHI::DescriptorSetLayoutHandle brdfLutSetLayout_;
+  DescriptorPoolHandle brdfBakeDescriptorPool_;
+  DescriptorSetHandle brdfBakeDescriptorSet_;
 
   Velos::RHI::BufferHandle cubeVertexBuffer_{};
 

@@ -242,6 +242,9 @@ void SceneRenderer::Shutdown(IDevice *device) {
     device->DestroyImageView(handle);
   }
 
+  DestroyTexture(device, iblResources_.brdfLutTexture);
+  device_->DestroyImageView(iblResources_.brdfLutView);
+
   iblBaker_->Shutdown(device);
   iblReady_ = false;
 
@@ -359,6 +362,9 @@ void SceneRenderer::LoadEnvironment(IDevice *device, const std::string &path) {
       device->DestroyImageView(handle);
     }
   }
+
+  DestroyTexture(device, iblResources_.brdfLutTexture);
+  device_->DestroyImageView(iblResources_.brdfLutView);
 
   if (iblResources_.descriptorSetLayout.IsValid()) {
     device->DestroyDescriptorSetLayout(iblResources_.descriptorSetLayout);

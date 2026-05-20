@@ -27,6 +27,7 @@ layout(set = 1, binding = 1) uniform FrameData {
 
 layout(set = 2, binding = 0) uniform samplerCube u_IrradianceMap;
 layout(set = 2, binding = 1) uniform samplerCube u_PrefilterMap;
+layout(set = 2, binding = 2) uniform sampler2D u_BRDFLUT;
 
 layout(location = 0) out vec4 outColor;
 
@@ -92,8 +93,13 @@ float GeometrySmith(vec3 N, vec3 V, vec3 L, float roughness) {
     return ggxV * ggxL;
 }
 
-vec3 FresnelSchlick(float cosTheta, vec3 F0) {
-    return F0 + (1.0 - F0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
+vec3 FresnelSchlickRoughness(
+    float cosTheta,
+    vec3 F0,
+    float roughness)
+{
+    return F0 + (max(vec3(1.0 - roughness), F0) - F0)
+        * pow(1.0 - cosTheta, 5.0);
 }
 
 void main() {
@@ -147,13 +153,9 @@ void main() {
 
     vec3 irradiance = texture(u_IrradianceMap, normalize(N)).rgb;
 
-    vec3 diffuseIBL =
-        irradiance *
-        baseColor *
-        (1.0 - metallic) *
-        ao;
 
-    vec3 R = normalize(reflect(-V, N));
+
+    vec3 R = reflect(-V, N);
 
     float maxReflectionLod =
         float(textureQueryLevels(u_PrefilterMap) - 1);
@@ -165,15 +167,27 @@ void main() {
         textureLod(u_PrefilterMap, R, lod).rgb;
 
     vec3 F_ibl =
-        FresnelSchlick(max(dot(N, V), 0.0), F0);
+        FresnelSchlickRoughness(
+            max(dot(N, V), 0.0),
+            F0,
+            roughness
+        );
 
-    // Temporary approximation until BRDF LUT:
-    vec3 specularIBL =
-        prefilteredColor * F_ibl;
+    vec3 kS_IBL = F_ibl;
+    vec3 kD_IBL = (1.0 - kS_IBL) * (1.0 - metallic);
+
+    vec3 diffuseIBL =
+        irradiance *
+        baseColor *
+        kD_IBL *
+        ao;
+
+    vec2 brdf = texture(u_BRDFLUT, vec2(NdotV, roughness)).rg;
+    vec3 specularIBL = prefilteredColor * (F_ibl * brdf.x + brdf.y) * ao;
 
     float NDF = DistributionGGX(N, H, roughness);
     float G   = GeometrySmith(N, V, L, roughness);
-    vec3  F   = FresnelSchlick(HdotV, F0);
+    vec3  F   = FresnelSchlickRoughness(HdotV, F0, roughness);
 
     vec3 numerator = NDF * G * F;
     float denominator = max(4.0 * NdotV * NdotL, 0.0001);
@@ -191,9 +205,6 @@ void main() {
     }
 
     vec3 direct = (diffuse + specular) * radiance * NdotL * shadow;
-
-    vec3 ambientDiffuse = baseColor * (1.0 - metallic) * 0.20 * ao;
-    vec3 ambientSpecular = F0 * mix(0.25, 0.04, roughness);
 
     vec3 ambient = diffuseIBL + specularIBL;
 

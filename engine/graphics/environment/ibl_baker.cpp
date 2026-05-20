@@ -1,15 +1,22 @@
 #include "glm/ext/matrix_clip_space.hpp"
 #include "glm/ext/matrix_float4x4.hpp"
 #include "glm/ext/matrix_transform.hpp"
+#include "graphics/texture.h"
+#include "rhi/rhi_handles.h"
+#include "rhi/rhi_pipeline.h"
+#include "rhi/rhi_resources.h"
+#include "rhi/rhi_types.h"
 #include <core/path.h>
 #include <graphics/environment/ibl_baker.h>
+#include <unistd.h>
 
 namespace Rodan {
 
 namespace {
 constexpr uint32_t k_IrradianceSize = 32;
 constexpr uint32_t k_PrefilterSize = 128;
-constexpr uint32_t k_PrefilterMipLevels = 5;
+constexpr uint32_t k_PrefilterMipLevels = 8;
+constexpr uint32_t k_BRDFLutSize = 512;
 
 struct IrradiancePushConstants {
   glm::mat4 view;
@@ -148,6 +155,22 @@ void IBLBaker::Initialize(IDevice *device,
       .debugName = "IBL Prefilter FS",
   });
 
+  auto compSpv = Velos::ShaderCompiler::CompileFile({
+      .path = Velos::Path::Resolve("assets/shaders/brdf_lut.comp").string(),
+      .stage = ShaderStage::Compute,
+      .entryPoint = "main",
+  });
+
+  brdfLutCS_ = device_->CreateShader({
+      .stage = ShaderStage::Compute,
+      .bytecode = compSpv.spirv.data(),
+      .bytecodeSize =
+          static_cast<uint64_t>(compSpv.spirv.size() * sizeof(std::uint32_t)),
+      .entryPoint = "main",
+      .reflection = compSpv.reflection,
+      .debugName = "BRDF LUT CS",
+  });
+
   VertexBufferLayoutDesc vertexLayout{
       .stride = sizeof(glm::vec3),
       .inputRate = VertexInputRate::PerVertex,
@@ -221,6 +244,36 @@ void IBLBaker::Initialize(IDevice *device,
     throw std::runtime_error(
         "IBLBaker::Initialize: failed to create prefilter pipeline");
   }
+
+  DescriptorBindingDesc brdfLutBindings[] = {
+      {
+          .binding = 0,
+          .type = DescriptorType::StorageImage,
+          .count = 1,
+          .visibility = ShaderStage::Compute,
+      },
+  };
+
+  brdfLutSetLayout_ = device_->CreateDescriptorSetLayout({
+      .bindings = brdfLutBindings,
+      .bindingCount = 1,
+      .debugName = "BRDF LUT Bake Set Layout",
+  });
+
+  DescriptorSetLayoutHandle brdfSetLayouts[] = {brdfLutSetLayout_};
+
+  ComputePipelineDesc brdfLutDesc{};
+  brdfLutDesc.computeShader = brdfLutCS_;
+  brdfLutDesc.layout.descriptorSetLayouts = brdfSetLayouts;
+  brdfLutDesc.layout.descriptorSetLayoutCount = 1;
+  brdfLutDesc.debugName = "BRDF LUT Pipeline";
+
+  brdfLutPipeline_ = device_->CreateComputePipeline(brdfLutDesc);
+
+  if (!brdfLutPipeline_.IsValid()) {
+    throw std::runtime_error(
+        "IBLBaker::Initialize: failed to create BRDF LUT pipeline");
+  }
 }
 
 IBLResources IBLBaker::BakeIrradiance(ICommandList &cmd,
@@ -234,6 +287,7 @@ IBLResources IBLBaker::BakeIrradiance(ICommandList &cmd,
   CreateIrradianceResources(result);
   RenderIrradiance(cmd, environment, result);
   RenderPrefilter(cmd, environment, result);
+  RenderBRDFLut(cmd, environment, result);
   CreateIBLDescriptorSet(result);
 
   return result;
@@ -336,6 +390,41 @@ void IBLBaker::CreateIrradianceResources(IBLResources &result) {
       });
     }
   }
+
+  result.brdfLutTexture.image = device_->CreateImage({
+      .width = k_BRDFLutSize,
+      .height = k_BRDFLutSize,
+      .depth = 1,
+      .mipLevels = 1,
+      .arrayLayers = 1,
+      .format = Format::RG32_FLOAT,
+      .type = ImageType::Image2D,
+      .usage = ImageUsage::Storage | ImageUsage::Sampled,
+      .debugName = "BRDF LUT Texture",
+  });
+
+  result.brdfLutTexture.view = device_->CreateImageView({
+      .image = result.brdfLutTexture.image,
+      .format = Format::RG32_FLOAT,
+      .type = ImageViewType::View2D,
+      .aspect = ImageAspect::Color,
+      .baseMipLevel = 0,
+      .mipLevelCount = 1,
+      .baseArrayLayer = 0,
+      .arrayLayerCount = 1,
+      .debugName = "BRDF LUT View",
+  });
+
+  result.brdfLutTexture.sampler = device_->CreateSampler({
+      .minFilter = Filter::Linear,
+      .magFilter = Filter::Linear,
+      .addressU = SamplerAddressMode::ClampToEdge,
+      .addressV = SamplerAddressMode::ClampToEdge,
+      .addressW = SamplerAddressMode::ClampToEdge,
+      .minLod = 0.0,
+      .maxLod = 7.0,
+      .debugName = "BRDF LUT Sampler",
+  });
 }
 
 void IBLBaker::RenderIrradiance(ICommandList &cmd,
@@ -511,6 +600,77 @@ void IBLBaker::RenderPrefilter(ICommandList &cmd,
   });
 }
 
+void IBLBaker::RenderBRDFLut(Velos::RHI::ICommandList &cmd,
+                             const EnvironmentMap &environment,
+                             IBLResources &result) {
+  (void)environment;
+
+  if (brdfBakeDescriptorPool_.IsValid()) {
+    device_->DestroyDescriptorPool(brdfBakeDescriptorPool_);
+    brdfBakeDescriptorPool_ = {};
+    brdfBakeDescriptorSet_ = {};
+  }
+
+  DescriptorPoolSize poolSizes[] = {
+      {
+          .type = DescriptorType::StorageImage,
+          .count = 1,
+      },
+  };
+
+  brdfBakeDescriptorPool_ = device_->CreateDescriptorPool({
+      .poolSizes = poolSizes,
+      .poolSizeCount = 1,
+      .maxSets = 1,
+      .debugName = "BRDF LUT Bake Descriptor Pool",
+  });
+
+  brdfBakeDescriptorSet_ =
+      device_->AllocateDescriptorSet(brdfBakeDescriptorPool_, brdfLutSetLayout_,
+                                     "BRDF LUT Bake Descriptor Set");
+
+  DescriptorImageInfo imageInfo{};
+  imageInfo.imageView = result.brdfLutTexture.view;
+  imageInfo.imageLayout = ImageLayout::General;
+
+  device_->UpdateDescriptorSet({
+      .dstSet = brdfBakeDescriptorSet_,
+      .binding = 0,
+      .arrayElement = 0,
+      .type = DescriptorType::StorageImage,
+      .bufferInfo = nullptr,
+      .imageInfo = &imageInfo,
+      .descriptorCount = 1,
+  });
+
+  cmd.Barrier({
+      .image = result.brdfLutTexture.image,
+      .oldLayout = ImageLayout::Undefined,
+      .newLayout = ImageLayout::General,
+      .aspect = ImageAspect::Color,
+      .baseMipLevel = 0,
+      .mipLevelCount = 1,
+      .baseArrayLayer = 0,
+      .layerCount = 1,
+  });
+
+  cmd.BindComputePipeline(brdfLutPipeline_);
+  cmd.BindComputeDescriptorSet(brdfLutPipeline_, 0, brdfBakeDescriptorSet_);
+
+  cmd.Dispatch((k_BRDFLutSize + 7) / 8, (k_BRDFLutSize + 7) / 8, 1);
+
+  cmd.Barrier({
+      .image = result.brdfLutTexture.image,
+      .oldLayout = ImageLayout::General,
+      .newLayout = ImageLayout::ShaderReadOnly,
+      .aspect = ImageAspect::Color,
+      .baseMipLevel = 0,
+      .mipLevelCount = 1,
+      .baseArrayLayer = 0,
+      .layerCount = 1,
+  });
+}
+
 void IBLBaker::CreateIBLDescriptorSet(IBLResources &result) {
   DescriptorBindingDesc bindings[] = {
       {
@@ -525,18 +685,24 @@ void IBLBaker::CreateIBLDescriptorSet(IBLResources &result) {
           .count = 1,
           .visibility = ShaderStage::Fragment,
       },
+      {
+          .binding = 2,
+          .type = DescriptorType::CombinedImageSampler,
+          .count = 1,
+          .visibility = ShaderStage::Fragment,
+      },
   };
 
   result.descriptorSetLayout = device_->CreateDescriptorSetLayout({
       .bindings = bindings,
-      .bindingCount = 2,
+      .bindingCount = 3,
       .debugName = "IBL Descriptor Set Layout",
   });
 
   DescriptorPoolSize poolSizes[] = {
       {
           .type = DescriptorType::CombinedImageSampler,
-          .count = 2,
+          .count = 3,
       },
   };
 
@@ -560,6 +726,11 @@ void IBLBaker::CreateIBLDescriptorSet(IBLResources &result) {
   prefilterInfo.imageView = result.prefilterTexture.view;
   prefilterInfo.imageLayout = ImageLayout::ShaderReadOnly;
 
+  DescriptorImageInfo brdfLutInfo{};
+  brdfLutInfo.sampler = result.brdfLutTexture.sampler;
+  brdfLutInfo.imageView = result.brdfLutTexture.view;
+  brdfLutInfo.imageLayout = ImageLayout::ShaderReadOnly;
+
   device_->UpdateDescriptorSet({
       .dstSet = result.descriptorSet,
       .binding = 0,
@@ -579,6 +750,16 @@ void IBLBaker::CreateIBLDescriptorSet(IBLResources &result) {
       .imageInfo = &prefilterInfo,
       .descriptorCount = 1,
   });
+
+  device_->UpdateDescriptorSet({
+      .dstSet = result.descriptorSet,
+      .binding = 2,
+      .arrayElement = 0,
+      .type = DescriptorType::CombinedImageSampler,
+      .bufferInfo = nullptr,
+      .imageInfo = &brdfLutInfo,
+      .descriptorCount = 1,
+  });
 }
 
 void IBLBaker::Shutdown(IDevice *device) {
@@ -586,37 +767,58 @@ void IBLBaker::Shutdown(IDevice *device) {
     return;
   }
 
-  if (prefilterPipeline_) {
+  if (brdfLutPipeline_.IsValid()) {
+    device->DestroyPipeline(brdfLutPipeline_);
+    brdfLutPipeline_ = {};
+  }
+
+  if (prefilterPipeline_.IsValid()) {
     device->DestroyPipeline(prefilterPipeline_);
     prefilterPipeline_ = {};
   }
 
-  if (irradiancePipeline_) {
+  if (irradiancePipeline_.IsValid()) {
     device->DestroyPipeline(irradiancePipeline_);
     irradiancePipeline_ = {};
   }
 
-  if (prefilterFS_) {
+  if (brdfLutCS_.IsValid()) {
+    device->DestroyShader(brdfLutCS_);
+    brdfLutCS_ = {};
+  }
+
+  if (prefilterFS_.IsValid()) {
     device->DestroyShader(prefilterFS_);
     prefilterFS_ = {};
   }
 
-  if (prefilterVS_) {
+  if (prefilterVS_.IsValid()) {
     device->DestroyShader(prefilterVS_);
     prefilterVS_ = {};
   }
 
-  if (irradianceFS_) {
+  if (irradianceFS_.IsValid()) {
     device->DestroyShader(irradianceFS_);
     irradianceFS_ = {};
   }
 
-  if (irradianceVS_) {
+  if (irradianceVS_.IsValid()) {
     device->DestroyShader(irradianceVS_);
     irradianceVS_ = {};
   }
 
-  if (cubeVertexBuffer_) {
+  if (brdfBakeDescriptorPool_.IsValid()) {
+    device->DestroyDescriptorPool(brdfBakeDescriptorPool_);
+    brdfBakeDescriptorPool_ = {};
+    brdfBakeDescriptorSet_ = {};
+  }
+
+  if (brdfLutSetLayout_.IsValid()) {
+    device->DestroyDescriptorSetLayout(brdfLutSetLayout_);
+    brdfLutSetLayout_ = {};
+  }
+
+  if (cubeVertexBuffer_.IsValid()) {
     device->DestroyBuffer(cubeVertexBuffer_);
     cubeVertexBuffer_ = {};
   }

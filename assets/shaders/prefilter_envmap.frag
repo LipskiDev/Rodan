@@ -13,17 +13,21 @@ layout(push_constant) uniform Push {
 } pc;
 
 const float PI = 3.14159265359;
-const uint SAMPLE_COUNT = 1024u;
+const uint SAMPLE_COUNT = 4 * 1024u;
 
 float RadicalInverse_VdC(uint bits)
 {
     bits = (bits << 16u) | (bits >> 16u);
+
     bits = ((bits & 0x55555555u) << 1u) |
            ((bits & 0xAAAAAAAAu) >> 1u);
+
     bits = ((bits & 0x33333333u) << 2u) |
            ((bits & 0xCCCCCCCCu) >> 2u);
+
     bits = ((bits & 0x0F0F0F0Fu) << 4u) |
            ((bits & 0xF0F0F0F0u) >> 4u);
+
     bits = ((bits & 0x00FF00FFu) << 8u) |
            ((bits & 0xFF00FF00u) >> 8u);
 
@@ -38,6 +42,19 @@ vec2 Hammersley(uint i, uint N)
     );
 }
 
+mat3 GenerateTBN(vec3 N)
+{
+    vec3 up =
+        abs(N.z) < 0.999
+        ? vec3(0.0, 0.0, 1.0)
+        : vec3(1.0, 0.0, 0.0);
+
+    vec3 T = normalize(cross(up, N));
+    vec3 B = cross(N, T);
+
+    return mat3(T, B, N);
+}
+
 vec3 ImportanceSampleGGX(vec2 Xi, vec3 N, float roughness)
 {
     float a = roughness * roughness;
@@ -49,49 +66,38 @@ vec3 ImportanceSampleGGX(vec2 Xi, vec3 N, float roughness)
         (1.0 + (a * a - 1.0) * Xi.y)
     );
 
-    float sinTheta = sqrt(1.0 - cosTheta * cosTheta);
+    float sinTheta = sqrt(max(1.0 - cosTheta * cosTheta, 0.0));
 
-    vec3 H;
-    H.x = cos(phi) * sinTheta;
-    H.y = sin(phi) * sinTheta;
-    H.z = cosTheta;
+    vec3 Ht;
+    Ht.x = cos(phi) * sinTheta;
+    Ht.y = sin(phi) * sinTheta;
+    Ht.z = cosTheta;
 
-    vec3 up =
-        abs(N.z) < 0.999
-            ? vec3(0.0, 0.0, 1.0)
-            : vec3(1.0, 0.0, 0.0);
+    mat3 TBN = GenerateTBN(N);
 
-    vec3 tangent = normalize(cross(up, N));
-    vec3 bitangent = cross(N, tangent);
-
-    vec3 sampleVec =
-        tangent * H.x +
-        bitangent * H.y +
-        N * H.z;
-
-    return normalize(sampleVec);
+    return normalize(TBN * Ht);
 }
 
 void main()
 {
     vec3 N = normalize(vLocalPos);
 
+    // for cubemap prefiltering:
     vec3 R = N;
     vec3 V = R;
 
     vec3 prefilteredColor = vec3(0.0);
     float totalWeight = 0.0;
 
-    for (uint i = 0u; i < SAMPLE_COUNT; ++i)
+    for(uint i = 0u; i < SAMPLE_COUNT; ++i)
     {
         vec2 Xi = Hammersley(i, SAMPLE_COUNT);
 
-        vec3 H =
-            ImportanceSampleGGX(
-                Xi,
-                N,
-                pc.roughness
-            );
+        vec3 H = ImportanceSampleGGX(
+            Xi,
+            N,
+            pc.roughness
+        );
 
         vec3 L =
             normalize(
@@ -100,17 +106,16 @@ void main()
 
         float NdotL = max(dot(N, L), 0.0);
 
-        if (NdotL > 0.0)
+        if(NdotL > 0.0)
         {
             prefilteredColor +=
-                texture(u_Environment, L).rgb *
-                NdotL;
+                texture(u_Environment, L).rgb * NdotL;
 
             totalWeight += NdotL;
         }
     }
 
-    prefilteredColor /= totalWeight;
+    prefilteredColor /= max(totalWeight, 0.0001);
 
     outColor = vec4(prefilteredColor, 1.0);
 }

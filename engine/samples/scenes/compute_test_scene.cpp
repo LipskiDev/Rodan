@@ -25,7 +25,7 @@ void ComputeTestScene::Initialize(VRHI::IDevice *device,
   swapchain_ = swapchain;
 
   auto csOutput = Velos::ShaderCompiler::CompileFile({
-      .path = Velos::Path::Resolve("assets/shaders/compute_test.comp").string(),
+      .path = Velos::Path::Resolve("assets/shaders/brdf_lut.comp").string(),
       .stage = VRHI::ShaderStage::Compute,
       .entryPoint = "main",
       .language = Velos::ShaderSourceLanguage::GLSL,
