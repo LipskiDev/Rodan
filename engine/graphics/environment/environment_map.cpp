@@ -1,7 +1,6 @@
 #include "graphics/environment/environment_map.h"
 
 #include "graphics/bitmap.h"
-#include "path.h"
 
 #include <stb_image.h>
 
@@ -82,15 +81,18 @@ void EnvironmentMap::CreateFromHDR(IDevice *device,
       .debugName = "Environment Cubemap Upload Staging Buffer",
   });
 
+  mipLevels_ = static_cast<uint32_t>(std::floor(std::log2(faceSize_))) + 1;
+
   image_ = device_->CreateImage({
       .width = faceSize_,
       .height = faceSize_,
       .depth = 1,
-      .mipLevels = 1,
+      .mipLevels = mipLevels_,
       .arrayLayers = 6,
       .format = Format::RGBA32_FLOAT,
       .type = ImageType::Cube,
-      .usage = ImageUsage::TransferDst | ImageUsage::Sampled,
+      .usage = ImageUsage::TransferSrc | ImageUsage::TransferDst |
+               ImageUsage::Sampled,
       .debugName = "Environment Cubemap",
   });
 
@@ -100,7 +102,7 @@ void EnvironmentMap::CreateFromHDR(IDevice *device,
       .type = ImageViewType::Cube,
       .aspect = ImageAspect::Color,
       .baseMipLevel = 0,
-      .mipLevelCount = 1,
+      .mipLevelCount = mipLevels_,
       .baseArrayLayer = 0,
       .arrayLayerCount = 6,
       .debugName = "Environment Cubemap View",
@@ -189,7 +191,7 @@ void EnvironmentMap::RecordUpload(ICommandList &cmd) {
       .newLayout = ImageLayout::TransferDst,
       .aspect = ImageAspect::Color,
       .baseMipLevel = 0,
-      .mipLevelCount = 1,
+      .mipLevelCount = mipLevels_,
       .baseArrayLayer = 0,
       .layerCount = 6,
   });
@@ -217,15 +219,7 @@ void EnvironmentMap::RecordUpload(ICommandList &cmd) {
     cmd.CopyBufferToImage(stagingBuffer_, image_, region);
   }
 
-  cmd.Barrier({
-      .image = image_,
-      .newLayout = ImageLayout::ShaderReadOnly,
-      .aspect = ImageAspect::Color,
-      .baseMipLevel = 0,
-      .mipLevelCount = 1,
-      .baseArrayLayer = 0,
-      .layerCount = 6,
-  });
+  cmd.GenerateMipmaps(image_, faceSize_, faceSize_, mipLevels_, 6);
 
   uploaded_ = true;
 }

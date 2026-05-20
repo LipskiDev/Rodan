@@ -11,7 +11,10 @@ namespace Rodan {
 struct IBLResources {
   Texture irradianceTexture{};
 
-  std::array<Velos::RHI::ImageViewHandle, 6> irradianceFaceViews{};
+  Texture prefilterTexture{};
+
+  std::array<ImageViewHandle, 6> irradianceFaceViews;
+  std::array<Velos::RHI::ImageViewHandle, 6 * 5> prefilterFaceMipViews{};
 
   Velos::RHI::DescriptorSetLayoutHandle descriptorSetLayout{};
   Velos::RHI::DescriptorPoolHandle descriptorPool{};

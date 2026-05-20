@@ -8,10 +8,18 @@ namespace Rodan {
 
 namespace {
 constexpr uint32_t k_IrradianceSize = 32;
+constexpr uint32_t k_PrefilterSize = 128;
+constexpr uint32_t k_PrefilterMipLevels = 5;
 
 struct IrradiancePushConstants {
   glm::mat4 view;
   glm::mat4 proj;
+};
+
+struct PrefilterPushConstants {
+  glm::mat4 view;
+  glm::mat4 proj;
+  float roughness;
 };
 
 std::array<glm::mat4, 6> CreateCaptureViews() {
@@ -106,6 +114,40 @@ void IBLBaker::Initialize(IDevice *device,
       .debugName = "IBL Irradiance FS",
   });
 
+  vertSpv = Velos::ShaderCompiler::CompileFile({
+      .path =
+          Velos::Path::Resolve("assets/shaders/prefilter_envmap.vert").string(),
+      .stage = ShaderStage::Vertex,
+      .entryPoint = "main",
+  });
+
+  fragSpv = Velos::ShaderCompiler::CompileFile({
+      .path =
+          Velos::Path::Resolve("assets/shaders/prefilter_envmap.frag").string(),
+      .stage = ShaderStage::Fragment,
+      .entryPoint = "main",
+  });
+
+  prefilterVS_ = device_->CreateShader({
+      .stage = ShaderStage::Vertex,
+      .bytecode = vertSpv.spirv.data(),
+      .bytecodeSize =
+          static_cast<uint64_t>(vertSpv.spirv.size() * sizeof(std::uint32_t)),
+      .entryPoint = "main",
+      .reflection = vertSpv.reflection,
+      .debugName = "IBL Prefilter VS",
+  });
+
+  prefilterFS_ = device_->CreateShader({
+      .stage = ShaderStage::Fragment,
+      .bytecode = fragSpv.spirv.data(),
+      .bytecodeSize =
+          static_cast<uint64_t>(fragSpv.spirv.size() * sizeof(std::uint32_t)),
+      .entryPoint = "main",
+      .reflection = fragSpv.reflection,
+      .debugName = "IBL Prefilter FS",
+  });
+
   VertexBufferLayoutDesc vertexLayout{
       .stride = sizeof(glm::vec3),
       .inputRate = VertexInputRate::PerVertex,
@@ -149,6 +191,36 @@ void IBLBaker::Initialize(IDevice *device,
     throw std::runtime_error(
         "IBLBaker::Initialize: failed to create irradiance pipeline");
   }
+
+  GraphicsPipelineDesc prefilterDesc{};
+  prefilterDesc.vertexShader = prefilterVS_;
+  prefilterDesc.fragmentShader = prefilterFS_;
+  prefilterDesc.vertexLayouts.push_back(vertexLayout);
+
+  prefilterDesc.layout.descriptorSetLayouts = setLayouts;
+  prefilterDesc.layout.descriptorSetLayoutCount = 1;
+
+  prefilterDesc.topology = PrimitiveTopology::TriangleList;
+
+  prefilterDesc.raster.cullBackFaces = false;
+  prefilterDesc.raster.frontFaceCCW = true;
+  prefilterDesc.raster.wireframe = false;
+
+  prefilterDesc.blend.enable = false;
+
+  prefilterDesc.colorFormat = Format::RGBA32_FLOAT;
+  prefilterDesc.depth.depthFormat = Format::Undefined;
+  prefilterDesc.depth.depthTestEnable = false;
+  prefilterDesc.depth.depthWriteEnable = false;
+
+  prefilterDesc.debugName = "IBL Prefilter Pipeline";
+
+  prefilterPipeline_ = device_->CreateGraphicsPipeline(prefilterDesc);
+
+  if (!prefilterPipeline_.IsValid()) {
+    throw std::runtime_error(
+        "IBLBaker::Initialize: failed to create prefilter pipeline");
+  }
 }
 
 IBLResources IBLBaker::BakeIrradiance(ICommandList &cmd,
@@ -161,6 +233,7 @@ IBLResources IBLBaker::BakeIrradiance(ICommandList &cmd,
 
   CreateIrradianceResources(result);
   RenderIrradiance(cmd, environment, result);
+  RenderPrefilter(cmd, environment, result);
   CreateIBLDescriptorSet(result);
 
   return result;
@@ -191,6 +264,48 @@ void IBLBaker::CreateIrradianceResources(IBLResources &result) {
       .debugName = "IBL Irradiance Cubemap View",
   });
 
+  result.irradianceTexture.sampler = device_->CreateSampler({
+      .minFilter = Filter::Linear,
+      .magFilter = Filter::Linear,
+      .addressU = SamplerAddressMode::ClampToEdge,
+      .addressV = SamplerAddressMode::ClampToEdge,
+      .addressW = SamplerAddressMode::ClampToEdge,
+      .debugName = "IBL Irradiance Sampler",
+  });
+
+  result.prefilterTexture.image = device_->CreateImage({
+      .width = k_PrefilterSize,
+      .height = k_PrefilterSize,
+      .depth = 1,
+      .mipLevels = k_PrefilterMipLevels,
+      .arrayLayers = 6,
+      .format = Format::RGBA32_FLOAT,
+      .type = ImageType::Cube,
+      .usage = ImageUsage::ColorAttachment | ImageUsage::Sampled,
+      .debugName = "IBL Prefilter Cubemap",
+  });
+
+  result.prefilterTexture.view = device_->CreateImageView({
+      .image = result.prefilterTexture.image,
+      .format = Format::RGBA32_FLOAT,
+      .type = ImageViewType::Cube,
+      .aspect = ImageAspect::Color,
+      .baseMipLevel = 0,
+      .mipLevelCount = k_PrefilterMipLevels,
+      .baseArrayLayer = 0,
+      .arrayLayerCount = 6,
+  });
+
+  result.prefilterTexture.sampler = device_->CreateSampler({
+      .minFilter = Filter::Linear,
+      .magFilter = Filter::Linear,
+      .addressU = SamplerAddressMode::ClampToEdge,
+      .addressV = SamplerAddressMode::ClampToEdge,
+      .addressW = SamplerAddressMode::ClampToEdge,
+      .minLod = 0.0f,
+      .maxLod = static_cast<float>(k_PrefilterMipLevels - 1),
+  });
+
   for (uint32_t face = 0; face < 6; ++face) {
     result.irradianceFaceViews[face] = device_->CreateImageView({
         .image = result.irradianceTexture.image,
@@ -201,18 +316,26 @@ void IBLBaker::CreateIrradianceResources(IBLResources &result) {
         .mipLevelCount = 1,
         .baseArrayLayer = face,
         .arrayLayerCount = 1,
-        .debugName = "IBL Irradiance Face View",
     });
   }
 
-  result.irradianceTexture.sampler = device_->CreateSampler({
-      .minFilter = Filter::Linear,
-      .magFilter = Filter::Linear,
-      .addressU = SamplerAddressMode::ClampToEdge,
-      .addressV = SamplerAddressMode::ClampToEdge,
-      .addressW = SamplerAddressMode::ClampToEdge,
-      .debugName = "IBL Irradiance Sampler",
-  });
+  for (uint32_t mip = 0; mip < k_PrefilterMipLevels; ++mip) {
+    for (uint32_t face = 0; face < 6; ++face) {
+
+      uint32_t idx = mip * 6 + face;
+
+      result.prefilterFaceMipViews[idx] = device_->CreateImageView({
+          .image = result.prefilterTexture.image,
+          .format = Format::RGBA32_FLOAT,
+          .type = ImageViewType::View2D,
+          .aspect = ImageAspect::Color,
+          .baseMipLevel = mip,
+          .mipLevelCount = 1,
+          .baseArrayLayer = face,
+          .arrayLayerCount = 1,
+      });
+    }
+  }
 }
 
 void IBLBaker::RenderIrradiance(ICommandList &cmd,
@@ -291,6 +414,103 @@ void IBLBaker::RenderIrradiance(ICommandList &cmd,
   });
 }
 
+void IBLBaker::RenderPrefilter(ICommandList &cmd,
+                               const EnvironmentMap &environment,
+                               IBLResources &result) {
+  const auto captureViews = CreateCaptureViews();
+  const glm::mat4 captureProj = CreateCaptureProjection();
+
+  cmd.Barrier({
+      .image = result.prefilterTexture.image,
+      .oldLayout = ImageLayout::Undefined,
+      .newLayout = ImageLayout::ColorAttachment,
+      .aspect = ImageAspect::Color,
+      .baseMipLevel = 0,
+      .mipLevelCount = k_PrefilterMipLevels,
+      .baseArrayLayer = 0,
+      .layerCount = 6,
+  });
+
+  for (uint32_t mip = 0; mip < k_PrefilterMipLevels; ++mip) {
+
+    const uint32_t mipSize = k_PrefilterSize >> mip;
+
+    const float roughness =
+        static_cast<float>(mip) / static_cast<float>(k_PrefilterMipLevels - 1);
+
+    for (uint32_t face = 0; face < 6; ++face) {
+
+      const uint32_t idx = mip * 6 + face;
+
+      ColorAttachmentDesc colorAttachment{};
+      colorAttachment.view = result.prefilterFaceMipViews[idx];
+      colorAttachment.loadOp = LoadOp::Clear;
+      colorAttachment.storeOp = StoreOp::Store;
+      colorAttachment.clearValue = {
+          0.0f,
+          0.0f,
+          0.0f,
+          1.0f,
+      };
+
+      RenderingInfo renderingInfo{};
+      renderingInfo.renderArea = {
+          .offset = {0, 0},
+          .extent = {mipSize, mipSize},
+      };
+      renderingInfo.colorAttachments = &colorAttachment;
+      renderingInfo.colorAttachmentCount = 1;
+      renderingInfo.depthAttachment = nullptr;
+
+      cmd.BeginRendering(renderingInfo);
+
+      cmd.SetViewport({
+          .x = 0.0f,
+          .y = 0.0f,
+          .width = static_cast<float>(mipSize),
+          .height = static_cast<float>(mipSize),
+          .minDepth = 0.0f,
+          .maxDepth = 1.0f,
+      });
+
+      cmd.SetScissor({
+          .offset = {0, 0},
+          .extent = {mipSize, mipSize},
+      });
+
+      PrefilterPushConstants push{};
+      push.view = captureViews[face];
+      push.proj = captureProj;
+      push.roughness = roughness;
+
+      cmd.BindPipeline(prefilterPipeline_);
+
+      cmd.BindDescriptorSet(prefilterPipeline_, 0,
+                            environment.GetDescriptorSet());
+
+      cmd.BindVertexBuffer(0, cubeVertexBuffer_, 0);
+
+      cmd.PushConstants(ShaderStage::Vertex | ShaderStage::Fragment, 0,
+                        sizeof(PrefilterPushConstants), &push);
+
+      cmd.Draw(cubeVertexCount_);
+
+      cmd.EndRendering();
+    }
+  }
+
+  cmd.Barrier({
+      .image = result.prefilterTexture.image,
+      .oldLayout = ImageLayout::ColorAttachment,
+      .newLayout = ImageLayout::ShaderReadOnly,
+      .aspect = ImageAspect::Color,
+      .baseMipLevel = 0,
+      .mipLevelCount = k_PrefilterMipLevels,
+      .baseArrayLayer = 0,
+      .layerCount = 6,
+  });
+}
+
 void IBLBaker::CreateIBLDescriptorSet(IBLResources &result) {
   DescriptorBindingDesc bindings[] = {
       {
@@ -299,18 +519,24 @@ void IBLBaker::CreateIBLDescriptorSet(IBLResources &result) {
           .count = 1,
           .visibility = ShaderStage::Fragment,
       },
+      {
+          .binding = 1,
+          .type = DescriptorType::CombinedImageSampler,
+          .count = 1,
+          .visibility = ShaderStage::Fragment,
+      },
   };
 
   result.descriptorSetLayout = device_->CreateDescriptorSetLayout({
       .bindings = bindings,
-      .bindingCount = 1,
+      .bindingCount = 2,
       .debugName = "IBL Descriptor Set Layout",
   });
 
   DescriptorPoolSize poolSizes[] = {
       {
           .type = DescriptorType::CombinedImageSampler,
-          .count = 1,
+          .count = 2,
       },
   };
 
@@ -329,6 +555,11 @@ void IBLBaker::CreateIBLDescriptorSet(IBLResources &result) {
   irradianceInfo.imageView = result.irradianceTexture.view;
   irradianceInfo.imageLayout = ImageLayout::ShaderReadOnly;
 
+  DescriptorImageInfo prefilterInfo{};
+  prefilterInfo.sampler = result.prefilterTexture.sampler;
+  prefilterInfo.imageView = result.prefilterTexture.view;
+  prefilterInfo.imageLayout = ImageLayout::ShaderReadOnly;
+
   device_->UpdateDescriptorSet({
       .dstSet = result.descriptorSet,
       .binding = 0,
@@ -338,6 +569,16 @@ void IBLBaker::CreateIBLDescriptorSet(IBLResources &result) {
       .imageInfo = &irradianceInfo,
       .descriptorCount = 1,
   });
+
+  device_->UpdateDescriptorSet({
+      .dstSet = result.descriptorSet,
+      .binding = 1,
+      .arrayElement = 0,
+      .type = DescriptorType::CombinedImageSampler,
+      .bufferInfo = nullptr,
+      .imageInfo = &prefilterInfo,
+      .descriptorCount = 1,
+  });
 }
 
 void IBLBaker::Shutdown(IDevice *device) {
@@ -345,9 +586,24 @@ void IBLBaker::Shutdown(IDevice *device) {
     return;
   }
 
+  if (prefilterPipeline_) {
+    device->DestroyPipeline(prefilterPipeline_);
+    prefilterPipeline_ = {};
+  }
+
   if (irradiancePipeline_) {
     device->DestroyPipeline(irradiancePipeline_);
     irradiancePipeline_ = {};
+  }
+
+  if (prefilterFS_) {
+    device->DestroyShader(prefilterFS_);
+    prefilterFS_ = {};
+  }
+
+  if (prefilterVS_) {
+    device->DestroyShader(prefilterVS_);
+    prefilterVS_ = {};
   }
 
   if (irradianceFS_) {

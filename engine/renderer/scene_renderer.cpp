@@ -227,6 +227,14 @@ void SceneRenderer::Shutdown(IDevice *device) {
   }
   pipelines_.clear();
 
+  DestroyTexture(device, iblResources_.prefilterTexture);
+
+  for (ImageViewHandle handle : iblResources_.prefilterFaceMipViews) {
+    if (handle.IsValid()) {
+      device->DestroyImageView(handle);
+    }
+  }
+
   DestroyTexture(device, iblResources_.irradianceTexture);
   device_->DestroyDescriptorSetLayout(iblResources_.descriptorSetLayout);
   device_->DestroyDescriptorPool(iblResources_.descriptorPool);
@@ -336,6 +344,14 @@ void SceneRenderer::LoadEnvironment(IDevice *device, const std::string &path) {
 
   iblReady_ = false;
 
+  DestroyTexture(device, iblResources_.prefilterTexture);
+
+  for (ImageViewHandle handle : iblResources_.prefilterFaceMipViews) {
+    if (handle.IsValid()) {
+      device->DestroyImageView(handle);
+    }
+  }
+
   DestroyTexture(device, iblResources_.irradianceTexture);
 
   for (ImageViewHandle handle : iblResources_.irradianceFaceViews) {
@@ -393,7 +409,7 @@ PipelineHandle SceneRenderer::GetOrCreatePipeline(const MeshPipelineKey &key) {
   DescriptorSetLayoutHandle setLayouts[] = {
       materialLayout_,
       frameLayout_,
-      environment_->GetDescriptorSetLayout(),
+      iblResources_.descriptorSetLayout,
   };
 
   desc.layout.descriptorSetLayouts = setLayouts;

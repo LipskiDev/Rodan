@@ -26,6 +26,7 @@ layout(set = 1, binding = 1) uniform FrameData {
 } u_Frame;
 
 layout(set = 2, binding = 0) uniform samplerCube u_IrradianceMap;
+layout(set = 2, binding = 1) uniform samplerCube u_PrefilterMap;
 
 layout(location = 0) out vec4 outColor;
 
@@ -144,9 +145,31 @@ void main() {
 
     vec3 F0 = mix(vec3(0.04), baseColor, metallic);
 
-    vec3 irradiance = texture(u_IrradianceMap, N).rgb;
-    vec3 diffuseIBL = irradiance * baseColor * (1.0 - metallic) * ao;
-    vec3 fakeSpecularIBL = vec3(0.0);
+    vec3 irradiance = texture(u_IrradianceMap, normalize(N)).rgb;
+
+    vec3 diffuseIBL =
+        irradiance *
+        baseColor *
+        (1.0 - metallic) *
+        ao;
+
+    vec3 R = normalize(reflect(-V, N));
+
+    float maxReflectionLod =
+        float(textureQueryLevels(u_PrefilterMap) - 1);
+
+    float lod =
+        roughness * maxReflectionLod;
+
+    vec3 prefilteredColor =
+        textureLod(u_PrefilterMap, R, lod).rgb;
+
+    vec3 F_ibl =
+        FresnelSchlick(max(dot(N, V), 0.0), F0);
+
+    // Temporary approximation until BRDF LUT:
+    vec3 specularIBL =
+        prefilteredColor * F_ibl;
 
     float NDF = DistributionGGX(N, H, roughness);
     float G   = GeometrySmith(N, V, L, roughness);
@@ -172,7 +195,7 @@ void main() {
     vec3 ambientDiffuse = baseColor * (1.0 - metallic) * 0.20 * ao;
     vec3 ambientSpecular = F0 * mix(0.25, 0.04, roughness);
 
-    vec3 ambient = diffuseIBL + fakeSpecularIBL;
+    vec3 ambient = diffuseIBL + specularIBL;
 
     vec3 color = direct + ambient;
     color = color / (color + vec3(1.0));

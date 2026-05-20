@@ -47,6 +47,7 @@ private:
 
   Velos::u32 faceSize_ = 0;
   Velos::u64 cubemapByteSize_ = 0;
+  uint32_t mipLevels_;
 
   bool uploaded_ = false;
 };
