@@ -67,9 +67,12 @@ struct ImportedMesh {
 };
 
 struct ImportedNode {
-  Transform transform;
+  Transform localTransform; // raw glTF node transform
+  Transform worldTransform; // accumulated parent * local
+
   int meshIndex = -1;
   std::vector<int> children;
+  std::string name;
 };
 
 struct ImportedScene {

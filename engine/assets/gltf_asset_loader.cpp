@@ -5,6 +5,7 @@
 #include <assets/gltf_asset_loader.h>
 #include <assets/gltf_loader.h>
 #include <graphics/mesh_uploader.h>
+#include <iostream>
 #include <stdexcept>
 
 namespace Rodan {
@@ -374,7 +375,7 @@ void StaticGltfAsset::BuildInstances(ImportedScene importedScene) {
   spawn = [&](int nodeIndex, const Transform &parentTransform) {
     const auto &node = importedScene.nodes[nodeIndex];
 
-    const Transform localTransform = node.transform;
+    const Transform localTransform = node.localTransform;
     const Transform worldTransform = Transform::FromMatrix(
         parentTransform.ToMatrix() * localTransform.ToMatrix());
 
@@ -383,10 +384,16 @@ void StaticGltfAsset::BuildInstances(ImportedScene importedScene) {
         throw std::runtime_error("StaticGltfAsset: invalid mesh index in node");
       }
 
+      std::cout << "node=" << node.name << " meshIndex=" << node.meshIndex
+                << " mesh=" << importedScene.meshes[node.meshIndex].name
+                << " worldPos=(" << worldTransform.position.x << ", "
+                << worldTransform.position.y << ", "
+                << worldTransform.position.z << ")" << std::endl;
+
       StaticMeshInstance instance{};
       instance.mesh = meshes_[node.meshIndex];
-      instance.localTransform = node.transform;
-      instance.worldTransform = worldTransform;
+      instance.localTransform = node.worldTransform;
+      instance.worldTransform = Transform{};
 
       instances_.push_back(instance);
     }

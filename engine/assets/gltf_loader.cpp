@@ -471,7 +471,7 @@ static AABB ComputeSceneAABB(const ImportedScene &scene) {
   visit = [&](int nodeIndex, const glm::mat4 &parentWorld) {
     const ImportedNode &node = scene.nodes.at(nodeIndex);
 
-    const glm::mat4 world = parentWorld * node.transform.ToMatrix();
+    const glm::mat4 world = parentWorld * node.worldTransform.ToMatrix();
 
     if (node.meshIndex >= 0) {
       const ImportedMesh &mesh = scene.meshes.at(node.meshIndex);
@@ -507,6 +507,26 @@ static AABB ComputeSceneAABB(const ImportedScene &scene) {
   }
 
   return aabb;
+}
+
+void ComputeNodeWorldTransforms(ImportedScene &scene) {
+  std::function<void(int, const glm::mat4 &)> visit;
+
+  visit = [&](int nodeIndex, const glm::mat4 &parent) {
+    ImportedNode &node = scene.nodes[nodeIndex];
+
+    glm::mat4 world = parent * node.localTransform.ToMatrix();
+
+    node.worldTransform = Transform::FromMatrix(world);
+
+    for (int child : node.children) {
+      visit(child, world);
+    }
+  };
+
+  for (int root : scene.rootNodes) {
+    visit(root, glm::mat4(1.0f));
+  }
 }
 
 } // namespace
@@ -563,9 +583,10 @@ ImportedScene GltfLoader::Load(const std::string &path) {
   scene.nodes.reserve(model.nodes.size());
   for (const tinygltf::Node &node : model.nodes) {
     ImportedNode importedNode;
-    importedNode.transform = GetNodeTransform(node);
+    importedNode.localTransform = GetNodeTransform(node);
     importedNode.meshIndex = node.mesh;
     importedNode.children = node.children;
+    importedNode.name = node.name;
     scene.nodes.push_back(importedNode);
   }
 
@@ -575,6 +596,8 @@ ImportedScene GltfLoader::Load(const std::string &path) {
       scene.rootNodes.push_back(rootNode);
     }
   }
+
+  ComputeNodeWorldTransforms(scene);
 
   scene.worldBounds = ComputeSceneAABB(scene);
 
