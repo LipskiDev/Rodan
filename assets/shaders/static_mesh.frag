@@ -24,6 +24,16 @@ layout(set = 1, binding = 1) uniform FrameData {
   int shadowsEnabled;
   int showMode;
 } u_Frame;
+layout(set = 1, binding = 2) uniform MaterialData {
+  vec4 baseColorFactor;
+
+  float metallicFactor;
+  float roughnessFactor;
+  float alphaCutoff;
+  float alphaMode;
+
+  int hasMaterial;
+} u_Material;
 
 layout(set = 2, binding = 0) uniform samplerCube u_IrradianceMap;
 layout(set = 2, binding = 1) uniform samplerCube u_PrefilterMap;
@@ -33,16 +43,9 @@ layout(location = 0) out vec4 outColor;
 
 layout(push_constant) uniform PushConstants {
     mat4 model;              // offset 0,   size 64
-    vec4 baseColorFactor;    // offset 64,  size 16
 
-    float metallicFactor;    // offset 80
-    float roughnessFactor;   // offset 84
-    float alphaCutoff;       // offset 88
-
-    int showMode;            // offset 92
-    int hasMaterial;         // offset 96
-    int alphaMode;           // offset 100
-    int hasTangents;         // offset 104
+    int showMode;           
+    int hasTangents;        
 } pc;
 
 const float PI = 3.14159265359;
@@ -123,13 +126,13 @@ void main() {
         N = normalize(TBN * nTex);
     }
 
-    vec3 baseColor = pc.baseColorFactor.rgb * baseTex.rgb;
-    float alpha = pc.baseColorFactor.a * baseTex.a;
+    vec3 baseColor = u_Material.baseColorFactor.rgb * baseTex.rgb;
+    float alpha = u_Material.baseColorFactor.a * baseTex.a;
 
-    float metallic = pc.metallicFactor * mrTex.b;
-    float roughness = pc.roughnessFactor * mrTex.g;
+    float metallic = u_Material.metallicFactor * mrTex.b;
+    float roughness = u_Material.roughnessFactor * mrTex.g;
 
-    if (pc.hasMaterial == 0) {
+    if (u_Material.hasMaterial == 0) {
         metallic = 0.0;
         roughness = 0.5;
     }
@@ -212,7 +215,7 @@ void main() {
     color = color / (color + vec3(1.0));
     color = pow(color, vec3(1.0 / 2.2));
 
-    if (pc.alphaMode == 1 && alpha < pc.alphaCutoff) {
+    if (u_Material.alphaMode == 1 && alpha < u_Material.alphaCutoff) {
         discard;
     }
 

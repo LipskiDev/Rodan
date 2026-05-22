@@ -140,7 +140,12 @@ void SceneRenderer::Initialize(IDevice *device, SwapchainHandle swapchain,
       {.binding = 1,
        .type = DescriptorType::UniformBuffer,
        .count = 1,
-       .visibility = ShaderStage::Vertex | ShaderStage::Fragment}};
+       .visibility = ShaderStage::Vertex | ShaderStage::Fragment},
+      {.binding = 2,
+       .type = DescriptorType::UniformBuffer,
+       .count = 1,
+       .visibility = ShaderStage::Fragment},
+  };
 
   DescriptorBindingDesc environmentBindings[] = {
       {
@@ -158,7 +163,7 @@ void SceneRenderer::Initialize(IDevice *device, SwapchainHandle swapchain,
       },
       {
           .type = DescriptorType::UniformBuffer,
-          .count = 1,
+          .count = 2,
       }};
 
   frameDescriptorPool_ = device_->CreateDescriptorPool({
@@ -169,7 +174,7 @@ void SceneRenderer::Initialize(IDevice *device, SwapchainHandle swapchain,
 
   frameLayout_ = device_->CreateDescriptorSetLayout({
       .bindings = frameBindings,
-      .bindingCount = 2,
+      .bindingCount = 3,
       .debugName = "SceneRenderer Frame Descriptor Set Layout",
   });
 
@@ -180,6 +185,11 @@ void SceneRenderer::Initialize(IDevice *device, SwapchainHandle swapchain,
                                      .usage = BufferUsage::Uniform,
                                      .memoryUsage = MemoryUsage::CPUToGPU,
                                      .debugName = "Scene Frame UBO"});
+
+  materialUBO_ = device_->CreateBuffer({.size = sizeof(MaterialDataGPU),
+                                        .usage = BufferUsage::Uniform,
+                                        .memoryUsage = MemoryUsage::CPUToGPU,
+                                        .debugName = "Material Data UBO"});
 
   DescriptorImageInfo shadowImage{};
   shadowImage.imageView = directionalShadow_.texture.view;
@@ -206,6 +216,19 @@ void SceneRenderer::Initialize(IDevice *device, SwapchainHandle swapchain,
       .binding = 1,
       .type = DescriptorType::UniformBuffer,
       .bufferInfo = &frameBuffer,
+      .descriptorCount = 1,
+  });
+
+  DescriptorBufferInfo materialBuffer{};
+  materialBuffer.buffer = materialUBO_;
+  materialBuffer.offset = 0;
+  materialBuffer.range = sizeof(MaterialDataGPU);
+
+  device_->UpdateDescriptorSet({
+      .dstSet = frameSet_,
+      .binding = 2,
+      .type = DescriptorType::UniformBuffer,
+      .bufferInfo = &materialBuffer,
       .descriptorCount = 1,
   });
 
@@ -285,6 +308,7 @@ void SceneRenderer::Shutdown(IDevice *device) {
   device_->DestroyImage(directionalShadow_.texture.image);
 
   device->DestroyBuffer(frameUBO_);
+  device->DestroyBuffer(materialUBO_);
   device->DestroyDescriptorSetLayout(frameLayout_);
   device->DestroyDescriptorPool(frameDescriptorPool_);
 
@@ -666,16 +690,25 @@ void SceneRenderer::RenderStaticMeshes(ICommandList &cmd, const Camera &camera,
       StaticMeshPushConstants pc{};
       pc.model =
           item.worldTransform.ToMatrix() * item.localTransform.ToMatrix();
-      pc.baseColorFactor =
-          material ? material->baseColorFactor : glm::vec4(1.0f);
-      pc.metallicFactor = material ? material->metallicFactor : 0.0f;
-      pc.roughnessFactor = material ? material->roughnessFactor : 1.0f;
-      pc.alphaCutoff = material ? material->alphaCutoff : 0.5f;
       pc.showMode = 4;
-      pc.hasMaterial = material ? 1 : 0;
-      pc.alphaMode = material ? static_cast<int>(material->alphaMode) : 0;
       pc.hasTangents = submesh.hasTangents ? 1 : 0;
 
+      MaterialDataGPU materialGPU;
+      materialGPU.baseColorFactor =
+          material ? material->baseColorFactor : glm::vec4(1.0f);
+      materialGPU.metallicFactor = material ? material->metallicFactor : 0.0f;
+      materialGPU.roughnessFactor = material ? material->roughnessFactor : 1.0f;
+      materialGPU.alphaCutoff = material ? material->alphaCutoff : 0.5f;
+      materialGPU.alphaMode =
+          material ? static_cast<int>(material->alphaMode) : 0;
+      materialGPU.hasMaterial = material ? 1 : 0;
+
+      cmd.UpdateBuffer({
+          .buffer = materialUBO_,
+          .offset = 0,
+          .data = &materialGPU,
+          .size = sizeof(MaterialDataGPU),
+      });
       cmd.PushConstants(ShaderStage::Vertex | ShaderStage::Fragment, 0,
                         sizeof(StaticMeshPushConstants), &pc);
 

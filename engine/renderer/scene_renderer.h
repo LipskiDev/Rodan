@@ -36,6 +36,15 @@ struct alignas(16) FrameDataGPU {
   float _pad1;
 };
 
+struct alignas(16) MaterialDataGPU {
+  glm::vec3 baseColorFactor;
+  float metallicFactor;
+  float roughnessFactor;
+  float alphaCutoff;
+  float alphaMode;
+  int hasMaterial;
+};
+
 struct StaticMeshRenderItem {
   const MeshResource *mesh = nullptr;
   std::vector<const MaterialResource *> materials;
@@ -153,6 +162,7 @@ private:
   DescriptorSetHandle frameSet_{};
 
   BufferHandle frameUBO_;
+  BufferHandle materialUBO_;
 
   MeshRenderer meshRenderer_;
 

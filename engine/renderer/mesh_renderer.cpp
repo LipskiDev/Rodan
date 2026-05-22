@@ -44,6 +44,7 @@ void MeshRenderer::DrawSubmesh(ICommandList *cmd, const MeshResource &mesh,
 
   cmd->DrawIndexed(submesh.indexCount, submesh.firstIndex, 0);
 }
+
 void MeshRenderer::DrawDepthOnly(ICommandList *cmd, const MeshResource &mesh) {
   cmd->BindVertexBuffer(0, mesh.vertexBuffer, 0);
   cmd->BindIndexBuffer(mesh.indexBuffer, IndexType::U32, 0);

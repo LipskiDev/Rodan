@@ -411,6 +411,27 @@ static ImportedMaterial LoadMaterial(const tinygltf::Model &model,
     }
   }
 
+  // Extensions
+  if (material.extensions.contains("KHR_materials_transmission")) {
+    const auto &ext = material.extensions.at("KHR_materials_transmission");
+
+    if (ext.Has("transmissionFactor")) {
+      out.transmission.transmissionFactor =
+          static_cast<float>(ext.Get("transmissionFactor").GetNumberAsDouble());
+    }
+
+    if (ext.Has("transmissionTexture")) {
+      const auto &tex = ext.Get("transmissionTexture");
+
+      out.transmission.transmissionTexture = tex.Get("index").Get<int>();
+    }
+  }
+
+  if (material.extensions.contains("KHR_materials_volume")) {
+    const auto &ext = material.extensions.at("KHR_materials_volume");
+    // TODO finish
+  }
+
   return out;
 }
 

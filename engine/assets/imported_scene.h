@@ -29,6 +29,19 @@ struct ImportedTextureRef {
   int texCoord = 0;
 };
 
+struct ImportedTransmission {
+  float transmissionFactor = 0.0f;
+  int transmissionTexture = -1;
+};
+
+struct ImportedVolume {
+  float thicknessFactor = 0.0f;
+  int thicknessTexture = -1;
+
+  glm::vec3 attenuationColor = glm::vec3(1.0f);
+  float attenuationDistance = 0.0f;
+};
+
 struct ImportedMaterial {
   glm::vec4 baseColorFactor{1.0f};
   float metallicFactor = 1.0f;
@@ -42,6 +55,10 @@ struct ImportedMaterial {
   AlphaMode alphaMode = AlphaMode::Opaque;
   float alphaCutoff = 0.5f;
   bool doubleSided = false;
+
+  // Imported Extensions
+  ImportedTransmission transmission;
+  ImportedVolume volume;
 };
 
 struct ImportedImage {

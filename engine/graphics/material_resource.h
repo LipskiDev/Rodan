@@ -8,6 +8,19 @@
 namespace Rodan {
 using namespace Velos::RHI;
 
+struct TransmissionMaterial {
+  float transmissionFactor = 0.0f;
+  int transmissionTexture = -1;
+};
+
+struct VolumeMaterial {
+  float thicknessFactor = 0.0f;
+  int thicknessTexture = -1;
+
+  glm::vec3 attenuationColor = glm::vec3(1.0f);
+  float attenuationDistance = 0.0f;
+};
+
 struct MaterialResource {
   Texture baseColorTexture{};
   Texture normalTexture{};
@@ -32,6 +45,10 @@ struct MaterialResource {
   AlphaMode alphaMode;
   float alphaCutoff;
   bool doubleSided;
+
+  // Extensions
+  TransmissionMaterial transmission;
+  VolumeMaterial volume;
 };
 
 } // namespace Rodan

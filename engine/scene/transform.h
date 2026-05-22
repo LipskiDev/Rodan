@@ -30,8 +30,6 @@ struct Transform {
     glm::decompose(matrix, transform.scale, transform.rotation,
                    transform.position, skew, perspective);
 
-    transform.rotation = glm::conjugate(transform.rotation);
-
     return transform;
   }
 };
