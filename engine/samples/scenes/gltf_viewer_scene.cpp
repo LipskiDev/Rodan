@@ -349,6 +349,7 @@ void GltfViewerScene::LoadScene(IDevice *device, std::string path) {
 
   for (const MaterialResource &material : asset_->GetMaterials()) {
     materialHandles.push_back(renderWorld_.AddMaterial(material));
+    std::cout << material.transmission.transmissionFactor << std::endl;
   }
 
   for (const StaticMeshInstance &instance : instances_) {

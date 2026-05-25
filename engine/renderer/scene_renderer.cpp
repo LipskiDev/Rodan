@@ -13,6 +13,7 @@
 #include "rhi/rhi_types.h"
 #include "scene/render_world.h"
 #include <core/path.h>
+#include <iostream>
 #include <renderer/scene_renderer.h>
 #include <stdexcept>
 
@@ -191,6 +192,37 @@ void SceneRenderer::Initialize(IDevice *device, SwapchainHandle swapchain,
                                         .memoryUsage = MemoryUsage::CPUToGPU,
                                         .debugName = "Material Data UBO"});
 
+  DescriptorBindingDesc opaqueSceneBindings[] = {
+      {
+          .binding = 0,
+          .type = DescriptorType::CombinedImageSampler,
+          .count = 1,
+          .visibility = ShaderStage::Fragment,
+      },
+  };
+
+  opaqueSceneLayout_ = device_->CreateDescriptorSetLayout({
+      .bindings = opaqueSceneBindings,
+      .bindingCount = 1,
+      .debugName = "Opaque Scene Descriptor Set Layout",
+  });
+
+  DescriptorPoolSize opaqueScenePoolSizes[] = {
+      {
+          .type = DescriptorType::CombinedImageSampler,
+          .count = 1,
+      },
+  };
+
+  opaqueScenePool_ = device_->CreateDescriptorPool({
+      .poolSizes = opaqueScenePoolSizes,
+      .poolSizeCount = 1,
+      .maxSets = 1,
+  });
+
+  opaqueSceneSet_ =
+      device_->AllocateDescriptorSet(opaqueScenePool_, opaqueSceneLayout_);
+
   DescriptorImageInfo shadowImage{};
   shadowImage.imageView = directionalShadow_.texture.view;
   shadowImage.sampler = directionalShadow_.texture.sampler;
@@ -234,6 +266,38 @@ void SceneRenderer::Initialize(IDevice *device, SwapchainHandle swapchain,
 
   shadowLayout_ = ImageLayout::Undefined;
 
+  auto transmissionVertSpv = Velos::ShaderCompiler::CompileFile({
+      .path = Velos::Path::Resolve("assets/shaders/transmission.vert").string(),
+      .stage = ShaderStage::Vertex,
+      .entryPoint = "main",
+  });
+
+  auto transmissionFragSpv = Velos::ShaderCompiler::CompileFile({
+      .path = Velos::Path::Resolve("assets/shaders/transmission.frag").string(),
+      .stage = ShaderStage::Fragment,
+      .entryPoint = "main",
+  });
+
+  transmissionVS_ = device_->CreateShader({
+      .stage = ShaderStage::Vertex,
+      .bytecode = transmissionVertSpv.spirv.data(),
+      .bytecodeSize = static_cast<uint64_t>(transmissionVertSpv.spirv.size() *
+                                            sizeof(uint32_t)),
+      .entryPoint = "main",
+      .reflection = transmissionVertSpv.reflection,
+      .debugName = "Transmission VS",
+  });
+
+  transmissionFS_ = device_->CreateShader({
+      .stage = ShaderStage::Fragment,
+      .bytecode = transmissionFragSpv.spirv.data(),
+      .bytecodeSize = static_cast<uint64_t>(transmissionFragSpv.spirv.size() *
+                                            sizeof(uint32_t)),
+      .entryPoint = "main",
+      .reflection = transmissionFragSpv.reflection,
+      .debugName = "Transmission FS",
+  });
+
   environment_ = EnvironmentMap::LoadHDR(
       device, Velos::Path::Resolve("assets/hdr/piazza_bologni_4k.hdr"));
 
@@ -249,6 +313,9 @@ void SceneRenderer::Shutdown(IDevice *device) {
     device->DestroyPipeline(pipeline);
   }
   pipelines_.clear();
+
+  DestroyTexture(device, opaqueScene_.texture);
+  opaqueScene_ = {};
 
   DestroyTexture(device, iblResources_.prefilterTexture);
 
@@ -303,6 +370,18 @@ void SceneRenderer::Shutdown(IDevice *device) {
     shadowFS_ = {};
   }
 
+  if (transmissionPipeline_) {
+    device_->DestroyPipeline(transmissionPipeline_);
+  }
+
+  if (transmissionVS_) {
+    device_->DestroyShader(transmissionVS_);
+  }
+
+  if (transmissionFS_) {
+    device_->DestroyShader(transmissionFS_);
+  }
+
   device_->DestroySampler(directionalShadow_.texture.sampler);
   device_->DestroyImageView(directionalShadow_.texture.view);
   device_->DestroyImage(directionalShadow_.texture.image);
@@ -326,8 +405,9 @@ void SceneRenderer::Render(ICommandList &cmd, const RenderWorld &world,
                            const Camera &camera,
                            const FrameRenderContext &frame,
                            DebugContext dbgCtx) {
-  BuildStaticMeshRenderList(world);
+  EnsureOpaqueSceneTarget(frame);
 
+  BuildStaticMeshRenderList(world);
   RenderShadowMaps(cmd, world);
 
   if (environment_ && environment_->NeedsUpload()) {
@@ -339,14 +419,30 @@ void SceneRenderer::Render(ICommandList &cmd, const RenderWorld &world,
     iblReady_ = true;
   }
 
-  BeginMainPass(cmd, frame, camera, dbgCtx);
+  // PASS 1: opaque -> opaqueScene_
+  BeginOpaquePass(cmd, frame, camera, dbgCtx);
+
+  RenderOpaqueMeshes(cmd, camera, dbgCtx);
 
   if (environment_) {
     skyboxPass_.Render(cmd, *environment_, camera.GetView(),
                        camera.GetProjection());
   }
 
-  RenderStaticMeshes(cmd, camera, dbgCtx);
+  EndOpaquePass(cmd);
+
+  TransitionOpaqueSceneToReadable(cmd);
+
+  // PASS 2: transmission -> backbuffer
+  BeginMainPass(cmd, frame, camera, dbgCtx);
+  RenderOpaqueMeshes(cmd, camera, dbgCtx);
+
+  if (environment_) {
+    skyboxPass_.Render(cmd, *environment_, camera.GetView(),
+                       camera.GetProjection());
+  }
+
+  RenderTransmissionMeshes(cmd, camera, dbgCtx);
 
   RenderDebug(cmd, world, camera, dbgCtx);
 
@@ -355,7 +451,9 @@ void SceneRenderer::Render(ICommandList &cmd, const RenderWorld &world,
   }
 
   EndMainPass(cmd);
-  staticMeshes_.clear();
+
+  opaques_.clear();
+  transmissions_.clear();
 }
 
 void SceneRenderer::SubmitStaticMesh(StaticMeshRenderItem item) {
@@ -440,10 +538,11 @@ PipelineHandle SceneRenderer::GetOrCreatePipeline(const MeshPipelineKey &key) {
       materialLayout_,
       frameLayout_,
       iblResources_.descriptorSetLayout,
+      opaqueSceneLayout_,
   };
 
   desc.layout.descriptorSetLayouts = setLayouts;
-  desc.layout.descriptorSetLayoutCount = 3;
+  desc.layout.descriptorSetLayoutCount = 4;
 
   // Raster state
   desc.raster.cullBackFaces = false;
@@ -506,6 +605,44 @@ PipelineHandle SceneRenderer::GetOrCreateShadowPipeline() {
   return directionalShadow_.pipeline;
 }
 
+PipelineHandle SceneRenderer::GetOrCreateTransmissionPipeline() {
+  if (transmissionPipeline_.IsValid()) {
+    return transmissionPipeline_;
+  }
+
+  GraphicsPipelineDesc desc{};
+  desc.vertexShader = transmissionVS_;
+  desc.fragmentShader = transmissionFS_;
+  desc.topology = PrimitiveTopology::TriangleList;
+  desc.colorFormat = colorFormat_;
+  desc.debugName = "SceneRenderer.TransmissionPipeline";
+
+  desc.vertexLayouts = GetMeshVertexLayout();
+
+  DescriptorSetLayoutHandle setLayouts[] = {
+      materialLayout_,
+      frameLayout_,
+      iblResources_.descriptorSetLayout,
+      opaqueSceneLayout_,
+  };
+
+  desc.layout.descriptorSetLayouts = setLayouts;
+  desc.layout.descriptorSetLayoutCount = 4;
+
+  desc.raster.cullBackFaces = false;
+  desc.raster.frontFaceCCW = true;
+  desc.raster.wireframe = false;
+
+  desc.depth.depthTestEnable = true;
+  desc.depth.depthWriteEnable = false;
+  desc.depth.depthFormat = depthFormat_;
+
+  desc.blend.enable = true;
+
+  transmissionPipeline_ = device_->CreateGraphicsPipeline(desc);
+  return transmissionPipeline_;
+}
+
 void SceneRenderer::EnsureShadowMapReadable(ICommandList &cmd) {
   if (shadowLayout_ != ImageLayout::ShaderReadOnly) {
     cmd.Barrier({
@@ -517,6 +654,69 @@ void SceneRenderer::EnsureShadowMapReadable(ICommandList &cmd) {
 
     shadowLayout_ = ImageLayout::ShaderReadOnly;
   }
+}
+
+void SceneRenderer::EnsureOpaqueSceneTarget(const FrameRenderContext &frame) {
+  bool recreated = false;
+
+  if (opaqueScene_.texture.image.IsValid() &&
+      opaqueScene_.extent.width == frame.extent.width &&
+      opaqueScene_.extent.height == frame.extent.height) {
+    return;
+  }
+
+  if (opaqueScene_.texture.image.IsValid()) {
+    DestroyTexture(device_, opaqueScene_.texture);
+    opaqueScene_ = {};
+  }
+
+  recreated = true;
+
+  opaqueScene_.extent = frame.extent;
+  opaqueScene_.layout = ImageLayout::Undefined;
+
+  opaqueScene_.texture.image = device_->CreateImage({
+      .width = frame.extent.width,
+      .height = frame.extent.height,
+      .format = colorFormat_,
+      .usage = ImageUsage::ColorAttachment | ImageUsage::Sampled,
+      .debugName = "Opaque Scene Color",
+  });
+
+  opaqueScene_.texture.view = device_->CreateImageView({
+      .image = opaqueScene_.texture.image,
+      .format = colorFormat_,
+      .aspect = ImageAspect::Color,
+  });
+
+  opaqueScene_.texture.sampler = device_->CreateSampler({
+      .minFilter = Filter::Linear,
+      .magFilter = Filter::Linear,
+      .addressU = SamplerAddressMode::ClampToEdge,
+      .addressV = SamplerAddressMode::ClampToEdge,
+      .addressW = SamplerAddressMode::ClampToEdge,
+  });
+
+  if (recreated) {
+    UpdateOpaqueSceneDescriptor();
+  }
+}
+
+void SceneRenderer::UpdateOpaqueSceneDescriptor() {
+  DescriptorImageInfo opaqueSceneImage{};
+  opaqueSceneImage.imageView = opaqueScene_.texture.view;
+  opaqueSceneImage.sampler = opaqueScene_.texture.sampler;
+  opaqueSceneImage.imageLayout = ImageLayout::ShaderReadOnly;
+
+  device_->UpdateDescriptorSet({
+      .dstSet = opaqueSceneSet_,
+      .binding = 0,
+      .arrayElement = 0,
+      .type = DescriptorType::CombinedImageSampler,
+      .bufferInfo = nullptr,
+      .imageInfo = &opaqueSceneImage,
+      .descriptorCount = 1,
+  });
 }
 
 void SceneRenderer::RenderShadowMaps(ICommandList &cmd,
@@ -602,7 +802,7 @@ void SceneRenderer::RenderShadowMaps(ICommandList &cmd,
   PipelineHandle pipeline = GetOrCreateShadowPipeline();
   cmd.BindPipeline(pipeline);
 
-  for (const StaticMeshRenderItem &item : staticMeshes_) {
+  for (const StaticMeshRenderItem &item : opaques_) {
     if (!item.mesh) {
       continue;
     }
@@ -629,91 +829,174 @@ void SceneRenderer::RenderShadowMaps(ICommandList &cmd,
 }
 
 void SceneRenderer::BuildStaticMeshRenderList(const RenderWorld &world) {
-  staticMeshes_.clear();
+  opaques_.clear();
+  transmissions_.clear();
 
   for (const RenderObject &object : world.GetObjects()) {
     if (!object.visible) {
       continue;
     }
 
-    StaticMeshRenderItem item{};
-    item.mesh = &world.GetMesh(object.mesh);
-    item.worldTransform = object.worldTransform;
-    item.localTransform = object.localTransform;
-    item.objectId = object.objectId;
+    const MeshResource &mesh = world.GetMesh(object.mesh);
 
-    item.materials.reserve(object.materials.size());
-    for (MaterialHandle materialHandle : object.materials) {
-      item.materials.push_back(&world.GetMaterial(materialHandle));
+    for (const Submesh &submesh : mesh.submeshes) {
+      StaticMeshRenderItem item{};
+      item.mesh = &mesh;
+      item.worldTransform = object.worldTransform;
+      item.localTransform = object.localTransform;
+      item.objectId = object.objectId;
+
+      const MaterialResource *material = nullptr;
+
+      if (submesh.materialSlot < object.materials.size()) {
+        material = &world.GetMaterial(object.materials[submesh.materialSlot]);
+      }
+
+      item.material = material;
+      item.submesh = &submesh;
+
+      bool isTransmission =
+          material && material->transmission.transmissionFactor > 0.0f;
+
+      if (isTransmission) {
+        transmissions_.push_back(std::move(item));
+      } else {
+        opaques_.push_back(std::move(item));
+      }
     }
-
-    staticMeshes_.push_back(std::move(item));
-  }
-
-  if (!world.GetDirectionalLights().empty()) {
-    DirectionalLight light = world.GetDirectionalLights()[0];
-    directionalShadow_.direction = light.direction;
-    directionalShadow_.color = light.color;
-    directionalShadow_.intensity = light.intensity;
   }
 }
 
-void SceneRenderer::RenderStaticMeshes(ICommandList &cmd, const Camera &camera,
+void SceneRenderer::RenderOpaqueMeshes(ICommandList &cmd, const Camera &camera,
                                        DebugContext dbgCtx) {
-  for (const StaticMeshRenderItem &item : staticMeshes_) {
+  RenderStaticMeshes(cmd, camera, dbgCtx, opaques_);
+}
+
+void SceneRenderer::RenderTransmissionMeshes(ICommandList &cmd,
+                                             const Camera &camera,
+                                             DebugContext dbgCtx) {
+  PipelineHandle pipeline = GetOrCreateTransmissionPipeline();
+
+  for (const StaticMeshRenderItem &item : transmissions_) {
+    if (!item.mesh || !item.submesh) {
+      continue;
+    }
+
+    const Submesh &submesh = *item.submesh;
+    const MaterialResource *material = item.material;
+
+    cmd.BindPipeline(pipeline);
+
+    if (material && material->descriptorSet.IsValid()) {
+      cmd.BindDescriptorSet(pipeline, 0, material->descriptorSet);
+    }
+
+    cmd.BindDescriptorSet(pipeline, 1, frameSet_);
+
+    if (iblReady_) {
+      cmd.BindDescriptorSet(pipeline, 2, iblResources_.descriptorSet);
+    }
+
+    cmd.BindDescriptorSet(pipeline, 3, opaqueSceneSet_);
+
+    StaticMeshPushConstants pc{};
+    pc.model = item.worldTransform.ToMatrix() * item.localTransform.ToMatrix();
+    pc.showMode = 4;
+    pc.hasTangents = submesh.hasTangents ? 1 : 0;
+
+    MaterialDataGPU materialGPU{};
+    materialGPU.baseColorFactor =
+        material ? material->baseColorFactor : glm::vec4(1.0f);
+    materialGPU.metallicFactor = material ? material->metallicFactor : 0.0f;
+    materialGPU.roughnessFactor = material ? material->roughnessFactor : 1.0f;
+    materialGPU.alphaCutoff = material ? material->alphaCutoff : 0.5f;
+    materialGPU.alphaMode =
+        material ? static_cast<int>(material->alphaMode) : 0;
+    materialGPU.hasMaterial = material ? 1 : 0;
+
+    materialGPU.transmissionFactor =
+        material ? material->transmission.transmissionFactor : 0.0f;
+
+    materialGPU.thicknessFactor =
+        material ? material->volume.thicknessFactor : 0.0f;
+
+    materialGPU.ior = 1.5f;
+
+    materialGPU.attenuationColorDistance = glm::vec4(
+        material ? material->volume.attenuationColor : glm::vec3(1.0f),
+        material ? material->volume.attenuationDistance : 0.0f);
+
+    cmd.UpdateBuffer({
+        .buffer = materialUBO_,
+        .offset = 0,
+        .data = &materialGPU,
+        .size = sizeof(MaterialDataGPU),
+    });
+
+    cmd.PushConstants(ShaderStage::Vertex, 0, sizeof(StaticMeshPushConstants),
+                      &pc);
+
+    meshRenderer_.DrawSubmesh(&cmd, *item.mesh, submesh, material, pipeline);
+  }
+}
+
+void SceneRenderer::RenderStaticMeshes(
+    ICommandList &cmd, const Camera &camera, DebugContext dbgCtx,
+    const std::vector<StaticMeshRenderItem> &items) {
+  for (const StaticMeshRenderItem &item : items) {
     if (!item.mesh) {
       continue;
     }
 
-    for (const Submesh &submesh : item.mesh->submeshes) {
-      const MaterialResource *material = nullptr;
-
-      if (submesh.materialSlot < item.materials.size()) {
-        material = item.materials[submesh.materialSlot];
-      }
-
-      MeshPipelineKey key{};
-      if (material) {
-        key.alphaMode = material->alphaMode;
-        key.doubleSided = material->doubleSided;
-      }
-
-      PipelineHandle pipeline = GetOrCreatePipeline(key);
-
-      cmd.BindPipeline(pipeline);
-      cmd.BindDescriptorSet(pipeline, 1, frameSet_);
-
-      if (iblReady_) {
-        cmd.BindDescriptorSet(pipeline, 2, iblResources_.descriptorSet);
-      }
-
-      StaticMeshPushConstants pc{};
-      pc.model =
-          item.worldTransform.ToMatrix() * item.localTransform.ToMatrix();
-      pc.showMode = 4;
-      pc.hasTangents = submesh.hasTangents ? 1 : 0;
-
-      MaterialDataGPU materialGPU;
-      materialGPU.baseColorFactor =
-          material ? material->baseColorFactor : glm::vec4(1.0f);
-      materialGPU.metallicFactor = material ? material->metallicFactor : 0.0f;
-      materialGPU.roughnessFactor = material ? material->roughnessFactor : 1.0f;
-      materialGPU.alphaCutoff = material ? material->alphaCutoff : 0.5f;
-      materialGPU.alphaMode =
-          material ? static_cast<int>(material->alphaMode) : 0;
-      materialGPU.hasMaterial = material ? 1 : 0;
-
-      cmd.UpdateBuffer({
-          .buffer = materialUBO_,
-          .offset = 0,
-          .data = &materialGPU,
-          .size = sizeof(MaterialDataGPU),
-      });
-      cmd.PushConstants(ShaderStage::Vertex | ShaderStage::Fragment, 0,
-                        sizeof(StaticMeshPushConstants), &pc);
-
-      meshRenderer_.DrawSubmesh(&cmd, *item.mesh, submesh, material, pipeline);
+    if (!item.mesh || !item.submesh) {
+      continue;
     }
+
+    const Submesh &submesh = *item.submesh;
+    const MaterialResource *material = item.material;
+
+    MeshPipelineKey key{};
+    if (material) {
+      key.alphaMode = material->alphaMode;
+      key.doubleSided = material->doubleSided;
+    }
+
+    PipelineHandle pipeline = GetOrCreatePipeline(key);
+
+    cmd.BindPipeline(pipeline);
+    cmd.BindDescriptorSet(pipeline, 1, frameSet_);
+
+    if (iblReady_) {
+      cmd.BindDescriptorSet(pipeline, 2, iblResources_.descriptorSet);
+    }
+
+    cmd.BindDescriptorSet(pipeline, 3, opaqueSceneSet_);
+
+    StaticMeshPushConstants pc{};
+    pc.model = item.worldTransform.ToMatrix() * item.localTransform.ToMatrix();
+    pc.showMode = 4;
+    pc.hasTangents = submesh.hasTangents ? 1 : 0;
+
+    MaterialDataGPU materialGPU;
+    materialGPU.baseColorFactor =
+        material ? material->baseColorFactor : glm::vec4(1.0f);
+    materialGPU.metallicFactor = material ? material->metallicFactor : 0.0f;
+    materialGPU.roughnessFactor = material ? material->roughnessFactor : 1.0f;
+    materialGPU.alphaCutoff = material ? material->alphaCutoff : 0.5f;
+    materialGPU.alphaMode =
+        material ? static_cast<int>(material->alphaMode) : 0;
+    materialGPU.hasMaterial = material ? 1 : 0;
+
+    cmd.UpdateBuffer({
+        .buffer = materialUBO_,
+        .offset = 0,
+        .data = &materialGPU,
+        .size = sizeof(MaterialDataGPU),
+    });
+    cmd.PushConstants(ShaderStage::Vertex | ShaderStage::Fragment, 0,
+                      sizeof(StaticMeshPushConstants), &pc);
+
+    meshRenderer_.DrawSubmesh(&cmd, *item.mesh, submesh, material, pipeline);
   }
 }
 
@@ -731,7 +1014,7 @@ void SceneRenderer::RenderDebug(ICommandList &cmd, const RenderWorld &world,
 
   AABB sceneBounds;
 
-  for (const auto &mesh : staticMeshes_) {
+  for (const auto &mesh : opaques_) {
     const glm::mat4 model =
         mesh.worldTransform.ToMatrix() * mesh.localTransform.ToMatrix();
 
@@ -790,10 +1073,10 @@ void SceneRenderer::BeginMainPass(ICommandList &cmd,
 
   FrameDataGPU frameData{};
   frameData.lightViewProj = directionalShadow_.lightViewProj;
-  frameData.lightDirection = directionalShadow_.direction;
-  frameData.lightColor = directionalShadow_.color;
+  frameData.lightDirection = glm::vec4(directionalShadow_.direction, 0.0f);
+  frameData.lightColor = glm::vec4(directionalShadow_.color, 1.0f);
   frameData.lightIntensity = directionalShadow_.intensity;
-  frameData.renderShadows = directionalShadow_.enabled;
+  frameData.shadowsEnabled = directionalShadow_.enabled ? 1 : 0;
 
   frameData.proj = camera.GetProjection();
   frameData.view = camera.GetView();
@@ -855,6 +1138,97 @@ void SceneRenderer::BeginMainPass(ICommandList &cmd,
   });
 }
 
+void SceneRenderer::BeginOpaquePass(ICommandList &cmd,
+                                    const FrameRenderContext &frame,
+                                    const Camera &camera,
+                                    const DebugContext dbgCtx) {
+  FrameDataGPU frameData{};
+  frameData.lightViewProj = directionalShadow_.lightViewProj;
+  frameData.lightDirection = glm::vec4(directionalShadow_.direction, 0.0f);
+  frameData.lightColor = glm::vec4(directionalShadow_.color, 1.0f);
+  frameData.lightIntensity = directionalShadow_.intensity;
+  frameData.shadowsEnabled = directionalShadow_.enabled ? 1 : 0;
+
+  frameData.proj = camera.GetProjection();
+  frameData.view = camera.GetView();
+
+  frameData.showMode = static_cast<int>(dbgCtx.mode);
+
+  cmd.UpdateBuffer(
+      {.buffer = frameUBO_, .data = &frameData, .size = sizeof(FrameDataGPU)});
+
+  cmd.Barrier({
+      .image = opaqueScene_.texture.image,
+      .oldLayout = opaqueScene_.layout,
+      .newLayout = ImageLayout::ColorAttachment,
+      .aspect = ImageAspect::Color,
+  });
+
+  cmd.Barrier({
+      .image = frame.depthImage,
+      .newLayout = ImageLayout::DepthAttachment,
+      .aspect = ImageAspect::Depth,
+  });
+
+  opaqueScene_.layout = ImageLayout::ColorAttachment;
+
+  ColorAttachmentDesc colorAttachment{};
+  colorAttachment.view = opaqueScene_.texture.view;
+  colorAttachment.loadOp = LoadOp::Clear;
+  colorAttachment.storeOp = StoreOp::Store;
+  colorAttachment.clearValue = {0.1f, 0.1f, 0.1f, 1.0f};
+
+  DepthAttachmentDesc depthAttachment{};
+  depthAttachment.view = frame.depthView;
+  depthAttachment.loadOp = LoadOp::Clear;
+  depthAttachment.storeOp = StoreOp::Store;
+  depthAttachment.clearDepth = 1.0f;
+  depthAttachment.clearStencil = 0;
+
+  Rect2D renderArea{};
+  renderArea.offset = {0, 0};
+  renderArea.extent = frame.extent;
+
+  RenderingInfo renderingInfo{};
+  renderingInfo.renderArea = renderArea;
+  renderingInfo.colorAttachments = &colorAttachment;
+  renderingInfo.colorAttachmentCount = 1;
+  renderingInfo.depthAttachment = &depthAttachment;
+
+  cmd.BeginRendering(renderingInfo);
+
+  cmd.SetViewport({
+      .x = 0.0f,
+      .y = 0.0f,
+      .width = static_cast<float>(frame.extent.width),
+      .height = static_cast<float>(frame.extent.height),
+      .minDepth = 0.0f,
+      .maxDepth = 1.0f,
+  });
+
+  cmd.SetScissor({
+      .offset = {0, 0},
+      .extent = frame.extent,
+  });
+}
+
 void SceneRenderer::EndMainPass(ICommandList &cmd) { cmd.EndRendering(); }
+
+void SceneRenderer::EndOpaquePass(ICommandList &cmd) { cmd.EndRendering(); }
+
+void SceneRenderer::TransitionOpaqueSceneToReadable(ICommandList &cmd) {
+  if (opaqueScene_.layout == ImageLayout::ShaderReadOnly) {
+    return;
+  }
+
+  cmd.Barrier({
+      .image = opaqueScene_.texture.image,
+      .oldLayout = opaqueScene_.layout,
+      .newLayout = ImageLayout::ShaderReadOnly,
+      .aspect = ImageAspect::Color,
+  });
+
+  opaqueScene_.layout = ImageLayout::ShaderReadOnly;
+}
 
 } // namespace Rodan

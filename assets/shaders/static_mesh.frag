@@ -14,15 +14,17 @@ layout(set = 0, binding = 3) uniform sampler2D u_OcclusionTexture;
 
 layout(set = 1, binding = 0) uniform sampler2D u_ShadowMap;
 layout(set = 1, binding = 1) uniform FrameData {
-  mat4 view;
-  mat4 proj;
+    mat4 view;
+    mat4 proj;
+    mat4 lightViewProj;
 
-  mat4 lightViewProj;
-  vec4 lightDirection;
-  vec4 lightColor;
-  float lightIntensity;
-  int shadowsEnabled;
-  int showMode;
+    vec4 lightDirection;
+    vec4 lightColor;
+
+    float lightIntensity;
+    int shadowsEnabled;
+    int showMode;
+    float _pad0;
 } u_Frame;
 layout(set = 1, binding = 2) uniform MaterialData {
   vec4 baseColorFactor;
@@ -30,7 +32,7 @@ layout(set = 1, binding = 2) uniform MaterialData {
   float metallicFactor;
   float roughnessFactor;
   float alphaCutoff;
-  float alphaMode;
+  int alphaMode;
 
   int hasMaterial;
 } u_Material;

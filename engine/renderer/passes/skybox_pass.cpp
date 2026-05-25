@@ -97,6 +97,8 @@ void SkyboxPass::Initialize(IDevice *device, Format colorFormat,
   desc.topology = PrimitiveTopology::TriangleList;
 
   desc.depth.depthFormat = Format::D32_FLOAT;
+  desc.depth.depthTestEnable = true;
+  desc.depth.depthWriteEnable = false;
   desc.raster.cullBackFaces = false;
   desc.raster.frontFaceCCW = true;
   desc.raster.wireframe = false;

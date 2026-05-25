@@ -301,6 +301,11 @@ void StaticGltfAsset::UploadMaterials(IDevice *device, IUploadContext *upload,
       gpuMat.ownsOcclusionTextureResources = false;
     }
 
+    gpuMat.transmission.transmissionFactor =
+        mat.transmission.transmissionFactor;
+    gpuMat.transmission.transmissionTexture =
+        mat.transmission.transmissionTexture;
+
     gpuMat.descriptorSet =
         device->AllocateDescriptorSet(descriptorPool_, materialLayout_);
 

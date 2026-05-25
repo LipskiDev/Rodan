@@ -25,29 +25,35 @@ struct alignas(16) FrameDataGPU {
   glm::mat4 proj;
   glm::mat4 lightViewProj;
 
-  glm::vec3 lightDirection;
-  float _padD;
-  glm::vec3 lightColor;
-  float _padC;
+  glm::vec4 lightDirection;
+  glm::vec4 lightColor;
 
   float lightIntensity;
-  bool renderShadows;
+  int shadowsEnabled;
   int showMode;
-  float _pad1;
+  float _pad0;
 };
 
 struct alignas(16) MaterialDataGPU {
-  glm::vec3 baseColorFactor;
+  glm::vec4 baseColorFactor;
+
   float metallicFactor;
   float roughnessFactor;
   float alphaCutoff;
-  float alphaMode;
+  int alphaMode;
+
   int hasMaterial;
+  float transmissionFactor;
+  float thicknessFactor;
+  float ior;
+
+  glm::vec4 attenuationColorDistance;
 };
 
 struct StaticMeshRenderItem {
   const MeshResource *mesh = nullptr;
-  std::vector<const MaterialResource *> materials;
+  const MaterialResource *material = nullptr;
+  const Submesh *submesh = nullptr;
 
   const MaterialResource *materialOverride = nullptr;
 
@@ -124,11 +130,17 @@ public:
 private:
   PipelineHandle GetOrCreatePipeline(const MeshPipelineKey &key);
   PipelineHandle GetOrCreateShadowPipeline();
+  PipelineHandle GetOrCreateTransmissionPipeline();
 
   void RenderShadowMaps(ICommandList &cmd, const RenderWorld &world);
   void BuildStaticMeshRenderList(const RenderWorld &world);
-  void RenderStaticMeshes(ICommandList &cmd, const Camera &camera,
+  void RenderOpaqueMeshes(ICommandList &cmd, const Camera &camera,
                           DebugContext dbgCtx);
+  void RenderTransmissionMeshes(ICommandList &cmd, const Camera &camera,
+                                DebugContext dbgCtx);
+  void RenderStaticMeshes(ICommandList &cmd, const Camera &camera,
+                          DebugContext dbgCtx,
+                          const std::vector<StaticMeshRenderItem> &items);
 
   void RenderDebug(ICommandList &cmd, const RenderWorld &world,
                    const Camera &camera, DebugContext dbgCtx);
@@ -136,9 +148,17 @@ private:
   void BeginMainPass(ICommandList &cmd, const FrameRenderContext &frame,
                      const Camera &camera, const DebugContext &dbgCtx);
 
+  void BeginOpaquePass(ICommandList &cmd, const FrameRenderContext &frame,
+                       const Camera &camera, const DebugContext dbgCtx);
+
   void EndMainPass(ICommandList &cmd);
+  void EndOpaquePass(ICommandList &cmd);
 
   void EnsureShadowMapReadable(ICommandList &cmd);
+  void EnsureOpaqueSceneTarget(const FrameRenderContext &frame);
+  void UpdateOpaqueSceneDescriptor();
+
+  void TransitionOpaqueSceneToReadable(ICommandList &cmd);
 
 private:
   IDevice *device_ = nullptr;
@@ -155,11 +175,19 @@ private:
   ShaderHandle shadowVS_;
   ShaderHandle shadowFS_;
 
+  ShaderHandle transmissionVS_{};
+  ShaderHandle transmissionFS_{};
+  PipelineHandle transmissionPipeline_{};
+
   DescriptorSetLayoutHandle materialLayout_{};
   DescriptorSetLayoutHandle frameLayout_{};
 
   DescriptorPoolHandle frameDescriptorPool_{};
   DescriptorSetHandle frameSet_{};
+
+  DescriptorSetLayoutHandle opaqueSceneLayout_{};
+  DescriptorPoolHandle opaqueScenePool_{};
+  DescriptorSetHandle opaqueSceneSet_{};
 
   BufferHandle frameUBO_;
   BufferHandle materialUBO_;
@@ -171,6 +199,9 @@ private:
   std::unique_ptr<Debug::LineRenderer2D> lineRenderer2D_;
 
   std::vector<StaticMeshRenderItem> staticMeshes_;
+
+  std::vector<StaticMeshRenderItem> opaques_;
+  std::vector<StaticMeshRenderItem> transmissions_;
 
   std::unordered_map<MeshPipelineKey, PipelineHandle, MeshPipelineKeyHasher>
       pipelines_;
@@ -184,6 +215,16 @@ private:
   std::unique_ptr<IBLBaker> iblBaker_;
   IBLResources iblResources_;
   bool iblReady_ = false;
+
+  struct OpaqueSceneTarget {
+    Texture texture{};
+    Extent2D extent{};
+    ImageLayout layout = ImageLayout::Undefined;
+  };
+
+  OpaqueSceneTarget opaqueScene_;
+
+  bool recreated = false;
 };
 
 } // namespace Rodan

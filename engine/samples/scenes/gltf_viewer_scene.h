@@ -102,7 +102,7 @@ private:
 
   bool pendingReload_ = false;
   std::string currentScenePath_ =
-      "assets/models/compare_normals/CompareNormal.glb";
+      "assets/models/DragonAttenuation/DragonAttenuation.glb";
   std::string pendingScenePath_;
   std::string currentSkyboxPath_ = "assets/hdr/piazza_bologni_4k.hdr";
   std::string pendingSkyboxPath_;
