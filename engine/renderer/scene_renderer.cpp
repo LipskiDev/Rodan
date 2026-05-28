@@ -11,6 +11,7 @@
 #include "rhi/rhi_pipeline.h"
 #include "rhi/rhi_resources.h"
 #include "rhi/rhi_types.h"
+#include "scene/handles.h"
 #include "scene/render_world.h"
 #include <core/path.h>
 #include <iostream>
@@ -143,7 +144,7 @@ void SceneRenderer::Initialize(IDevice *device, SwapchainHandle swapchain,
        .count = 1,
        .visibility = ShaderStage::Vertex | ShaderStage::Fragment},
       {.binding = 2,
-       .type = DescriptorType::UniformBuffer,
+       .type = DescriptorType::StorageBuffer,
        .count = 1,
        .visibility = ShaderStage::Fragment},
   };
@@ -164,12 +165,16 @@ void SceneRenderer::Initialize(IDevice *device, SwapchainHandle swapchain,
       },
       {
           .type = DescriptorType::UniformBuffer,
-          .count = 2,
+          .count = 1,
+      },
+      {
+          .type = DescriptorType::StorageBuffer,
+          .count = 1,
       }};
 
   frameDescriptorPool_ = device_->CreateDescriptorPool({
       .poolSizes = poolSizes,
-      .poolSizeCount = 2,
+      .poolSizeCount = 3,
       .maxSets = 1,
   });
 
@@ -187,10 +192,12 @@ void SceneRenderer::Initialize(IDevice *device, SwapchainHandle swapchain,
                                      .memoryUsage = MemoryUsage::CPUToGPU,
                                      .debugName = "Scene Frame UBO"});
 
-  materialUBO_ = device_->CreateBuffer({.size = sizeof(MaterialDataGPU),
-                                        .usage = BufferUsage::Uniform,
-                                        .memoryUsage = MemoryUsage::CPUToGPU,
-                                        .debugName = "Material Data UBO"});
+  materialBuffer_ = device_->CreateBuffer({
+      .size = sizeof(MaterialDataGPU) * k_MaxMaterials,
+      .usage = BufferUsage::Storage,
+      .memoryUsage = MemoryUsage::CPUToGPU,
+      .debugName = "Scene Material Buffer",
+  });
 
   DescriptorBindingDesc opaqueSceneBindings[] = {
       {
@@ -252,14 +259,14 @@ void SceneRenderer::Initialize(IDevice *device, SwapchainHandle swapchain,
   });
 
   DescriptorBufferInfo materialBuffer{};
-  materialBuffer.buffer = materialUBO_;
+  materialBuffer.buffer = materialBuffer_;
   materialBuffer.offset = 0;
-  materialBuffer.range = sizeof(MaterialDataGPU);
+  materialBuffer.range = sizeof(MaterialDataGPU) * k_MaxMaterials;
 
   device_->UpdateDescriptorSet({
       .dstSet = frameSet_,
       .binding = 2,
-      .type = DescriptorType::UniformBuffer,
+      .type = DescriptorType::StorageBuffer,
       .bufferInfo = &materialBuffer,
       .descriptorCount = 1,
   });
@@ -372,22 +379,24 @@ void SceneRenderer::Shutdown(IDevice *device) {
 
   if (transmissionPipeline_) {
     device_->DestroyPipeline(transmissionPipeline_);
+    transmissionPipeline_ = {};
   }
 
   if (transmissionVS_) {
     device_->DestroyShader(transmissionVS_);
+    transmissionVS_ = {};
   }
 
   if (transmissionFS_) {
     device_->DestroyShader(transmissionFS_);
+    transmissionFS_ = {};
   }
-
   device_->DestroySampler(directionalShadow_.texture.sampler);
   device_->DestroyImageView(directionalShadow_.texture.view);
   device_->DestroyImage(directionalShadow_.texture.image);
 
   device->DestroyBuffer(frameUBO_);
-  device->DestroyBuffer(materialUBO_);
+  device->DestroyBuffer(materialBuffer_);
   device->DestroyDescriptorSetLayout(frameLayout_);
   device->DestroyDescriptorPool(frameDescriptorPool_);
 
@@ -408,6 +417,8 @@ void SceneRenderer::Render(ICommandList &cmd, const RenderWorld &world,
   EnsureOpaqueSceneTarget(frame);
 
   BuildStaticMeshRenderList(world);
+  UploadMaterialBuffer(cmd, world);
+
   RenderShadowMaps(cmd, world);
 
   if (environment_ && environment_->NeedsUpload()) {
@@ -443,6 +454,7 @@ void SceneRenderer::Render(ICommandList &cmd, const RenderWorld &world,
   }
 
   RenderTransmissionMeshes(cmd, camera, dbgCtx);
+  RenderAlphaBlendMeshes(cmd, camera, dbgCtx);
 
   RenderDebug(cmd, world, camera, dbgCtx);
 
@@ -454,6 +466,7 @@ void SceneRenderer::Render(ICommandList &cmd, const RenderWorld &world,
 
   opaques_.clear();
   transmissions_.clear();
+  alphaBlends_.clear();
 }
 
 void SceneRenderer::SubmitStaticMesh(StaticMeshRenderItem item) {
@@ -551,7 +564,8 @@ PipelineHandle SceneRenderer::GetOrCreatePipeline(const MeshPipelineKey &key) {
 
   // Depth state
   desc.depth.depthTestEnable = true;
-  desc.depth.depthWriteEnable = true;
+  desc.depth.depthWriteEnable =
+      key.alphaMode == AlphaMode::Blend ? false : true;
   desc.depth.depthFormat = depthFormat_;
 
   // Blend state
@@ -629,7 +643,7 @@ PipelineHandle SceneRenderer::GetOrCreateTransmissionPipeline() {
   desc.layout.descriptorSetLayouts = setLayouts;
   desc.layout.descriptorSetLayoutCount = 4;
 
-  desc.raster.cullBackFaces = false;
+  desc.raster.cullBackFaces = true;
   desc.raster.frontFaceCCW = true;
   desc.raster.wireframe = false;
 
@@ -637,7 +651,7 @@ PipelineHandle SceneRenderer::GetOrCreateTransmissionPipeline() {
   desc.depth.depthWriteEnable = false;
   desc.depth.depthFormat = depthFormat_;
 
-  desc.blend.enable = true;
+  desc.blend.enable = false;
 
   transmissionPipeline_ = device_->CreateGraphicsPipeline(desc);
   return transmissionPipeline_;
@@ -831,6 +845,7 @@ void SceneRenderer::RenderShadowMaps(ICommandList &cmd,
 void SceneRenderer::BuildStaticMeshRenderList(const RenderWorld &world) {
   opaques_.clear();
   transmissions_.clear();
+  alphaBlends_.clear();
 
   for (const RenderObject &object : world.GetObjects()) {
     if (!object.visible) {
@@ -848,20 +863,31 @@ void SceneRenderer::BuildStaticMeshRenderList(const RenderWorld &world) {
 
       const MaterialResource *material = nullptr;
 
-      if (submesh.materialSlot < object.materials.size()) {
-        material = &world.GetMaterial(object.materials[submesh.materialSlot]);
-      }
+      MaterialHandle handle{};
 
+      if (submesh.materialSlot >= 0 &&
+          submesh.materialSlot < static_cast<int>(object.materials.size())) {
+        handle = object.materials[submesh.materialSlot];
+
+        if (handle.IsValid()) {
+          material = &world.GetMaterial(handle);
+        }
+      }
+      item.materialHandle = handle;
       item.material = material;
       item.submesh = &submesh;
 
       bool isTransmission =
-          material && material->transmission.transmissionFactor > 0.0f;
+          material && material->transmission.transmissionFactor > 0.001f;
+
+      bool isBlend = material && material->alphaMode == AlphaMode::Blend;
 
       if (isTransmission) {
-        transmissions_.push_back(std::move(item));
+        transmissions_.push_back(item);
+      } else if (isBlend) {
+        alphaBlends_.push_back(item);
       } else {
-        opaques_.push_back(std::move(item));
+        opaques_.push_back(item);
       }
     }
   }
@@ -904,40 +930,26 @@ void SceneRenderer::RenderTransmissionMeshes(ICommandList &cmd,
     pc.showMode = 4;
     pc.hasTangents = submesh.hasTangents ? 1 : 0;
 
-    MaterialDataGPU materialGPU{};
-    materialGPU.baseColorFactor =
-        material ? material->baseColorFactor : glm::vec4(1.0f);
-    materialGPU.metallicFactor = material ? material->metallicFactor : 0.0f;
-    materialGPU.roughnessFactor = material ? material->roughnessFactor : 1.0f;
-    materialGPU.alphaCutoff = material ? material->alphaCutoff : 0.5f;
-    materialGPU.alphaMode =
-        material ? static_cast<int>(material->alphaMode) : 0;
-    materialGPU.hasMaterial = material ? 1 : 0;
+    pc.materialIndex = 0;
 
-    materialGPU.transmissionFactor =
-        material ? material->transmission.transmissionFactor : 0.0f;
+    if (item.materialHandle.IsValid()) {
+      auto it = materialGpuIndex_.find(item.materialHandle.id);
+      if (it != materialGpuIndex_.end()) {
+        pc.materialIndex = static_cast<int>(it->second);
+      }
+    }
 
-    materialGPU.thicknessFactor =
-        material ? material->volume.thicknessFactor : 0.0f;
-
-    materialGPU.ior = 1.5f;
-
-    materialGPU.attenuationColorDistance = glm::vec4(
-        material ? material->volume.attenuationColor : glm::vec3(1.0f),
-        material ? material->volume.attenuationDistance : 0.0f);
-
-    cmd.UpdateBuffer({
-        .buffer = materialUBO_,
-        .offset = 0,
-        .data = &materialGPU,
-        .size = sizeof(MaterialDataGPU),
-    });
-
-    cmd.PushConstants(ShaderStage::Vertex, 0, sizeof(StaticMeshPushConstants),
-                      &pc);
+    cmd.PushConstants(ShaderStage::Vertex | ShaderStage::Fragment, 0,
+                      sizeof(StaticMeshPushConstants), &pc);
 
     meshRenderer_.DrawSubmesh(&cmd, *item.mesh, submesh, material, pipeline);
   }
+}
+
+void SceneRenderer::RenderAlphaBlendMeshes(ICommandList &cmd,
+                                           const Camera &camera,
+                                           DebugContext dbgCtx) {
+  RenderStaticMeshes(cmd, camera, dbgCtx, alphaBlends_);
 }
 
 void SceneRenderer::RenderStaticMeshes(
@@ -977,22 +989,15 @@ void SceneRenderer::RenderStaticMeshes(
     pc.showMode = 4;
     pc.hasTangents = submesh.hasTangents ? 1 : 0;
 
-    MaterialDataGPU materialGPU;
-    materialGPU.baseColorFactor =
-        material ? material->baseColorFactor : glm::vec4(1.0f);
-    materialGPU.metallicFactor = material ? material->metallicFactor : 0.0f;
-    materialGPU.roughnessFactor = material ? material->roughnessFactor : 1.0f;
-    materialGPU.alphaCutoff = material ? material->alphaCutoff : 0.5f;
-    materialGPU.alphaMode =
-        material ? static_cast<int>(material->alphaMode) : 0;
-    materialGPU.hasMaterial = material ? 1 : 0;
+    pc.materialIndex = 0;
 
-    cmd.UpdateBuffer({
-        .buffer = materialUBO_,
-        .offset = 0,
-        .data = &materialGPU,
-        .size = sizeof(MaterialDataGPU),
-    });
+    if (item.materialHandle.IsValid()) {
+      auto it = materialGpuIndex_.find(item.materialHandle.id);
+      if (it != materialGpuIndex_.end()) {
+        pc.materialIndex = static_cast<int>(it->second);
+      }
+    }
+
     cmd.PushConstants(ShaderStage::Vertex | ShaderStage::Fragment, 0,
                       sizeof(StaticMeshPushConstants), &pc);
 
@@ -1081,6 +1086,8 @@ void SceneRenderer::BeginMainPass(ICommandList &cmd,
   frameData.proj = camera.GetProjection();
   frameData.view = camera.GetView();
 
+  frameData.viewportSize = {frame.extent.width, frame.extent.height};
+
   frameData.showMode = static_cast<int>(dbgCtx.mode);
 
   cmd.UpdateBuffer(
@@ -1102,11 +1109,11 @@ void SceneRenderer::BeginMainPass(ICommandList &cmd,
   colorAttachment.view = frame.backbufferView;
   colorAttachment.loadOp = LoadOp::Clear;
   colorAttachment.storeOp = StoreOp::Store;
-  colorAttachment.clearValue = {0.1f, 0.1f, 0.1f, 1.0f};
+  colorAttachment.clearValue = {0.0f, 0.0f, 0.0f, 1.0f};
 
   DepthAttachmentDesc depthAttachment{};
   depthAttachment.view = frame.depthView;
-  depthAttachment.loadOp = LoadOp::Clear;
+  depthAttachment.loadOp = LoadOp::Load;
   depthAttachment.storeOp = StoreOp::Store;
   depthAttachment.clearDepth = 1.0f;
   depthAttachment.clearStencil = 0;
@@ -1148,6 +1155,8 @@ void SceneRenderer::BeginOpaquePass(ICommandList &cmd,
   frameData.lightColor = glm::vec4(directionalShadow_.color, 1.0f);
   frameData.lightIntensity = directionalShadow_.intensity;
   frameData.shadowsEnabled = directionalShadow_.enabled ? 1 : 0;
+
+  frameData.viewportSize = {frame.extent.width, frame.extent.height};
 
   frameData.proj = camera.GetProjection();
   frameData.view = camera.GetView();
@@ -1229,6 +1238,45 @@ void SceneRenderer::TransitionOpaqueSceneToReadable(ICommandList &cmd) {
   });
 
   opaqueScene_.layout = ImageLayout::ShaderReadOnly;
+}
+
+void SceneRenderer::UploadMaterialBuffer(ICommandList &command,
+                                         const RenderWorld &world) {
+  materialGpuIndex_.clear();
+
+  std::vector<MaterialDataGPU> gpuMaterials;
+  gpuMaterials.reserve(world.GetMaterials().size());
+
+  uint32_t gpuIndex = 0;
+
+  for (const auto &[handleId, material] : world.GetMaterials()) {
+    materialGpuIndex_[handleId] = gpuIndex++;
+
+    MaterialDataGPU gpu{};
+    gpu.baseColorFactor = material.baseColorFactor;
+    gpu.metallicFactor = material.metallicFactor;
+    gpu.roughnessFactor = material.roughnessFactor;
+    gpu.alphaCutoff = material.alphaCutoff;
+    gpu.alphaMode = static_cast<int>(material.alphaMode);
+    gpu.hasMaterial = 1;
+
+    gpu.transmissionFactor = material.transmission.transmissionFactor;
+    gpu.thicknessFactor = material.volume.thicknessFactor;
+    gpu.ior = 1.5f;
+    gpu.attenuationColorDistance = glm::vec4(
+        material.volume.attenuationColor, material.volume.attenuationDistance);
+
+    gpuMaterials.push_back(gpu);
+  }
+
+  if (!gpuMaterials.empty()) {
+    command.UpdateBuffer({
+        .buffer = materialBuffer_,
+        .offset = 0,
+        .data = gpuMaterials.data(),
+        .size = gpuMaterials.size() * sizeof(MaterialDataGPU),
+    });
+  }
 }
 
 } // namespace Rodan

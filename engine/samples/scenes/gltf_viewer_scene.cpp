@@ -347,9 +347,24 @@ void GltfViewerScene::LoadScene(IDevice *device, std::string path) {
   std::vector<MaterialHandle> materialHandles;
   materialHandles.reserve(asset_->GetMaterials().size());
 
+  int materialIndex = 0;
   for (const MaterialResource &material : asset_->GetMaterials()) {
-    materialHandles.push_back(renderWorld_.AddMaterial(material));
-    std::cout << material.transmission.transmissionFactor << std::endl;
+    MaterialHandle handle = renderWorld_.AddMaterial(material);
+    materialHandles.push_back(handle);
+
+    std::cout << "[Material " << materialIndex << "] "
+              << "handle=" << handle.id << " baseColor=("
+              << material.baseColorFactor.r << ", "
+              << material.baseColorFactor.g << ", "
+              << material.baseColorFactor.b << ", "
+              << material.baseColorFactor.a << ")"
+              << " metallic=" << material.metallicFactor
+              << " roughness=" << material.roughnessFactor
+              << " alphaMode=" << static_cast<int>(material.alphaMode)
+              << " transmission=" << material.transmission.transmissionFactor
+              << "\n";
+
+    materialIndex++;
   }
 
   for (const StaticMeshInstance &instance : instances_) {
@@ -359,14 +374,38 @@ void GltfViewerScene::LoadScene(IDevice *device, std::string path) {
 
     MeshHandle meshHandle = renderWorld_.AddMesh(*instance.mesh);
 
+    std::cout << "\n[Mesh instance]\n";
+
+    for (size_t i = 0; i < instance.mesh->submeshes.size(); ++i) {
+      const Submesh &submesh = instance.mesh->submeshes[i];
+
+      std::cout << "  submesh=" << i
+                << " materialSlot=" << submesh.materialSlot;
+
+      if (submesh.materialSlot >= 0 &&
+          submesh.materialSlot < static_cast<int>(materialHandles.size())) {
+        const MaterialResource &mat =
+            renderWorld_.GetMaterial(materialHandles[submesh.materialSlot]);
+
+        std::cout << " -> materialHandle="
+                  << materialHandles[submesh.materialSlot].id << " baseColor=("
+                  << mat.baseColorFactor.r << ", " << mat.baseColorFactor.g
+                  << ", " << mat.baseColorFactor.b << ", "
+                  << mat.baseColorFactor.a << ")"
+                  << " alphaMode=" << static_cast<int>(mat.alphaMode)
+                  << " transmission=" << mat.transmission.transmissionFactor;
+      } else {
+        std::cout << " -> INVALID MATERIAL SLOT";
+      }
+
+      std::cout << "\n";
+    }
+
     RenderObjectDesc desc{};
     desc.mesh = meshHandle;
     desc.materials = materialHandles;
     desc.visible = true;
-
-    Transform transform = instance.localTransform;
-
-    desc.transform = transform;
+    desc.transform = instance.localTransform;
 
     currentRenderTargets_.push_back(renderWorld_.CreateObject(desc));
   }

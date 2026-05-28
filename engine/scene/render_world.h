@@ -28,6 +28,7 @@ public:
   const MeshResource &GetMesh(MeshHandle handle) const;
   const MaterialResource &GetMaterial(MaterialHandle handle) const;
   const std::vector<DirectionalLight> &GetDirectionalLights() const;
+  const std::unordered_map<uint32_t, MaterialResource> &GetMaterials() const;
   DirectionalLight &GetDirectionalLight(DirectionalLightHandle handle);
 
   void Clear();

@@ -79,6 +79,11 @@ const MaterialResource &RenderWorld::GetMaterial(MaterialHandle handle) const {
   return materials_.at(handle.id);
 }
 
+const std::unordered_map<uint32_t, MaterialResource> &
+RenderWorld::GetMaterials() const {
+  return materials_;
+}
+
 const std::vector<DirectionalLight> &RenderWorld::GetDirectionalLights() const {
   return directionalLights_;
 }

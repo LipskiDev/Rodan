@@ -8,6 +8,8 @@ struct StaticMeshPushConstants {
 
   int showMode;
   int hasTangents;
+  int materialIndex;
+  int _pad0;
 };
 
 struct ShadowPushConstants {

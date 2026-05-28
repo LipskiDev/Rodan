@@ -20,6 +20,8 @@
 
 namespace Rodan {
 
+constexpr uint32_t k_MaxMaterials = 1024;
+
 struct alignas(16) FrameDataGPU {
   glm::mat4 view;
   glm::mat4 proj;
@@ -27,6 +29,8 @@ struct alignas(16) FrameDataGPU {
 
   glm::vec4 lightDirection;
   glm::vec4 lightColor;
+
+  glm::vec2 viewportSize;
 
   float lightIntensity;
   int shadowsEnabled;
@@ -53,6 +57,7 @@ struct alignas(16) MaterialDataGPU {
 struct StaticMeshRenderItem {
   const MeshResource *mesh = nullptr;
   const MaterialResource *material = nullptr;
+  MaterialHandle materialHandle{};
   const Submesh *submesh = nullptr;
 
   const MaterialResource *materialOverride = nullptr;
@@ -138,6 +143,9 @@ private:
                           DebugContext dbgCtx);
   void RenderTransmissionMeshes(ICommandList &cmd, const Camera &camera,
                                 DebugContext dbgCtx);
+
+  void RenderAlphaBlendMeshes(ICommandList &cmd, const Camera &camera,
+                              DebugContext dbgCtx);
   void RenderStaticMeshes(ICommandList &cmd, const Camera &camera,
                           DebugContext dbgCtx,
                           const std::vector<StaticMeshRenderItem> &items);
@@ -159,6 +167,8 @@ private:
   void UpdateOpaqueSceneDescriptor();
 
   void TransitionOpaqueSceneToReadable(ICommandList &cmd);
+
+  void UploadMaterialBuffer(ICommandList &command, const RenderWorld &world);
 
 private:
   IDevice *device_ = nullptr;
@@ -190,7 +200,7 @@ private:
   DescriptorSetHandle opaqueSceneSet_{};
 
   BufferHandle frameUBO_;
-  BufferHandle materialUBO_;
+  BufferHandle materialBuffer_;
 
   MeshRenderer meshRenderer_;
 
@@ -202,6 +212,7 @@ private:
 
   std::vector<StaticMeshRenderItem> opaques_;
   std::vector<StaticMeshRenderItem> transmissions_;
+  std::vector<StaticMeshRenderItem> alphaBlends_;
 
   std::unordered_map<MeshPipelineKey, PipelineHandle, MeshPipelineKeyHasher>
       pipelines_;
@@ -225,6 +236,8 @@ private:
   OpaqueSceneTarget opaqueScene_;
 
   bool recreated = false;
+
+  std::unordered_map<uint32_t, uint32_t> materialGpuIndex_;
 };
 
 } // namespace Rodan
