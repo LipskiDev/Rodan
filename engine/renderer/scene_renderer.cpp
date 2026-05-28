@@ -391,6 +391,18 @@ void SceneRenderer::Shutdown(IDevice *device) {
     device_->DestroyShader(transmissionFS_);
     transmissionFS_ = {};
   }
+
+  if (opaqueScenePool_.IsValid()) {
+    device->DestroyDescriptorPool(opaqueScenePool_);
+    opaqueScenePool_ = {};
+    opaqueSceneSet_ = {};
+  }
+
+  if (opaqueSceneLayout_.IsValid()) {
+    device->DestroyDescriptorSetLayout(opaqueSceneLayout_);
+    opaqueSceneLayout_ = {};
+  }
+
   device_->DestroySampler(directionalShadow_.texture.sampler);
   device_->DestroyImageView(directionalShadow_.texture.view);
   device_->DestroyImage(directionalShadow_.texture.image);
