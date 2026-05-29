@@ -11,6 +11,7 @@
 #include "rhi/rhi_pipeline.h"
 #include "rhi/rhi_resources.h"
 #include "rhi/rhi_types.h"
+#include "rhi/vulkan/vk_device.h"
 #include "scene/handles.h"
 #include "scene/render_world.h"
 #include <core/path.h>
@@ -454,7 +455,9 @@ void SceneRenderer::Render(ICommandList &cmd, const RenderWorld &world,
 
   EndOpaquePass(cmd);
 
-  TransitionOpaqueSceneToReadable(cmd);
+  cmd.GenerateMipmaps(opaqueScene_.texture.image, frame.extent.width,
+                      frame.extent.height, opaqueScene_.mipLevels, 1,
+                      ImageLayout::ColorAttachment);
 
   // PASS 2: transmission -> backbuffer
   BeginMainPass(cmd, frame, camera, dbgCtx);
@@ -699,20 +702,28 @@ void SceneRenderer::EnsureOpaqueSceneTarget(const FrameRenderContext &frame) {
   recreated = true;
 
   opaqueScene_.extent = frame.extent;
-  opaqueScene_.layout = ImageLayout::Undefined;
+
+  uint32_t mipLevels =
+      1u + static_cast<uint32_t>(std::floor(
+               std::log2(std::max(frame.extent.width, frame.extent.height))));
 
   opaqueScene_.texture.image = device_->CreateImage({
       .width = frame.extent.width,
       .height = frame.extent.height,
+      .mipLevels = mipLevels,
       .format = colorFormat_,
-      .usage = ImageUsage::ColorAttachment | ImageUsage::Sampled,
+      .usage = ImageUsage::ColorAttachment | ImageUsage::Sampled |
+               ImageUsage::TransferSrc | ImageUsage::TransferDst,
       .debugName = "Opaque Scene Color",
   });
+  opaqueScene_.mipLevels = mipLevels;
 
   opaqueScene_.texture.view = device_->CreateImageView({
       .image = opaqueScene_.texture.image,
       .format = colorFormat_,
       .aspect = ImageAspect::Color,
+      .baseMipLevel = 0,
+      .mipLevelCount = 1,
   });
 
   opaqueScene_.texture.sampler = device_->CreateSampler({
@@ -721,6 +732,8 @@ void SceneRenderer::EnsureOpaqueSceneTarget(const FrameRenderContext &frame) {
       .addressU = SamplerAddressMode::ClampToEdge,
       .addressV = SamplerAddressMode::ClampToEdge,
       .addressW = SamplerAddressMode::ClampToEdge,
+      .minLod = 0.0f,
+      .maxLod = static_cast<float>(mipLevels - 1),
   });
 
   if (recreated) {
@@ -1178,11 +1191,15 @@ void SceneRenderer::BeginOpaquePass(ICommandList &cmd,
   cmd.UpdateBuffer(
       {.buffer = frameUBO_, .data = &frameData, .size = sizeof(FrameDataGPU)});
 
+  auto currentLayout = device_->GetImageLayout(opaqueScene_.texture.image, 0);
+
   cmd.Barrier({
       .image = opaqueScene_.texture.image,
-      .oldLayout = opaqueScene_.layout,
+      .oldLayout = currentLayout,
       .newLayout = ImageLayout::ColorAttachment,
       .aspect = ImageAspect::Color,
+      .baseMipLevel = 0,
+      .mipLevelCount = 1,
   });
 
   cmd.Barrier({
@@ -1242,13 +1259,12 @@ void SceneRenderer::TransitionOpaqueSceneToReadable(ICommandList &cmd) {
     return;
   }
 
-  cmd.Barrier({
-      .image = opaqueScene_.texture.image,
-      .oldLayout = opaqueScene_.layout,
-      .newLayout = ImageLayout::ShaderReadOnly,
-      .aspect = ImageAspect::Color,
-  });
-
+  cmd.Barrier({.image = opaqueScene_.texture.image,
+               .oldLayout = opaqueScene_.layout,
+               .newLayout = ImageLayout::ShaderReadOnly,
+               .aspect = ImageAspect::Color,
+               .baseMipLevel = 0,
+               .mipLevelCount = opaqueScene_.mipLevels});
   opaqueScene_.layout = ImageLayout::ShaderReadOnly;
 }
 

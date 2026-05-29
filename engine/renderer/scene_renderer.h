@@ -231,6 +231,7 @@ private:
     Texture texture{};
     Extent2D extent{};
     ImageLayout layout = ImageLayout::Undefined;
+    uint32_t mipLevels;
   };
 
   OpaqueSceneTarget opaqueScene_;

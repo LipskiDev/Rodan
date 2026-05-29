@@ -219,7 +219,8 @@ void EnvironmentMap::RecordUpload(ICommandList &cmd) {
     cmd.CopyBufferToImage(stagingBuffer_, image_, region);
   }
 
-  cmd.GenerateMipmaps(image_, faceSize_, faceSize_, mipLevels_, 6);
+  cmd.GenerateMipmaps(image_, faceSize_, faceSize_, mipLevels_, 6,
+                      ImageLayout::TransferDst);
 
   uploaded_ = true;
 }

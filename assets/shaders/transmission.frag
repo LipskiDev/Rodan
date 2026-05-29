@@ -118,7 +118,8 @@ vec3 sampleOpaqueScene(vec2 uv, float roughness)
 {
     uv = clamp(uv, vec2(0.001), vec2(0.999));
 
-    float lod = roughness * roughness * 4.0;
+    float maxLod = float(textureQueryLevels(u_OpaqueScene) - 1);
+    float lod = roughness * roughness * maxLod;
 
     return textureLod(u_OpaqueScene, uv, lod).rgb;
 }
