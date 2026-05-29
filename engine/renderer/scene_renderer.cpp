@@ -573,7 +573,7 @@ PipelineHandle SceneRenderer::GetOrCreatePipeline(const MeshPipelineKey &key) {
   desc.layout.descriptorSetLayoutCount = 4;
 
   // Raster state
-  desc.raster.cullBackFaces = false;
+  desc.raster.cullBackFaces = true;
   desc.raster.frontFaceCCW = true;
   desc.raster.wireframe = false;
 
@@ -663,7 +663,7 @@ PipelineHandle SceneRenderer::GetOrCreateTransmissionPipeline() {
   desc.raster.wireframe = false;
 
   desc.depth.depthTestEnable = true;
-  desc.depth.depthWriteEnable = false;
+  desc.depth.depthWriteEnable = true;
   desc.depth.depthFormat = depthFormat_;
 
   desc.blend.enable = false;
@@ -723,7 +723,7 @@ void SceneRenderer::EnsureOpaqueSceneTarget(const FrameRenderContext &frame) {
       .format = colorFormat_,
       .aspect = ImageAspect::Color,
       .baseMipLevel = 0,
-      .mipLevelCount = 1,
+      .mipLevelCount = opaqueScene_.mipLevels,
   });
 
   opaqueScene_.texture.sampler = device_->CreateSampler({
@@ -1199,7 +1199,7 @@ void SceneRenderer::BeginOpaquePass(ICommandList &cmd,
       .newLayout = ImageLayout::ColorAttachment,
       .aspect = ImageAspect::Color,
       .baseMipLevel = 0,
-      .mipLevelCount = 1,
+      .mipLevelCount = opaqueScene_.mipLevels,
   });
 
   cmd.Barrier({

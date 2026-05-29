@@ -119,7 +119,7 @@ vec3 sampleOpaqueScene(vec2 uv, float roughness)
     uv = clamp(uv, vec2(0.001), vec2(0.999));
 
     float maxLod = float(textureQueryLevels(u_OpaqueScene) - 1);
-    float lod = roughness * roughness * maxLod;
+    float lod = roughness * maxLod;
 
     return textureLod(u_OpaqueScene, uv, lod).rgb;
 }
@@ -150,9 +150,10 @@ void main()
     float alpha = material.baseColorFactor.a * baseSample.a;
 
     vec4 mrSample = texture(u_MetallicRoughness, vUV);
+    float mrRoughness = mrSample.g;
 
     float perceptualRoughness =
-        clamp(material.roughnessFactor * mrSample.g, 0.04, 1.0);
+        clamp(material.roughnessFactor * mrSample.g, 0.0, 1.0);
 
     float ior =
         material.ior > 0.0 ? material.ior : 1.5;
@@ -160,9 +161,7 @@ void main()
     float transmission =
         saturate(material.transmissionFactor);
 
-    float transmissionRoughness =
-        perceptualRoughness *
-        clamp(ior * 2.0 - 2.0, 0.0, 1.0);
+    float transmissionRoughness = clamp(mrRoughness * mrRoughness, 0.0, 1.0);
 
     vec2 screenUV =
         gl_FragCoord.xy / max(frame.viewportSize, vec2(1.0));
@@ -181,6 +180,8 @@ void main()
     vec3 transmitted =
         sampleOpaqueScene(transmissionUV, transmissionRoughness);
 
+    float transmissionVisibility = transmission * (1.0 - perceptualRoughness * 0.65);
+
     transmitted =
         applyVolumeAttenuation(
             transmitted,
@@ -189,7 +190,7 @@ void main()
             material.attenuationColorDistance.a
         );
 
-    if (material.thicknessFactor > 0.0) {
+    if (material.attenuationColorDistance.a > 0.0) {
         transmitted *= baseColor;
     }
 
@@ -218,7 +219,7 @@ void main()
         reflected * fresnel;
 
     vec3 finalColor =
-        mix(baseColor, glass, transmission);
+        mix(baseColor, glass, transmissionVisibility);
 
     outColor = vec4(finalColor, alpha);
 }
