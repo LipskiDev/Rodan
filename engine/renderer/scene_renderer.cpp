@@ -225,10 +225,13 @@ void SceneRenderer::Initialize(IDevice *device, SwapchainHandle swapchain,
   opaqueScenePool_ = device_->CreateDescriptorPool({
       .poolSizes = opaqueScenePoolSizes,
       .poolSizeCount = 1,
-      .maxSets = 1,
+      .maxSets = 2,
   });
 
   opaqueSceneSet_ =
+      device_->AllocateDescriptorSet(opaqueScenePool_, opaqueSceneLayout_);
+
+  dummmyOpaqueSceneSet_ =
       device_->AllocateDescriptorSet(opaqueScenePool_, opaqueSceneLayout_);
 
   DescriptorImageInfo shadowImage{};
@@ -274,38 +277,6 @@ void SceneRenderer::Initialize(IDevice *device, SwapchainHandle swapchain,
 
   shadowLayout_ = ImageLayout::Undefined;
 
-  auto transmissionVertSpv = Velos::ShaderCompiler::CompileFile({
-      .path = Velos::Path::Resolve("assets/shaders/transmission.vert").string(),
-      .stage = ShaderStage::Vertex,
-      .entryPoint = "main",
-  });
-
-  auto transmissionFragSpv = Velos::ShaderCompiler::CompileFile({
-      .path = Velos::Path::Resolve("assets/shaders/transmission.frag").string(),
-      .stage = ShaderStage::Fragment,
-      .entryPoint = "main",
-  });
-
-  transmissionVS_ = device_->CreateShader({
-      .stage = ShaderStage::Vertex,
-      .bytecode = transmissionVertSpv.spirv.data(),
-      .bytecodeSize = static_cast<uint64_t>(transmissionVertSpv.spirv.size() *
-                                            sizeof(uint32_t)),
-      .entryPoint = "main",
-      .reflection = transmissionVertSpv.reflection,
-      .debugName = "Transmission VS",
-  });
-
-  transmissionFS_ = device_->CreateShader({
-      .stage = ShaderStage::Fragment,
-      .bytecode = transmissionFragSpv.spirv.data(),
-      .bytecodeSize = static_cast<uint64_t>(transmissionFragSpv.spirv.size() *
-                                            sizeof(uint32_t)),
-      .entryPoint = "main",
-      .reflection = transmissionFragSpv.reflection,
-      .debugName = "Transmission FS",
-  });
-
   environment_ = EnvironmentMap::LoadHDR(
       device, Velos::Path::Resolve("assets/hdr/piazza_bologni_4k.hdr"));
 
@@ -323,6 +294,7 @@ void SceneRenderer::Shutdown(IDevice *device) {
   pipelines_.clear();
 
   DestroyTexture(device, opaqueScene_.texture);
+  DestroyTexture(device, opaqueScene_.dummy);
   opaqueScene_ = {};
 
   DestroyTexture(device, iblResources_.prefilterTexture);
@@ -383,16 +355,6 @@ void SceneRenderer::Shutdown(IDevice *device) {
     transmissionPipeline_ = {};
   }
 
-  if (transmissionVS_) {
-    device_->DestroyShader(transmissionVS_);
-    transmissionVS_ = {};
-  }
-
-  if (transmissionFS_) {
-    device_->DestroyShader(transmissionFS_);
-    transmissionFS_ = {};
-  }
-
   if (opaqueScenePool_.IsValid()) {
     device->DestroyDescriptorPool(opaqueScenePool_);
     opaqueScenePool_ = {};
@@ -444,40 +406,16 @@ void SceneRenderer::Render(ICommandList &cmd, const RenderWorld &world,
   }
 
   // PASS 1: opaque -> opaqueScene_
-  BeginOpaquePass(cmd, frame, camera, dbgCtx);
-
-  RenderOpaqueMeshes(cmd, camera, dbgCtx);
-
-  if (environment_) {
-    skyboxPass_.Render(cmd, *environment_, camera.GetView(),
-                       camera.GetProjection());
-  }
-
-  EndOpaquePass(cmd);
+  RenderOpaquePass(cmd, frame, camera, dbgCtx);
 
   cmd.GenerateMipmaps(opaqueScene_.texture.image, frame.extent.width,
                       frame.extent.height, opaqueScene_.mipLevels, 1,
                       ImageLayout::ColorAttachment);
 
+  opaqueScene_.layout = ImageLayout::ShaderReadOnly;
+
   // PASS 2: transmission -> backbuffer
-  BeginMainPass(cmd, frame, camera, dbgCtx);
-  RenderOpaqueMeshes(cmd, camera, dbgCtx);
-
-  if (environment_) {
-    skyboxPass_.Render(cmd, *environment_, camera.GetView(),
-                       camera.GetProjection());
-  }
-
-  RenderTransmissionMeshes(cmd, camera, dbgCtx);
-  RenderAlphaBlendMeshes(cmd, camera, dbgCtx);
-
-  RenderDebug(cmd, world, camera, dbgCtx);
-
-  if (frame.renderUi) {
-    frame.renderUi(cmd);
-  }
-
-  EndMainPass(cmd);
+  RenderMainPass(cmd, world, frame, camera, dbgCtx);
 
   opaques_.clear();
   transmissions_.clear();
@@ -640,8 +578,8 @@ PipelineHandle SceneRenderer::GetOrCreateTransmissionPipeline() {
   }
 
   GraphicsPipelineDesc desc{};
-  desc.vertexShader = transmissionVS_;
-  desc.fragmentShader = transmissionFS_;
+  desc.vertexShader = staticMeshVS_;
+  desc.fragmentShader = staticMeshFS_;
   desc.topology = PrimitiveTopology::TriangleList;
   desc.colorFormat = colorFormat_;
   desc.debugName = "SceneRenderer.TransmissionPipeline";
@@ -696,6 +634,7 @@ void SceneRenderer::EnsureOpaqueSceneTarget(const FrameRenderContext &frame) {
 
   if (opaqueScene_.texture.image.IsValid()) {
     DestroyTexture(device_, opaqueScene_.texture);
+    DestroyTexture(device_, opaqueScene_.dummy);
     opaqueScene_ = {};
   }
 
@@ -736,6 +675,28 @@ void SceneRenderer::EnsureOpaqueSceneTarget(const FrameRenderContext &frame) {
       .maxLod = static_cast<float>(mipLevels - 1),
   });
 
+  auto upload = device_->CreateUploadContext(4 * 256 * 1024 * 1024);
+  upload->Begin();
+
+  const std::uint8_t whitePixel[4] = {255, 255, 255, 255};
+
+  opaqueScene_.dummy =
+      CreateTexture2D(device_, upload.get(),
+                      TextureDesc{
+                          .width = 1,
+                          .height = 1,
+                          .format = Format::RGBA8_UNORM,
+                          .minFilter = Filter::Linear,
+                          .magFilter = Filter::Linear,
+                          .addressU = SamplerAddressMode::Repeat,
+                          .addressV = SamplerAddressMode::Repeat,
+                          .addressW = SamplerAddressMode::Repeat,
+                          .debugName = "Dummy OpaqueScene Texture",
+                      },
+                      whitePixel, 4);
+
+  upload->Flush();
+
   if (recreated) {
     UpdateOpaqueSceneDescriptor();
   }
@@ -750,10 +711,21 @@ void SceneRenderer::UpdateOpaqueSceneDescriptor() {
   device_->UpdateDescriptorSet({
       .dstSet = opaqueSceneSet_,
       .binding = 0,
-      .arrayElement = 0,
       .type = DescriptorType::CombinedImageSampler,
-      .bufferInfo = nullptr,
       .imageInfo = &opaqueSceneImage,
+      .descriptorCount = 1,
+  });
+
+  DescriptorImageInfo dummyImage{};
+  dummyImage.imageView = opaqueScene_.dummy.view;
+  dummyImage.sampler = opaqueScene_.dummy.sampler;
+  dummyImage.imageLayout = ImageLayout::ShaderReadOnly;
+
+  device_->UpdateDescriptorSet({
+      .dstSet = dummmyOpaqueSceneSet_,
+      .binding = 0,
+      .type = DescriptorType::CombinedImageSampler,
+      .imageInfo = &dummyImage,
       .descriptorCount = 1,
   });
 }
@@ -1007,7 +979,12 @@ void SceneRenderer::RenderStaticMeshes(
       cmd.BindDescriptorSet(pipeline, 2, iblResources_.descriptorSet);
     }
 
-    cmd.BindDescriptorSet(pipeline, 3, opaqueSceneSet_);
+    DescriptorSetHandle sceneSet =
+        (opaqueScene_.layout == ImageLayout::ColorAttachment)
+            ? dummmyOpaqueSceneSet_
+            : opaqueSceneSet_;
+
+    cmd.BindDescriptorSet(pipeline, 3, sceneSet);
 
     StaticMeshPushConstants pc{};
     pc.model = item.worldTransform.ToMatrix() * item.localTransform.ToMatrix();
@@ -1094,6 +1071,48 @@ void SceneRenderer::RenderDebug(ICommandList &cmd, const RenderWorld &world,
 
   lineRenderer3D_->render(cmd, camera.GetProjection() * camera.GetView());
   lineRenderer3D_->clear();
+}
+
+void SceneRenderer::RenderOpaquePass(ICommandList &cmd,
+                                     const FrameRenderContext &frame,
+                                     const Camera &camera,
+                                     const DebugContext &dbgCtx) {
+
+  BeginOpaquePass(cmd, frame, camera, dbgCtx);
+
+  RenderOpaqueMeshes(cmd, camera, dbgCtx);
+
+  if (environment_) {
+    skyboxPass_.Render(cmd, *environment_, camera.GetView(),
+                       camera.GetProjection());
+  }
+
+  EndOpaquePass(cmd);
+}
+
+void SceneRenderer::RenderMainPass(ICommandList &cmd, const RenderWorld &world,
+                                   const FrameRenderContext &frame,
+                                   const Camera &camera,
+                                   const DebugContext &dbgCtx) {
+
+  BeginMainPass(cmd, frame, camera, dbgCtx);
+  RenderOpaqueMeshes(cmd, camera, dbgCtx);
+
+  if (environment_) {
+    skyboxPass_.Render(cmd, *environment_, camera.GetView(),
+                       camera.GetProjection());
+  }
+
+  RenderTransmissionMeshes(cmd, camera, dbgCtx);
+  RenderAlphaBlendMeshes(cmd, camera, dbgCtx);
+
+  RenderDebug(cmd, world, camera, dbgCtx);
+
+  if (frame.renderUi) {
+    frame.renderUi(cmd);
+  }
+
+  EndMainPass(cmd);
 }
 
 void SceneRenderer::BeginMainPass(ICommandList &cmd,
