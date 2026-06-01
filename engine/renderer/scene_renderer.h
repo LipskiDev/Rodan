@@ -153,6 +153,13 @@ private:
   void RenderDebug(ICommandList &cmd, const RenderWorld &world,
                    const Camera &camera, DebugContext dbgCtx);
 
+  void RenderOpaquePass(ICommandList &cmd, const FrameRenderContext &frame,
+                        const Camera &camera, const DebugContext &dbgCtx);
+
+  void RenderMainPass(ICommandList &cmd, const RenderWorld &world,
+                      const FrameRenderContext &frame, const Camera &camera,
+                      const DebugContext &dbgCtx);
+
   void BeginMainPass(ICommandList &cmd, const FrameRenderContext &frame,
                      const Camera &camera, const DebugContext &dbgCtx);
 
@@ -185,8 +192,6 @@ private:
   ShaderHandle shadowVS_;
   ShaderHandle shadowFS_;
 
-  ShaderHandle transmissionVS_{};
-  ShaderHandle transmissionFS_{};
   PipelineHandle transmissionPipeline_{};
 
   DescriptorSetLayoutHandle materialLayout_{};
@@ -198,6 +203,7 @@ private:
   DescriptorSetLayoutHandle opaqueSceneLayout_{};
   DescriptorPoolHandle opaqueScenePool_{};
   DescriptorSetHandle opaqueSceneSet_{};
+  DescriptorSetHandle dummmyOpaqueSceneSet_{};
 
   BufferHandle frameUBO_;
   BufferHandle materialBuffer_;
@@ -229,6 +235,7 @@ private:
 
   struct OpaqueSceneTarget {
     Texture texture{};
+    Texture dummy{};
     Extent2D extent{};
     ImageLayout layout = ImageLayout::Undefined;
     uint32_t mipLevels;

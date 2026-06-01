@@ -53,6 +53,8 @@ layout(set = 2, binding = 0) uniform samplerCube u_IrradianceMap;
 layout(set = 2, binding = 1) uniform samplerCube u_PrefilterMap;
 layout(set = 2, binding = 2) uniform sampler2D u_BRDFLUT;
 
+layout(set = 3, binding = 0) uniform sampler2D u_OpaqueScene;
+
 layout(location = 0) out vec4 outColor;
 
 layout(push_constant) uniform PushConstants {
@@ -123,25 +125,87 @@ vec3 FresnelSchlickRoughness(
         * pow(1.0 - cosTheta, 5.0);
 }
 
-void main() {
-    vec4 baseTex = texture(u_BaseColor, vUV);
-    vec4 mrTex   = texture(u_MetallicRoughness, vUV);
-    vec3 nTex    = texture(u_Normal, vUV).xyz * 2.0 - 1.0;
-    float ao     = texture(u_OcclusionTexture, vUV).r;
+float saturate(float x)
+{
+    return clamp(x, 0.0, 1.0);
+}
 
+float dielectricF0(float ior)
+{
+    float f = (ior - 1.0) / (ior + 1.0);
+    return f * f;
+}
+
+vec3 applyVolumeAttenuation(
+    vec3 color,
+    float distance,
+    vec3 attenuationColor,
+    float attenuationDistance)
+{
+    if (attenuationDistance <= 0.0 || distance <= 0.0) {
+        return color;
+    }
+
+    vec3 safeColor = max(attenuationColor, vec3(0.001));
+    vec3 attenuationCoefficient = -log(safeColor) / attenuationDistance;
+    vec3 transmittance = exp(-attenuationCoefficient * distance);
+
+    return color * transmittance;
+}
+
+vec3 sampleOpaqueScene(vec2 uv, float roughness)
+{
+    uv = clamp(uv, vec2(0.001), vec2(0.999));
+
+    float maxLod = float(textureQueryLevels(u_OpaqueScene) - 1);
+    float lod = roughness * maxLod;
+
+    return textureLod(u_OpaqueScene, uv, lod).rgb;
+}
+
+vec2 projectWorldToScreenUV(vec3 worldPos)
+{
+    vec4 clip = u_Frame.proj * u_Frame.view * vec4(worldPos, 1.0);
+
+    if (clip.w <= 0.0) {
+        return gl_FragCoord.xy / max(u_Frame.viewportSize, vec2(1.0));
+    }
+
+    vec2 uv = clip.xy / clip.w;
+    uv = uv * 0.5 + 0.5;
+
+    return uv;
+}
+
+vec3 getNormal()
+{
     vec3 N = normalize(vWorldNormal);
 
     if (length(vTangent) > 0.001 &&
         length(vBitangent) > 0.001 &&
-        length(vNormal) > 0.001) {
+        length(vNormal) > 0.001)
+    {
+        vec3 normalSample = texture(u_Normal, vUV).xyz * 2.0 - 1.0;
+
         mat3 TBN = mat3(
             normalize(vTangent),
             normalize(vBitangent),
             normalize(vNormal)
         );
 
-        N = normalize(TBN * nTex);
+        N = normalize(TBN * normalSample);
     }
+
+    return N;
+}
+
+void main() {
+    vec4 baseTex = texture(u_BaseColor, vUV);
+    vec4 mrTex   = texture(u_MetallicRoughness, vUV);
+    vec3 nTex    = texture(u_Normal, vUV).xyz * 2.0 - 1.0;
+    float ao     = texture(u_OcclusionTexture, vUV).r;
+
+    vec3 N = getNormal();
 
     // SSBO material lookup
     vec3 baseColor = material.baseColorFactor.rgb * baseTex.rgb;
@@ -164,6 +228,9 @@ void main() {
 
     vec3 camPos = vec3(inverse(u_Frame.view)[3]);
     vec3 V = normalize(camPos - vWorldPos);
+
+    vec4 mrSample = texture(u_MetallicRoughness, vUV);
+    float mrRoughness = mrSample.g;
 
     vec3 L = normalize(-u_Frame.lightDirection.xyz);
     vec3 H = normalize(V + L);
@@ -233,10 +300,62 @@ void main() {
     vec3 ambient =
         diffuseIBL + specularIBL;
 
-    vec3 color = direct + ambient;
 
-    color = color / (color + vec3(1.0));
-    color = pow(color, vec3(1.0 / 2.2));
+    vec3 directDiffuse =
+        diffuse * radiance * NdotL * shadow;
+
+    vec3 directSpecular =
+        specular * radiance * NdotL * shadow;
+
+    vec3 f_diffuse = diffuseIBL + directDiffuse;
+    vec3 f_specular = specularIBL + directSpecular;
+
+    float transmission = saturate(material.transmissionFactor);
+
+    vec3 color = mix(f_diffuse, f_specular, F_ibl);
+
+    if(transmission > 0.001) {
+      float ior = material.ior > 0.0 ? material.ior : 1.5;
+
+      float perceptualRoughness = clamp(material.roughnessFactor * mrSample.g, 0.0, 1.0);
+      float alphaRoughness = perceptualRoughness * perceptualRoughness;
+
+      float transmissionRoughness = clamp(mrRoughness * mrRoughness, 0.0, 1.0);
+
+      vec2 transmissionUV = gl_FragCoord.xy / max(u_Frame.viewportSize, vec2(1.0));
+
+      float thickness = max(material.thicknessFactor, 0.0);
+      float safeThickness = min(thickness, 0.05);
+
+      if(safeThickness > 0.0001) {
+        vec3 refracted = refract(-V, N, 1.0 / ior);
+        vec3 exitPos = vWorldPos + normalize(refracted) * safeThickness;
+        transmissionUV = projectWorldToScreenUV(exitPos);
+      }
+
+      vec3 transmitted = sampleOpaqueScene(transmissionUV, transmissionRoughness);
+
+      float transmissionVisibility = transmission * (1.0 - perceptualRoughness * 0.65);
+
+      transmitted = applyVolumeAttenuation(transmitted, safeThickness, material.attenuationColorDistance.rgb, material.attenuationColorDistance.a);
+
+      if(material.attenuationColorDistance.a > 0.0) {
+        transmitted *= baseColor;
+      }
+
+      float f0 = dielectricF0(ior);
+
+      float fresnel = f0 + (1.0 - f0) * pow(1.0 - NdotV, 5.0);
+
+      vec3 R = normalize(reflect(-V, N));
+
+      vec3 reflected =
+          textureLod(u_PrefilterMap, R, perceptualRoughness * perceptualRoughness * maxReflectionLod).rgb;
+
+      vec3 glass = transmitted * (1.0 - fresnel) + reflected * fresnel;
+
+      color = mix(baseColor, glass, transmissionVisibility);
+    }
 
     outColor = vec4(color, alpha);
 }
