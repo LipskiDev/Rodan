@@ -31,12 +31,12 @@ struct ImportedTextureRef {
 
 struct ImportedTransmission {
   float transmissionFactor = 0.0f;
-  int transmissionTexture = -1;
+  ImportedTextureRef transmissionTexture;
 };
 
 struct ImportedVolume {
   float thicknessFactor = 0.0f;
-  int thicknessTexture = -1;
+  ImportedTextureRef thicknessTexture;
 
   glm::vec3 attenuationColor = glm::vec3(1.0f);
   float attenuationDistance = 0.0f;

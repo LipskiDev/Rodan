@@ -423,13 +423,48 @@ static ImportedMaterial LoadMaterial(const tinygltf::Model &model,
     if (ext.Has("transmissionTexture")) {
       const auto &tex = ext.Get("transmissionTexture");
 
-      out.transmission.transmissionTexture = tex.Get("index").Get<int>();
+      const int textureIndex = tex.Get("index").Get<int>();
+      const tinygltf::Texture &texture = model.textures.at(textureIndex);
+
+      out.transmission.transmissionTexture.imageIndex = texture.source;
+      out.transmission.transmissionTexture.samplerIndex = texture.sampler;
+      out.transmission.transmissionTexture.texCoord =
+          tex.Has("texCoord") ? tex.Get("texCoord").Get<int>() : 0;
     }
   }
 
   if (material.extensions.contains("KHR_materials_volume")) {
     const auto &ext = material.extensions.at("KHR_materials_volume");
-    // TODO finish
+
+    if (ext.Has("thicknessFactor")) {
+      out.volume.thicknessFactor =
+          static_cast<float>(ext.Get("thicknessFactor").GetNumberAsDouble());
+    }
+
+    if (ext.Has("attenuationColor")) {
+      const auto &c = ext.Get("attenuationColor");
+      out.volume.attenuationColor =
+          glm::vec3(static_cast<float>(c.Get(0).GetNumberAsDouble()),
+                    static_cast<float>(c.Get(1).GetNumberAsDouble()),
+                    static_cast<float>(c.Get(2).GetNumberAsDouble()));
+    }
+
+    if (ext.Has("attenuationDistance")) {
+      out.volume.attenuationDistance = static_cast<float>(
+          ext.Get("attenuationDistance").GetNumberAsDouble());
+    }
+
+    if (ext.Has("thicknessTexture")) {
+      const auto &texInfo = ext.Get("thicknessTexture");
+      int textureIndex = texInfo.Get("index").Get<int>();
+
+      const tinygltf::Texture &tex = model.textures.at(textureIndex);
+
+      out.volume.thicknessTexture.imageIndex = tex.source;
+      out.volume.thicknessTexture.samplerIndex = tex.sampler;
+      out.volume.thicknessTexture.texCoord =
+          texInfo.Has("texCoord") ? texInfo.Get("texCoord").Get<int>() : 0;
+    }
   }
 
   return out;

@@ -11,6 +11,8 @@ layout(set = 0, binding = 0) uniform sampler2D u_BaseColor;
 layout(set = 0, binding = 1) uniform sampler2D u_Normal;
 layout(set = 0, binding = 2) uniform sampler2D u_MetallicRoughness;
 layout(set = 0, binding = 3) uniform sampler2D u_OcclusionTexture;
+layout(set = 0, binding = 4) uniform sampler2D u_TransmissionTexture;
+layout(set = 0, binding = 5) uniform sampler2D u_ThicknessTexture;
 
 layout(set = 1, binding = 0) uniform sampler2D u_ShadowMap;
 layout(set = 1, binding = 1) uniform FrameData {
@@ -69,6 +71,15 @@ layout(push_constant) uniform PushConstants {
 #define material materials[pc.materialIndex]
 
 const float PI = 3.14159265359;
+
+vec3 extractScale(mat4 m)
+{
+    return vec3(
+        length(m[0].xyz),
+        length(m[1].xyz),
+        length(m[2].xyz)
+    );
+}
 
 float ComputeShadow(vec3 worldPos, vec3 normal, vec3 lightDir) {
     vec4 lightSpace = u_Frame.lightViewProj * vec4(worldPos, 1.0);
@@ -230,7 +241,7 @@ void main() {
     vec3 V = normalize(camPos - vWorldPos);
 
     vec4 mrSample = texture(u_MetallicRoughness, vUV);
-    float mrRoughness = mrSample.g;
+    float mrRoughness = mrSample.g * material.roughnessFactor;
 
     vec3 L = normalize(-u_Frame.lightDirection.xyz);
     vec3 H = normalize(V + L);
@@ -310,7 +321,11 @@ void main() {
     vec3 f_diffuse = diffuseIBL + directDiffuse;
     vec3 f_specular = specularIBL + directSpecular;
 
-    float transmission = saturate(material.transmissionFactor);
+    float transmission =
+        saturate(
+            material.transmissionFactor *
+            texture(u_TransmissionTexture, vUV).r
+        );
 
     vec3 color = mix(f_diffuse, f_specular, F_ibl);
 
@@ -324,12 +339,28 @@ void main() {
 
       vec2 transmissionUV = gl_FragCoord.xy / max(u_Frame.viewportSize, vec2(1.0));
 
-      float thickness = max(material.thicknessFactor, 0.0);
-      float safeThickness = min(thickness, 0.05);
+      vec3 objectScale = extractScale(pc.model);
+              float scaleCompensation =
+                  (objectScale.x + objectScale.y + objectScale.z) / 3.0;
 
-      if(safeThickness > 0.0001) {
+
+      float thickness =
+          material.thicknessFactor *
+          texture(u_ThicknessTexture, vUV).g *
+          scaleCompensation;
+
+      float transmissionDistance = 0.0;
+
+      if(thickness > 0.0001) {
         vec3 refracted = refract(-V, N, 1.0 / ior);
-        vec3 exitPos = vWorldPos + normalize(refracted) * safeThickness;
+
+        if(length(refracted) < 0.001) {
+          refracted = -V;
+        }
+
+        transmissionDistance = thickness / NdotV;
+
+        vec3 exitPos = vWorldPos + normalize(refracted) * thickness;
         transmissionUV = projectWorldToScreenUV(exitPos);
       }
 
@@ -337,11 +368,7 @@ void main() {
 
       float transmissionVisibility = transmission * (1.0 - perceptualRoughness * 0.65);
 
-      transmitted = applyVolumeAttenuation(transmitted, safeThickness, material.attenuationColorDistance.rgb, material.attenuationColorDistance.a);
-
-      if(material.attenuationColorDistance.a > 0.0) {
-        transmitted *= baseColor;
-      }
+      transmitted = applyVolumeAttenuation(transmitted, transmissionDistance, material.attenuationColorDistance.rgb, material.attenuationColorDistance.a);
 
       float f0 = dielectricF0(ior);
 
@@ -354,7 +381,7 @@ void main() {
 
       vec3 glass = transmitted * (1.0 - fresnel) + reflected * fresnel;
 
-      color = mix(baseColor, glass, transmissionVisibility);
+      color = mix(color, glass, transmissionVisibility);
     }
 
     outColor = vec4(color, alpha);

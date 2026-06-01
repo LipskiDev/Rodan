@@ -1,3 +1,5 @@
+#include "graphics/texture.h"
+#include "imgui_internal.h"
 #include "rhi/rhi_resources.h"
 #include "rhi/rhi_types.h"
 #include "rhi/rhi_upload_context.h"
@@ -76,6 +78,14 @@ void StaticGltfAsset::Destroy(IDevice *device) {
     if (mat.ownsOcclusionTextureResources) {
       DestroyTexture(device, mat.occlusionTexture);
     }
+
+    if (mat.transmission.ownsTransmissionTexture) {
+      DestroyTexture(device, mat.transmission.transmissionTexture);
+    }
+
+    if (mat.volume.ownsVolumeTexture) {
+      DestroyTexture(device, mat.volume.thicknessTexture);
+    }
   }
   materials_.clear();
 
@@ -99,35 +109,35 @@ void StaticGltfAsset::Destroy(IDevice *device) {
 void StaticGltfAsset::CreateMaterialLayout(IDevice *device) {
 
   DescriptorBindingDesc bindings[] = {
-      DescriptorBindingDesc{
-          .binding = 0,
-          .type = DescriptorType::CombinedImageSampler,
-          .count = 1,
-          .visibility = ShaderStage::Fragment,
-      },
-      DescriptorBindingDesc{
-          .binding = 1,
-          .type = DescriptorType::CombinedImageSampler,
-          .count = 1,
-          .visibility = ShaderStage::Fragment,
-      },
-      DescriptorBindingDesc{
-          .binding = 2,
-          .type = DescriptorType::CombinedImageSampler,
-          .count = 1,
-          .visibility = ShaderStage::Fragment,
-      },
-      DescriptorBindingDesc{
-          .binding = 3,
-          .type = DescriptorType::CombinedImageSampler,
-          .count = 1,
-          .visibility = ShaderStage::Fragment,
-      },
+      {.binding = 0,
+       .type = DescriptorType::CombinedImageSampler,
+       .count = 1,
+       .visibility = ShaderStage::Fragment},
+      {.binding = 1,
+       .type = DescriptorType::CombinedImageSampler,
+       .count = 1,
+       .visibility = ShaderStage::Fragment},
+      {.binding = 2,
+       .type = DescriptorType::CombinedImageSampler,
+       .count = 1,
+       .visibility = ShaderStage::Fragment},
+      {.binding = 3,
+       .type = DescriptorType::CombinedImageSampler,
+       .count = 1,
+       .visibility = ShaderStage::Fragment},
+      {.binding = 4,
+       .type = DescriptorType::CombinedImageSampler,
+       .count = 1,
+       .visibility = ShaderStage::Fragment}, // transmission
+      {.binding = 5,
+       .type = DescriptorType::CombinedImageSampler,
+       .count = 1,
+       .visibility = ShaderStage::Fragment}, // thickness
   };
 
   DescriptorSetLayoutDesc layout{};
   layout.bindings = bindings;
-  layout.bindingCount = 4;
+  layout.bindingCount = 6;
   layout.debugName = "GLTF Material Layout";
 
   materialLayout_ = device->CreateDescriptorSetLayout(layout);
@@ -141,7 +151,7 @@ void StaticGltfAsset::CreateDescriptorPool(IDevice *device,
 
   DescriptorPoolSize poolSize{};
   poolSize.type = DescriptorType::CombinedImageSampler;
-  poolSize.count = materialCount * 4;
+  poolSize.count = materialCount * 6;
 
   DescriptorPoolDesc poolDesc{};
   poolDesc.poolSizes = &poolSize;
@@ -303,8 +313,57 @@ void StaticGltfAsset::UploadMaterials(IDevice *device, IUploadContext *upload,
 
     gpuMat.transmission.transmissionFactor =
         mat.transmission.transmissionFactor;
-    gpuMat.transmission.transmissionTexture =
-        mat.transmission.transmissionTexture;
+
+    gpuMat.volume.thicknessFactor = mat.volume.thicknessFactor;
+    gpuMat.volume.attenuationColor = mat.volume.attenuationColor;
+    gpuMat.volume.attenuationDistance = mat.volume.attenuationDistance;
+
+    if (mat.transmission.transmissionTexture.imageIndex >= 0) {
+      const ImportedImage &img =
+          importedScene.images[mat.transmission.transmissionTexture.imageIndex];
+
+      gpuMat.transmission.transmissionTexture = CreateTexture2D(
+          device, upload,
+          TextureDesc{.width = static_cast<uint32_t>(img.width),
+                      .height = static_cast<uint32_t>(img.height),
+                      .format = Format::RGBA8_UNORM,
+                      .minFilter = Filter::Linear,
+                      .magFilter = Filter::Linear,
+                      .addressU = SamplerAddressMode::Repeat,
+                      .addressV = SamplerAddressMode::Repeat,
+                      .addressW = SamplerAddressMode::Repeat,
+                      .debugName = "GLTF Transmission Texture"},
+          img.pixelsRGBA8.data(),
+          static_cast<uint64_t>(img.pixelsRGBA8.size()));
+      gpuMat.transmission.ownsTransmissionTexture = true;
+
+    } else {
+      gpuMat.transmission.transmissionTexture =
+          fallbackTexture_; // white = multiplier 1
+    }
+
+    if (mat.volume.thicknessTexture.imageIndex >= 0) {
+      const ImportedImage &img =
+          importedScene.images[mat.volume.thicknessTexture.imageIndex];
+
+      gpuMat.volume.thicknessTexture = CreateTexture2D(
+          device, upload,
+          TextureDesc{.width = static_cast<uint32_t>(img.width),
+                      .height = static_cast<uint32_t>(img.height),
+                      .format = Format::RGBA8_UNORM,
+                      .minFilter = Filter::Linear,
+                      .magFilter = Filter::Linear,
+                      .addressU = SamplerAddressMode::Repeat,
+                      .addressV = SamplerAddressMode::Repeat,
+                      .addressW = SamplerAddressMode::Repeat,
+                      .debugName = "GLTF Thickness Texture"},
+          img.pixelsRGBA8.data(),
+          static_cast<uint64_t>(img.pixelsRGBA8.size()));
+      gpuMat.volume.ownsVolumeTexture = true;
+
+    } else {
+      gpuMat.volume.thicknessTexture = fallbackTexture_; // white = multiplier 1
+    }
 
     gpuMat.descriptorSet =
         device->AllocateDescriptorSet(descriptorPool_, materialLayout_);
@@ -329,6 +388,18 @@ void StaticGltfAsset::UploadMaterials(IDevice *device, IUploadContext *upload,
     occlusionImageInfo.sampler = gpuMat.occlusionTexture.sampler;
     occlusionImageInfo.imageView = gpuMat.occlusionTexture.view;
     occlusionImageInfo.imageLayout = ImageLayout::ShaderReadOnly;
+
+    DescriptorImageInfo transmissionImageInfo{};
+    transmissionImageInfo.sampler =
+        gpuMat.transmission.transmissionTexture.sampler;
+    transmissionImageInfo.imageView =
+        gpuMat.transmission.transmissionTexture.view;
+    transmissionImageInfo.imageLayout = ImageLayout::ShaderReadOnly;
+
+    DescriptorImageInfo thicknessImageInfo{};
+    thicknessImageInfo.sampler = gpuMat.volume.thicknessTexture.sampler;
+    thicknessImageInfo.imageView = gpuMat.volume.thicknessTexture.view;
+    thicknessImageInfo.imageLayout = ImageLayout::ShaderReadOnly;
 
     device->UpdateDescriptorSet({
         .dstSet = gpuMat.descriptorSet,
@@ -367,6 +438,22 @@ void StaticGltfAsset::UploadMaterials(IDevice *device, IUploadContext *upload,
         .type = DescriptorType::CombinedImageSampler,
         .bufferInfo = nullptr,
         .imageInfo = &occlusionImageInfo,
+        .descriptorCount = 1,
+    });
+
+    device->UpdateDescriptorSet({
+        .dstSet = gpuMat.descriptorSet,
+        .binding = 4,
+        .type = DescriptorType::CombinedImageSampler,
+        .imageInfo = &transmissionImageInfo,
+        .descriptorCount = 1,
+    });
+
+    device->UpdateDescriptorSet({
+        .dstSet = gpuMat.descriptorSet,
+        .binding = 5,
+        .type = DescriptorType::CombinedImageSampler,
+        .imageInfo = &thicknessImageInfo,
         .descriptorCount = 1,
     });
 

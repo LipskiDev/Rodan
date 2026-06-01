@@ -10,12 +10,14 @@ using namespace Velos::RHI;
 
 struct TransmissionMaterial {
   float transmissionFactor = 0.0f;
-  int transmissionTexture = -1;
+  Texture transmissionTexture{};
+  bool ownsTransmissionTexture = false;
 };
 
 struct VolumeMaterial {
   float thicknessFactor = 0.0f;
-  int thicknessTexture = -1;
+  Texture thicknessTexture{};
+  bool ownsVolumeTexture = false;
 
   glm::vec3 attenuationColor = glm::vec3(1.0f);
   float attenuationDistance = 0.0f;
