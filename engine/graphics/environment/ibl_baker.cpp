@@ -8,7 +8,6 @@
 #include "rhi/rhi_types.h"
 #include <core/path.h>
 #include <graphics/environment/ibl_baker.h>
-#include <unistd.h>
 
 namespace Rodan {
 

@@ -333,7 +333,7 @@ void GltfViewerScene::LoadScene(IDevice *device, std::string path) {
   upload->Begin();
 
   asset_ =
-      StaticGltfAsset::Load(device, upload.get(), Velos::Path::Resolve(path));
+      StaticGltfAsset::Load(device, upload.get(), Velos::Path::Resolve(path).string());
 
   upload->Flush();
 
