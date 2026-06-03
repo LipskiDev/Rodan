@@ -45,12 +45,19 @@ void MeshRenderer::DrawSubmesh(ICommandList *cmd, const MeshResource &mesh,
   cmd->DrawIndexed(submesh.indexCount, submesh.firstIndex, 0);
 }
 
-void MeshRenderer::DrawDepthOnly(ICommandList *cmd, const MeshResource &mesh) {
+void MeshRenderer::DrawSubmeshBound(ICommandList *cmd, const Submesh &submesh) {
+  cmd->DrawIndexed(submesh.indexCount, submesh.firstIndex, 0);
+}
+
+void MeshRenderer::DrawDepthOnly(ICommandList *cmd, const MeshResource &mesh,
+                                 const Submesh &submesh) {
+  if (!cmd) {
+    return;
+  }
+
   cmd->BindVertexBuffer(0, mesh.vertexBuffer, 0);
   cmd->BindIndexBuffer(mesh.indexBuffer, IndexType::U32, 0);
 
-  for (const Submesh &submesh : mesh.submeshes) {
-    cmd->DrawIndexed(submesh.indexCount, submesh.firstIndex, 0);
-  }
+  cmd->DrawIndexed(submesh.indexCount, submesh.firstIndex, 0);
 }
 } // namespace Rodan

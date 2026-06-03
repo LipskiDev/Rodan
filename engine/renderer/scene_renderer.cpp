@@ -493,43 +493,91 @@ void SceneRenderer::Render(ICommandList &cmd, const RenderWorld &world,
                            const Camera &camera,
                            const FrameRenderContext &frame,
                            DebugContext dbgCtx) {
+  using Clock = std::chrono::high_resolution_clock;
+
+  auto now = []() { return Clock::now(); };
+
+  auto ms = [](Clock::time_point a, Clock::time_point b) {
+    return std::chrono::duration<double, std::milli>(b - a).count();
+  };
+
+  const auto tFrameStart = now();
+
+  auto t0 = now();
   EnsureOpaqueSceneTarget(frame);
   EnsureFinalSceneTarget(frame);
+  auto tTargets = now();
 
   BuildStaticMeshRenderList(world);
+  auto tBuildList = now();
+
   UploadMaterialBuffer(cmd, world);
+  auto tUploadMaterials = now();
 
   RenderShadowMaps(cmd, world);
+  auto tShadow = now();
 
   if (environment_ && environment_->NeedsUpload()) {
     environment_->RecordUpload(cmd);
   }
+  auto tEnvUpload = now();
 
   if (environment_ && !iblReady_) {
     iblResources_ = iblBaker_->BakeIrradiance(cmd, *environment_);
     iblReady_ = true;
   }
+  auto tIBL = now();
 
-  // PASS 1: opaque -> opaqueScene_
-  RenderOpaquePass(cmd, frame, camera, dbgCtx);
+  auto tOpaquePass = now();
 
-  cmd.GenerateMipmaps(opaqueScene_.texture.image, frame.extent.width,
-                      frame.extent.height, opaqueScene_.mipLevels, 1,
-                      ImageLayout::ColorAttachment);
+  if (!transmissions_.empty()) {
 
-  opaqueScene_.layout = ImageLayout::ShaderReadOnly;
+    RenderOpaquePass(cmd, frame, camera, dbgCtx);
+    cmd.GenerateMipmaps(opaqueScene_.texture.image, frame.extent.width,
+                        frame.extent.height, opaqueScene_.mipLevels, 1,
+                        ImageLayout::ColorAttachment);
 
-  // PASS 2: transmission -> backbuffer
+    opaqueScene_.layout = ImageLayout::ShaderReadOnly;
+  }
+  auto tMips = now();
+
   RenderMainPass(cmd, world, frame, camera, dbgCtx);
+  auto tMainPass = now();
 
-  // Pass 3: Tonemapping
   RenderTonemappingPass(cmd, world, frame, camera, dbgCtx);
+  auto tTonemap = now();
+
+  RenderUIPass(cmd, frame);
+  auto tUI = now();
 
   opaques_.clear();
   transmissions_.clear();
   alphaBlends_.clear();
-}
 
+  const auto tFrameEnd = now();
+
+  static int frameCounter = 0;
+  frameCounter++;
+
+  if (frameCounter % 60 == 0) {
+    std::cout << "\nCPU frame timings:\n"
+              << "  Ensure targets:   " << ms(t0, tTargets) << " ms\n"
+              << "  Build list:       " << ms(tTargets, tBuildList) << " ms\n"
+              << "  Upload materials: " << ms(tBuildList, tUploadMaterials)
+              << " ms\n"
+              << "  Shadow maps:      " << ms(tUploadMaterials, tShadow)
+              << " ms\n"
+              << "  Env upload:       " << ms(tShadow, tEnvUpload) << " ms\n"
+              << "  IBL bake:         " << ms(tEnvUpload, tIBL) << " ms\n"
+              << "  Opaque pass:      " << ms(tIBL, tOpaquePass) << " ms\n"
+              << "  Generate mips:    " << ms(tOpaquePass, tMips) << " ms\n"
+              << "  Main pass:        " << ms(tMips, tMainPass) << " ms\n"
+              << "  Tonemapping:      " << ms(tMainPass, tTonemap) << " ms\n"
+              << "  UI pass:          " << ms(tTonemap, tUI) << " ms\n"
+              << "  Total Render():   " << ms(tFrameStart, tFrameEnd)
+              << " ms\n";
+  }
+}
 void SceneRenderer::SubmitStaticMesh(StaticMeshRenderItem item) {
   staticMeshes_.push_back(item);
 }
@@ -1056,7 +1104,7 @@ void SceneRenderer::RenderShadowMaps(ICommandList &cmd,
 
     cmd.PushConstants(ShaderStage::Vertex, 0, sizeof(ShadowPushConstants), &pc);
 
-    meshRenderer_.DrawDepthOnly(&cmd, *item.mesh);
+    meshRenderer_.DrawDepthOnly(&cmd, *item.mesh, *item.submesh);
   }
 
   cmd.EndRendering();
@@ -1130,7 +1178,24 @@ void SceneRenderer::RenderOpaqueMeshes(ICommandList &cmd, const Camera &camera,
 void SceneRenderer::RenderTransmissionMeshes(ICommandList &cmd,
                                              const Camera &camera,
                                              DebugContext dbgCtx) {
+  if (transmissions_.empty()) {
+    return;
+  }
+
   PipelineHandle pipeline = GetOrCreateTransmissionPipeline();
+
+  cmd.BindPipeline(pipeline);
+  cmd.BindDescriptorSet(pipeline, 1, frameSet_);
+
+  if (iblReady_) {
+    cmd.BindDescriptorSet(pipeline, 2, iblResources_.descriptorSet);
+  }
+
+  cmd.BindDescriptorSet(pipeline, 3, opaqueSceneSet_);
+
+  DescriptorSetHandle lastMaterialSet{};
+  BufferHandle lastVB{};
+  BufferHandle lastIB{};
 
   for (const StaticMeshRenderItem &item : transmissions_) {
     if (!item.mesh || !item.submesh) {
@@ -1140,25 +1205,30 @@ void SceneRenderer::RenderTransmissionMeshes(ICommandList &cmd,
     const Submesh &submesh = *item.submesh;
     const MaterialResource *material = item.material;
 
-    cmd.BindPipeline(pipeline);
-
+    DescriptorSetHandle materialSet{};
     if (material && material->descriptorSet.IsValid()) {
-      cmd.BindDescriptorSet(pipeline, 0, material->descriptorSet);
+      materialSet = material->descriptorSet;
     }
 
-    cmd.BindDescriptorSet(pipeline, 1, frameSet_);
-
-    if (iblReady_) {
-      cmd.BindDescriptorSet(pipeline, 2, iblResources_.descriptorSet);
+    if (materialSet.id != lastMaterialSet.id) {
+      cmd.BindDescriptorSet(pipeline, 0, materialSet);
+      lastMaterialSet = materialSet;
     }
 
-    cmd.BindDescriptorSet(pipeline, 3, opaqueSceneSet_);
+    if (item.mesh->vertexBuffer.id != lastVB.id) {
+      cmd.BindVertexBuffer(0, item.mesh->vertexBuffer, 0);
+      lastVB = item.mesh->vertexBuffer;
+    }
+
+    if (item.mesh->indexBuffer.id != lastIB.id) {
+      cmd.BindIndexBuffer(item.mesh->indexBuffer, IndexType::U32, 0);
+      lastIB = item.mesh->indexBuffer;
+    }
 
     StaticMeshPushConstants pc{};
     pc.model = item.worldTransform.ToMatrix() * item.localTransform.ToMatrix();
     pc.showMode = 4;
     pc.hasTangents = submesh.hasTangents ? 1 : 0;
-
     pc.materialIndex = 0;
 
     if (item.materialHandle.IsValid()) {
@@ -1171,10 +1241,9 @@ void SceneRenderer::RenderTransmissionMeshes(ICommandList &cmd,
     cmd.PushConstants(ShaderStage::Vertex | ShaderStage::Fragment, 0,
                       sizeof(StaticMeshPushConstants), &pc);
 
-    meshRenderer_.DrawSubmesh(&cmd, *item.mesh, submesh, material, pipeline);
+    meshRenderer_.DrawSubmeshBound(&cmd, submesh);
   }
 }
-
 void SceneRenderer::RenderAlphaBlendMeshes(ICommandList &cmd,
                                            const Camera &camera,
                                            DebugContext dbgCtx) {
@@ -1184,15 +1253,19 @@ void SceneRenderer::RenderAlphaBlendMeshes(ICommandList &cmd,
 void SceneRenderer::RenderStaticMeshes(
     ICommandList &cmd, const Camera &camera, DebugContext dbgCtx,
     const std::vector<StaticMeshRenderItem> &items) {
-  for (const StaticMeshRenderItem &item : items) {
-    if (!item.mesh) {
-      continue;
-    }
 
+  PipelineHandle lastPipeline{};
+  DescriptorSetHandle lastMaterialSet{};
+  DescriptorSetHandle lastSceneSet{};
+  BufferHandle lastVertexBuffer{};
+  BufferHandle lastIndexBuffer{};
+
+  for (const StaticMeshRenderItem &item : items) {
     if (!item.mesh || !item.submesh) {
       continue;
     }
 
+    const MeshResource &mesh = *item.mesh;
     const Submesh &submesh = *item.submesh;
     const MaterialResource *material = item.material;
 
@@ -1204,11 +1277,29 @@ void SceneRenderer::RenderStaticMeshes(
 
     PipelineHandle pipeline = GetOrCreatePipeline(key);
 
-    cmd.BindPipeline(pipeline);
-    cmd.BindDescriptorSet(pipeline, 1, frameSet_);
+    if (pipeline.id != lastPipeline.id) {
+      cmd.BindPipeline(pipeline);
+      cmd.BindDescriptorSet(pipeline, 1, frameSet_);
 
-    if (iblReady_) {
-      cmd.BindDescriptorSet(pipeline, 2, iblResources_.descriptorSet);
+      if (iblReady_) {
+        cmd.BindDescriptorSet(pipeline, 2, iblResources_.descriptorSet);
+      }
+
+      lastPipeline = pipeline;
+      lastMaterialSet = {};
+      lastSceneSet = {};
+      lastVertexBuffer = {};
+      lastIndexBuffer = {};
+    }
+
+    DescriptorSetHandle materialSet{};
+    if (material && material->descriptorSet.IsValid()) {
+      materialSet = material->descriptorSet;
+    }
+
+    if (materialSet.id != lastMaterialSet.id) {
+      cmd.BindDescriptorSet(pipeline, 0, materialSet);
+      lastMaterialSet = materialSet;
     }
 
     DescriptorSetHandle sceneSet =
@@ -1216,13 +1307,25 @@ void SceneRenderer::RenderStaticMeshes(
             ? dummmyOpaqueSceneSet_
             : opaqueSceneSet_;
 
-    cmd.BindDescriptorSet(pipeline, 3, sceneSet);
+    if (sceneSet.id != lastSceneSet.id) {
+      cmd.BindDescriptorSet(pipeline, 3, sceneSet);
+      lastSceneSet = sceneSet;
+    }
+
+    if (mesh.vertexBuffer.id != lastVertexBuffer.id) {
+      cmd.BindVertexBuffer(0, mesh.vertexBuffer, 0);
+      lastVertexBuffer = mesh.vertexBuffer;
+    }
+
+    if (mesh.indexBuffer.id != lastIndexBuffer.id) {
+      cmd.BindIndexBuffer(mesh.indexBuffer, IndexType::U32, 0);
+      lastIndexBuffer = mesh.indexBuffer;
+    }
 
     StaticMeshPushConstants pc{};
     pc.model = item.worldTransform.ToMatrix() * item.localTransform.ToMatrix();
     pc.showMode = 4;
     pc.hasTangents = submesh.hasTangents ? 1 : 0;
-
     pc.materialIndex = 0;
 
     if (item.materialHandle.IsValid()) {
@@ -1235,10 +1338,9 @@ void SceneRenderer::RenderStaticMeshes(
     cmd.PushConstants(ShaderStage::Vertex | ShaderStage::Fragment, 0,
                       sizeof(StaticMeshPushConstants), &pc);
 
-    meshRenderer_.DrawSubmesh(&cmd, *item.mesh, submesh, material, pipeline);
+    meshRenderer_.DrawSubmeshBound(&cmd, submesh);
   }
 }
-
 void SceneRenderer::RenderPostProcessingEffect(ICommandList &cmd,
                                                const FrameRenderContext &frame,
                                                const DebugContext &dbgCtx) {
@@ -1368,6 +1470,9 @@ void SceneRenderer::RenderTonemappingPass(ICommandList &cmd,
 
   EndTonemappingPass(cmd);
 }
+
+void SceneRenderer::RenderUIPass(ICommandList &cmd,
+                                 const FrameRenderContext &frame) {}
 
 void SceneRenderer::BeginMainPass(ICommandList &cmd,
                                   const FrameRenderContext &frame,

@@ -169,6 +169,8 @@ private:
                              const FrameRenderContext &frame,
                              const Camera &camera, const DebugContext &dbgCtx);
 
+  void RenderUIPass(ICommandList &cmd, const FrameRenderContext &frame);
+
   void BeginMainPass(ICommandList &cmd, const FrameRenderContext &frame,
                      const Camera &camera, const DebugContext &dbgCtx);
 

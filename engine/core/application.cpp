@@ -93,7 +93,7 @@ void Application::CreateSwapchain() {
       .height = static_cast<u32>(window_->GetFramebufferHeight()),
       .format = colorFormat_,
       .bufferCount = 2,
-      .vsync = true,
+      .vsync = false,
       .debugName = "Main Swapchain",
   });
 }
