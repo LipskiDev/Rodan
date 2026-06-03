@@ -20,7 +20,6 @@
 #include <stdexcept>
 
 namespace Rodan {
-
 void SceneRenderer::Initialize(IDevice *device, SwapchainHandle swapchain,
                                Format colorFormat, Format depthFormat,
                                DescriptorSetLayoutHandle materialLayout) {
@@ -109,6 +108,44 @@ void SceneRenderer::Initialize(IDevice *device, SwapchainHandle swapchain,
         "SceneRenderer::Initialize: failed to create static mesh shaders");
   }
 
+  vertSpv = Velos::ShaderCompiler::CompileFile({
+      .path =
+          Velos::Path::Resolve("assets/shaders/postprocessing.vert").string(),
+      .stage = ShaderStage::Vertex,
+      .entryPoint = "main",
+  });
+
+  fragSpv = Velos::ShaderCompiler::CompileFile({
+      .path = Velos::Path::Resolve("assets/shaders/tonemapping.frag").string(),
+      .stage = ShaderStage::Fragment,
+      .entryPoint = "main",
+  });
+
+  postProcessingVS_ = device_->CreateShader({
+      .stage = ShaderStage::Vertex,
+      .bytecode = vertSpv.spirv.data(),
+      .bytecodeSize =
+          static_cast<uint64_t>(vertSpv.spirv.size() * sizeof(std::uint32_t)),
+      .entryPoint = "main",
+      .reflection = vertSpv.reflection,
+      .debugName = "SceneRenderer Post Processing VS",
+  });
+
+  tonemappingFS_ = device_->CreateShader({
+      .stage = ShaderStage::Fragment,
+      .bytecode = fragSpv.spirv.data(),
+      .bytecodeSize =
+          static_cast<uint64_t>(fragSpv.spirv.size() * sizeof(std::uint32_t)),
+      .entryPoint = "main",
+      .reflection = fragSpv.reflection,
+      .debugName = "SceneRenderer Tonemapping FS",
+  });
+
+  if (!postProcessingVS_.IsValid() || !tonemappingFS_.IsValid()) {
+    throw std::runtime_error("SceneRenderer::Initialize: failed to create post "
+                             "processing tonemapping shaders");
+  }
+
   directionalShadow_.texture.image = device->CreateImage({
       .width = directionalShadow_.resolution,
       .height = directionalShadow_.resolution,
@@ -185,6 +222,37 @@ void SceneRenderer::Initialize(IDevice *device, SwapchainHandle swapchain,
       .debugName = "SceneRenderer Frame Descriptor Set Layout",
   });
 
+  DescriptorBindingDesc postProcessingBindings[] = {
+      {
+          .binding = 0,
+          .type = DescriptorType::CombinedImageSampler,
+          .count = 1,
+          .visibility = ShaderStage::Fragment,
+      },
+  };
+
+  postProcessingLayout_ = device_->CreateDescriptorSetLayout({
+      .bindings = postProcessingBindings,
+      .bindingCount = 1,
+      .debugName = "SceneRenderer Post Processing Descriptor Set Layout",
+  });
+
+  DescriptorPoolSize poolSizesPostProcessing[] = {
+      {
+          .type = DescriptorType::CombinedImageSampler,
+          .count = 1,
+      },
+  };
+
+  postProcessingDescriptorPool_ = device_->CreateDescriptorPool({
+      .poolSizes = poolSizesPostProcessing,
+      .poolSizeCount = 1,
+      .maxSets = 1,
+  });
+
+  postProcessingSet_ = device_->AllocateDescriptorSet(
+      postProcessingDescriptorPool_, postProcessingLayout_);
+
   frameSet_ =
       device_->AllocateDescriptorSet(frameDescriptorPool_, frameLayout_);
 
@@ -192,6 +260,11 @@ void SceneRenderer::Initialize(IDevice *device, SwapchainHandle swapchain,
                                      .usage = BufferUsage::Uniform,
                                      .memoryUsage = MemoryUsage::CPUToGPU,
                                      .debugName = "Scene Frame UBO"});
+
+  DescriptorImageInfo finalImageInfo{};
+  finalImageInfo.imageView = finalScene_.colorTexture.view;
+  finalImageInfo.sampler = finalScene_.colorTexture.sampler;
+  finalImageInfo.imageLayout = ImageLayout::ShaderReadOnly;
 
   materialBuffer_ = device_->CreateBuffer({
       .size = sizeof(MaterialDataGPU) * k_MaxMaterials,
@@ -297,6 +370,37 @@ void SceneRenderer::Shutdown(IDevice *device) {
   DestroyTexture(device, opaqueScene_.dummy);
   opaqueScene_ = {};
 
+  // Tonemapping / final scene target
+  DestroyTexture(device, finalScene_.colorTexture);
+  DestroyTexture(device, finalScene_.depthTexture);
+  finalScene_ = {};
+
+  if (tonemappingPipeline_) {
+    device->DestroyPipeline(tonemappingPipeline_);
+    tonemappingPipeline_ = {};
+  }
+
+  if (postProcessingVS_) {
+    device->DestroyShader(postProcessingVS_);
+    postProcessingVS_ = {};
+  }
+
+  if (tonemappingFS_) {
+    device->DestroyShader(tonemappingFS_);
+    tonemappingFS_ = {};
+  }
+
+  if (postProcessingDescriptorPool_.IsValid()) {
+    device->DestroyDescriptorPool(postProcessingDescriptorPool_);
+    postProcessingDescriptorPool_ = {};
+    postProcessingSet_ = {};
+  }
+
+  if (postProcessingLayout_.IsValid()) {
+    device->DestroyDescriptorSetLayout(postProcessingLayout_);
+    postProcessingLayout_ = {};
+  }
+
   DestroyTexture(device, iblResources_.prefilterTexture);
 
   for (ImageViewHandle handle : iblResources_.prefilterFaceMipViews) {
@@ -390,6 +494,7 @@ void SceneRenderer::Render(ICommandList &cmd, const RenderWorld &world,
                            const FrameRenderContext &frame,
                            DebugContext dbgCtx) {
   EnsureOpaqueSceneTarget(frame);
+  EnsureFinalSceneTarget(frame);
 
   BuildStaticMeshRenderList(world);
   UploadMaterialBuffer(cmd, world);
@@ -416,6 +521,9 @@ void SceneRenderer::Render(ICommandList &cmd, const RenderWorld &world,
 
   // PASS 2: transmission -> backbuffer
   RenderMainPass(cmd, world, frame, camera, dbgCtx);
+
+  // Pass 3: Tonemapping
+  RenderTonemappingPass(cmd, world, frame, camera, dbgCtx);
 
   opaques_.clear();
   transmissions_.clear();
@@ -610,6 +718,39 @@ PipelineHandle SceneRenderer::GetOrCreateTransmissionPipeline() {
   return transmissionPipeline_;
 }
 
+PipelineHandle SceneRenderer::GetOrCreateTonemappingPipeline() {
+  if (tonemappingPipeline_.IsValid()) {
+    return tonemappingPipeline_;
+  }
+
+  GraphicsPipelineDesc desc{};
+  desc.vertexShader = postProcessingVS_;
+  desc.fragmentShader = tonemappingFS_;
+  desc.topology = PrimitiveTopology::TriangleList;
+  desc.colorFormat = colorFormat_;
+  desc.debugName = "SceneRenderer.TonemappingPipeline";
+
+  desc.vertexLayouts = {};
+
+  DescriptorSetLayoutHandle setLayouts[] = {postProcessingLayout_};
+
+  desc.layout.descriptorSetLayouts = setLayouts;
+  desc.layout.descriptorSetLayoutCount = 1;
+
+  desc.raster.cullBackFaces = false;
+  desc.raster.frontFaceCCW = true;
+  desc.raster.wireframe = false;
+
+  desc.depth.depthTestEnable = false;
+  desc.depth.depthWriteEnable = false;
+  desc.depth.depthFormat = depthFormat_;
+
+  desc.blend.enable = false;
+
+  tonemappingPipeline_ = device_->CreateGraphicsPipeline(desc);
+  return tonemappingPipeline_;
+}
+
 void SceneRenderer::EnsureShadowMapReadable(ICommandList &cmd) {
   if (shadowLayout_ != ImageLayout::ShaderReadOnly) {
     cmd.Barrier({
@@ -728,6 +869,97 @@ void SceneRenderer::UpdateOpaqueSceneDescriptor() {
       .imageInfo = &dummyImage,
       .descriptorCount = 1,
   });
+}
+
+void SceneRenderer::UpdateFinalSceneDescriptor() {
+  DescriptorImageInfo finalSceneImage{};
+  finalSceneImage.imageView = finalScene_.colorTexture.view;
+  finalSceneImage.sampler = finalScene_.colorTexture.sampler;
+  finalSceneImage.imageLayout = ImageLayout::ShaderReadOnly;
+
+  device_->UpdateDescriptorSet({
+      .dstSet = postProcessingSet_,
+      .binding = 0,
+      .type = DescriptorType::CombinedImageSampler,
+      .imageInfo = &finalSceneImage,
+      .descriptorCount = 1,
+  });
+}
+
+void SceneRenderer::EnsureFinalSceneTarget(const FrameRenderContext &frame) {
+  bool recreated = false;
+
+  if (finalScene_.colorTexture.image.IsValid() &&
+      finalScene_.depthTexture.image.IsValid() &&
+      finalScene_.extent.width == frame.extent.width &&
+      finalScene_.extent.height == frame.extent.height) {
+    return;
+  }
+
+  if (finalScene_.colorTexture.image.IsValid() ||
+      finalScene_.depthTexture.image.IsValid()) {
+    DestroyTexture(device_, finalScene_.colorTexture);
+    DestroyTexture(device_, finalScene_.depthTexture);
+    finalScene_ = {};
+  }
+
+  recreated = true;
+
+  finalScene_.extent = frame.extent;
+
+  finalScene_.colorTexture.image = device_->CreateImage({
+      .width = frame.extent.width,
+      .height = frame.extent.height,
+      .mipLevels = 1,
+      .format = colorFormat_,
+      .usage = ImageUsage::ColorAttachment | ImageUsage::Sampled |
+               ImageUsage::TransferSrc | ImageUsage::TransferDst,
+      .debugName = "Opaque Scene Color",
+  });
+
+  finalScene_.colorTexture.view = device_->CreateImageView({
+      .image = finalScene_.colorTexture.image,
+      .format = colorFormat_,
+      .aspect = ImageAspect::Color,
+      .baseMipLevel = 0,
+  });
+
+  finalScene_.colorTexture.sampler = device_->CreateSampler({
+      .minFilter = Filter::Linear,
+      .magFilter = Filter::Linear,
+      .addressU = SamplerAddressMode::ClampToEdge,
+      .addressV = SamplerAddressMode::ClampToEdge,
+      .addressW = SamplerAddressMode::ClampToEdge,
+  });
+
+  finalScene_.depthTexture.image = device_->CreateImage({
+      .width = frame.extent.width,
+      .height = frame.extent.height,
+      .mipLevels = 1,
+      .format = depthFormat_,
+      .usage = ImageUsage::DepthStencil | ImageUsage::Sampled |
+               ImageUsage::TransferSrc | ImageUsage::TransferDst,
+      .debugName = "Opaque Scene Color",
+  });
+
+  finalScene_.depthTexture.view = device_->CreateImageView({
+      .image = finalScene_.depthTexture.image,
+      .format = depthFormat_,
+      .aspect = ImageAspect::Depth,
+      .baseMipLevel = 0,
+  });
+
+  finalScene_.depthTexture.sampler = device_->CreateSampler({
+      .minFilter = Filter::Linear,
+      .magFilter = Filter::Linear,
+      .addressU = SamplerAddressMode::ClampToEdge,
+      .addressV = SamplerAddressMode::ClampToEdge,
+      .addressW = SamplerAddressMode::ClampToEdge,
+  });
+
+  if (recreated) {
+    UpdateFinalSceneDescriptor();
+  }
 }
 
 void SceneRenderer::RenderShadowMaps(ICommandList &cmd,
@@ -1007,6 +1239,18 @@ void SceneRenderer::RenderStaticMeshes(
   }
 }
 
+void SceneRenderer::RenderPostProcessingEffect(ICommandList &cmd,
+                                               const FrameRenderContext &frame,
+                                               const DebugContext &dbgCtx) {
+  PipelineHandle postProcessingPipeline = GetOrCreateTonemappingPipeline();
+
+  cmd.BindPipeline(postProcessingPipeline);
+
+  cmd.BindDescriptorSet(postProcessingPipeline, 0, postProcessingSet_);
+
+  cmd.Draw(3);
+}
+
 void SceneRenderer::RenderDebug(ICommandList &cmd, const RenderWorld &world,
                                 const Camera &camera, DebugContext dbgCtx) {
   if (!lineRenderer3D_) {
@@ -1077,7 +1321,6 @@ void SceneRenderer::RenderOpaquePass(ICommandList &cmd,
                                      const FrameRenderContext &frame,
                                      const Camera &camera,
                                      const DebugContext &dbgCtx) {
-
   BeginOpaquePass(cmd, frame, camera, dbgCtx);
 
   RenderOpaqueMeshes(cmd, camera, dbgCtx);
@@ -1094,7 +1337,6 @@ void SceneRenderer::RenderMainPass(ICommandList &cmd, const RenderWorld &world,
                                    const FrameRenderContext &frame,
                                    const Camera &camera,
                                    const DebugContext &dbgCtx) {
-
   BeginMainPass(cmd, frame, camera, dbgCtx);
   RenderOpaqueMeshes(cmd, camera, dbgCtx);
 
@@ -1115,11 +1357,22 @@ void SceneRenderer::RenderMainPass(ICommandList &cmd, const RenderWorld &world,
   EndMainPass(cmd);
 }
 
+void SceneRenderer::RenderTonemappingPass(ICommandList &cmd,
+                                          const RenderWorld &world,
+                                          const FrameRenderContext &frame,
+                                          const Camera &camera,
+                                          const DebugContext &dbgCtx) {
+  BeginTonemappingPass(cmd, frame, camera, dbgCtx);
+
+  RenderPostProcessingEffect(cmd, frame, dbgCtx);
+
+  EndTonemappingPass(cmd);
+}
+
 void SceneRenderer::BeginMainPass(ICommandList &cmd,
                                   const FrameRenderContext &frame,
                                   const Camera &camera,
                                   const DebugContext &dbgCtx) {
-
   FrameDataGPU frameData{};
   frameData.lightViewProj = directionalShadow_.lightViewProj;
   frameData.lightDirection = glm::vec4(directionalShadow_.direction, 0.0f);
@@ -1138,26 +1391,26 @@ void SceneRenderer::BeginMainPass(ICommandList &cmd,
       {.buffer = frameUBO_, .data = &frameData, .size = sizeof(FrameDataGPU)});
 
   cmd.Barrier({
-      .image = frame.backbufferImage,
+      .image = finalScene_.colorTexture.image,
       .newLayout = ImageLayout::ColorAttachment,
       .aspect = ImageAspect::Color,
   });
 
   cmd.Barrier({
-      .image = frame.depthImage,
+      .image = finalScene_.depthTexture.image,
       .newLayout = ImageLayout::DepthAttachment,
       .aspect = ImageAspect::Depth,
   });
 
   ColorAttachmentDesc colorAttachment{};
-  colorAttachment.view = frame.backbufferView;
+  colorAttachment.view = finalScene_.colorTexture.view;
   colorAttachment.loadOp = LoadOp::Clear;
   colorAttachment.storeOp = StoreOp::Store;
-  colorAttachment.clearValue = {0.0f, 0.0f, 0.0f, 1.0f};
+  colorAttachment.clearValue = {1.0f, 0.0f, 0.0f, 1.0f};
 
   DepthAttachmentDesc depthAttachment{};
-  depthAttachment.view = frame.depthView;
-  depthAttachment.loadOp = LoadOp::Load;
+  depthAttachment.view = finalScene_.depthTexture.view;
+  depthAttachment.loadOp = LoadOp::Clear;
   depthAttachment.storeOp = StoreOp::Store;
   depthAttachment.clearDepth = 1.0f;
   depthAttachment.clearStencil = 0;
@@ -1269,9 +1522,80 @@ void SceneRenderer::BeginOpaquePass(ICommandList &cmd,
   });
 }
 
+void SceneRenderer::BeginTonemappingPass(ICommandList &cmd,
+                                         const FrameRenderContext &frame,
+                                         const Camera &camera,
+                                         const DebugContext &dbgCtx) {
+  auto currentLayout =
+      device_->GetImageLayout(finalScene_.colorTexture.image, 0);
+
+  cmd.Barrier({
+      .image = finalScene_.colorTexture.image,
+      .oldLayout = currentLayout,
+      .newLayout = ImageLayout::ShaderReadOnly,
+      .aspect = ImageAspect::Color,
+  });
+
+  cmd.Barrier({
+      .image = frame.backbufferImage,
+      .oldLayout = ImageLayout::Undefined,
+      .newLayout = ImageLayout::ColorAttachment,
+      .aspect = ImageAspect::Color,
+  });
+
+  cmd.Barrier({
+      .image = frame.depthImage,
+      .newLayout = ImageLayout::DepthAttachment,
+      .aspect = ImageAspect::Depth,
+  });
+
+  ColorAttachmentDesc colorAttachment{};
+  colorAttachment.view = frame.backbufferView;
+  colorAttachment.loadOp = LoadOp::Clear;
+  colorAttachment.storeOp = StoreOp::Store;
+  colorAttachment.clearValue = {0.1f, 0.1f, 0.1f, 1.0f};
+
+  DepthAttachmentDesc depthAttachment{};
+  depthAttachment.view = frame.depthView;
+  depthAttachment.loadOp = LoadOp::Clear;
+  depthAttachment.storeOp = StoreOp::Store;
+  depthAttachment.clearDepth = 1.0f;
+  depthAttachment.clearStencil = 0;
+
+  Rect2D renderArea{};
+  renderArea.offset = {0, 0};
+  renderArea.extent = frame.extent;
+
+  RenderingInfo renderingInfo{};
+  renderingInfo.renderArea = renderArea;
+  renderingInfo.colorAttachments = &colorAttachment;
+  renderingInfo.colorAttachmentCount = 1;
+  renderingInfo.depthAttachment = &depthAttachment;
+
+  cmd.BeginRendering(renderingInfo);
+
+  cmd.SetViewport({
+      .x = 0.0f,
+      .y = 0.0f,
+      .width = static_cast<float>(frame.extent.width),
+      .height = static_cast<float>(frame.extent.height),
+      .minDepth = 0.0f,
+      .maxDepth = 1.0f,
+  });
+
+  cmd.SetScissor({
+      .offset = {0, 0},
+      .extent = frame.extent,
+  });
+}
+
 void SceneRenderer::EndMainPass(ICommandList &cmd) { cmd.EndRendering(); }
 
 void SceneRenderer::EndOpaquePass(ICommandList &cmd) { cmd.EndRendering(); }
+
+void SceneRenderer::EndTonemappingPass(ICommandList &cmd) {
+  cmd.EndRendering();
+}
 
 void SceneRenderer::TransitionOpaqueSceneToReadable(ICommandList &cmd) {
   if (opaqueScene_.layout == ImageLayout::ShaderReadOnly) {

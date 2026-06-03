@@ -136,6 +136,7 @@ private:
   PipelineHandle GetOrCreatePipeline(const MeshPipelineKey &key);
   PipelineHandle GetOrCreateShadowPipeline();
   PipelineHandle GetOrCreateTransmissionPipeline();
+  PipelineHandle GetOrCreateTonemappingPipeline();
 
   void RenderShadowMaps(ICommandList &cmd, const RenderWorld &world);
   void BuildStaticMeshRenderList(const RenderWorld &world);
@@ -150,6 +151,10 @@ private:
                           DebugContext dbgCtx,
                           const std::vector<StaticMeshRenderItem> &items);
 
+  void RenderPostProcessingEffect(ICommandList &cmd,
+                                  const FrameRenderContext &frame,
+                                  const DebugContext &dbgCtx);
+
   void RenderDebug(ICommandList &cmd, const RenderWorld &world,
                    const Camera &camera, DebugContext dbgCtx);
 
@@ -160,18 +165,28 @@ private:
                       const FrameRenderContext &frame, const Camera &camera,
                       const DebugContext &dbgCtx);
 
+  void RenderTonemappingPass(ICommandList &cmd, const RenderWorld &world,
+                             const FrameRenderContext &frame,
+                             const Camera &camera, const DebugContext &dbgCtx);
+
   void BeginMainPass(ICommandList &cmd, const FrameRenderContext &frame,
                      const Camera &camera, const DebugContext &dbgCtx);
 
   void BeginOpaquePass(ICommandList &cmd, const FrameRenderContext &frame,
                        const Camera &camera, const DebugContext dbgCtx);
 
+  void BeginTonemappingPass(ICommandList &cmd, const FrameRenderContext &frame,
+                            const Camera &camera, const DebugContext &dbgCtx);
+
   void EndMainPass(ICommandList &cmd);
   void EndOpaquePass(ICommandList &cmd);
+  void EndTonemappingPass(ICommandList &cmd);
 
   void EnsureShadowMapReadable(ICommandList &cmd);
   void EnsureOpaqueSceneTarget(const FrameRenderContext &frame);
+  void EnsureFinalSceneTarget(const FrameRenderContext &frame);
   void UpdateOpaqueSceneDescriptor();
+  void UpdateFinalSceneDescriptor();
 
   void TransitionOpaqueSceneToReadable(ICommandList &cmd);
 
@@ -192,10 +207,18 @@ private:
   ShaderHandle shadowVS_;
   ShaderHandle shadowFS_;
 
+  ShaderHandle postProcessingVS_;
+  ShaderHandle tonemappingFS_;
+
   PipelineHandle transmissionPipeline_{};
+  PipelineHandle tonemappingPipeline_{};
 
   DescriptorSetLayoutHandle materialLayout_{};
   DescriptorSetLayoutHandle frameLayout_{};
+
+  DescriptorPoolHandle postProcessingDescriptorPool_{};
+  DescriptorSetLayoutHandle postProcessingLayout_{};
+  DescriptorSetHandle postProcessingSet_{};
 
   DescriptorPoolHandle frameDescriptorPool_{};
   DescriptorSetHandle frameSet_{};
@@ -242,6 +265,15 @@ private:
   };
 
   OpaqueSceneTarget opaqueScene_;
+
+  struct FinalSceneTarget {
+    Texture colorTexture{};
+    Texture depthTexture{};
+    Extent2D extent{};
+    ImageLayout layout = ImageLayout::Undefined;
+  };
+
+  FinalSceneTarget finalScene_;
 
   bool recreated = false;
 
