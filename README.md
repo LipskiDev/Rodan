@@ -1,15 +1,9 @@
 <div align="center">
 
 # Rodan
+### Real-Time Renderer · Modern C++ · Vulkan
 
-### Real-Time Renderer built with Modern C++ and Vulkan
-
-Rodan is a real-time rendering project focused on modern graphics programming, rendering architecture, and GPU systems.
-
-Built on top of **Velos**, a custom Rendering Hardware Interface, Rodan explores production-oriented rendering techniques while maintaining clean, engine-like architecture.
-
-<!-- Replace with your own screenshot -->
-<img src="docs/images/sponza.png" width="85%"/>
+<img src="docs/images/abeautifulgame.png" width="85%"/>
 
 ![C++](https://img.shields.io/badge/C%2B%2B-23-blue)
 ![Vulkan](https://img.shields.io/badge/API-Vulkan-red)
@@ -21,60 +15,41 @@ Built on top of **Velos**, a custom Rendering Hardware Interface, Rodan explores
 
 ## Features
 
-### Rendering
-- Physically Based Rendering (PBR)
-- glTF 2.0 scene loading
-- Normal mapping
+- Physically Based Rendering (PBR) with Image Based Lighting (IBL)
+- Skybox rendering from HDR environments
 - Directional shadow mapping
-
-### Engine Systems
-- Scene graph
-- Orbit + free camera controls
-- Runtime asset loading
-- Material system
-
-### Velos RHI
-- Vulkan backend
-- Command buffer abstraction
-- Pipeline & descriptor management
-- Explicit resource transitions
+- Tonemapping post-processing
+- glTF 2.0 scene loading — KHR_materials_transmission, KHR_materials_volume
+- Normal, occlusion & metallic/roughness textures
+- Sorted render queues — opaque, alpha blend, transmission
+- Compute pipeline support
+- AABB bounding volumes with debug wireframe rendering
+- Debug visualisation modes — Base Color, Normal, Metallic/Roughness, Tangent, Occlusion
+- ImGui editor — scene loading, lights, camera, transforms, stats
+- Custom Velos RHI — Vulkan backend, pipelines, descriptors, explicit resource transitions
 
 ---
 
 ## Screenshots
 
-### Sponza
-![Sponza](docs/images/sponza.png)
-
-### Occlusion Textures
-![Shadows](docs/images/occlusion_texture.png)
-
----
-
-## Architecture
-
-```text
-Rodan Renderer
-      ↓
-Velos RHI
-      ↓
-Vulkan Backend
-      ↓
-GPU
-```
+<img src="docs/images/abeautifulgame.png" width="100%"/>
+<img src="docs/images/sponza.png" width="100%"/>
+<img src="docs/images/metal_roughness_ibl.png" width="100%"/>
+<img src="docs/images/dragon_attenuation.png" width="100%"/>
 
 ---
 
 ## Building
 
-### Requirements
-- Linux
-- C++23 compiler
-- Vulkan SDK
-- Premake5
+### Windows
+```bash
+git clone --recursive https://github.com/LipskiDev/Rodan.git
+cd Rodan
+premake5 vs2026
+make -j$(nproc)
+```
 
-### Build
-
+### Linux
 ```bash
 git clone --recursive https://github.com/LipskiDev/Rodan.git
 cd Rodan
@@ -82,26 +57,27 @@ premake5 gmake2
 make -j$(nproc)
 ```
 
+Requires a C++23 compiler, Vulkan SDK, and Premake5.
+
 ---
 
 ## Roadmap
 
-- [x] PBR materials
-- [x] Shadow mapping
-- [x] glTF loading
-- [ ] Skybox rendering
-- [ ] Image Based Lighting (IBL)
-- [ ] Compute pipelines
-- [ ] GPU-driven rendering
+- [x] Physically Based Rendering (PBR)
+- [x] Image Based Lighting (IBL)
+- [x] Directional shadow mapping
+- [x] glTF 2.0 scene loading
+- [x] Skybox rendering
+- [x] Tonemapping post-processing
+- [x] Transmission & volume materials (KHR extensions)
+- [x] Sorted render queues
+- [x] Compute pipelines
+- [x] AABB bounding volumes & debug wireframes
+- [x] Debug visualisation modes
+- [x] ImGui editor
+- [ ] Point & spot lights
+- [ ] Cascaded shadow maps
+- [ ] Screen Space Ambient Occlusion (SSAO)
+- [ ] Bloom
 - [ ] Frame graph
-
----
-
-## Motivation
-
-Rodan is a long-term graphics engineering project built to deepen expertise in:
-
-- Real-time rendering
-- GPU programming
-- Engine architecture
-- Graphics debugging & profiling
+- [ ] GPU-driven rendering
