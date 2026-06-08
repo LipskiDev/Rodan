@@ -63,18 +63,6 @@ Requires a C++23 compiler, Vulkan SDK, and Premake5.
 
 ## Roadmap
 
-- [x] Physically Based Rendering (PBR)
-- [x] Image Based Lighting (IBL)
-- [x] Directional shadow mapping
-- [x] glTF 2.0 scene loading
-- [x] Skybox rendering
-- [x] Tonemapping post-processing
-- [x] Transmission & volume materials (KHR extensions)
-- [x] Sorted render queues
-- [x] Compute pipelines
-- [x] AABB bounding volumes & debug wireframes
-- [x] Debug visualisation modes
-- [x] ImGui editor
 - [ ] Point & spot lights
 - [ ] Cascaded shadow maps
 - [ ] Screen Space Ambient Occlusion (SSAO)
