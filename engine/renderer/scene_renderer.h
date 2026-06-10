@@ -261,6 +261,7 @@ private:
   struct OpaqueSceneTarget {
     Texture texture{};
     Texture dummy{};
+    ImageViewHandle renderView{};
     Extent2D extent{};
     ImageLayout layout = ImageLayout::Undefined;
     uint32_t mipLevels;

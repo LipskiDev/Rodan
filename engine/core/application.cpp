@@ -276,6 +276,7 @@ void Application::RenderFrame() {
 
   cmd.Barrier({
       .image = frame.backbufferImage,
+      .oldLayout = device_->GetImageLayout(frame.backbufferImage, 0),
       .newLayout = ImageLayout::Present,
       .aspect = ImageAspect::Color,
   });

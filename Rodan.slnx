@@ -12,6 +12,8 @@
   </Project>
   <Project Path="build\meshoptimizer\meshoptimizer.vcxproj" Id="75046AD2-E1C4-E508-AAFF-2E86167F2AE5">
   </Project>
+  <Project Path="build\nfd\nfd.vcxproj" Id="5D94880B-C99D-887C-5219-9F7CBE21947C">
+  </Project>
   <Project Path="build\Rodan\Rodan.vcxproj" Id="D96D090E-4582-31BF-0E04-D51E7AD72DF0">
   </Project>
   <Project Path="build\Runtime\Runtime.vcxproj" Id="4995DAC4-B574-5960-BE8C-E4362AEBBFC1" DefaultStartup="true">
