@@ -191,7 +191,7 @@ void EnvironmentMap::RecordUpload(ICommandList &cmd) {
       .newLayout = ImageLayout::TransferDst,
       .aspect = ImageAspect::Color,
       .baseMipLevel = 0,
-      .mipLevelCount = mipLevels_,
+      .mipLevelCount = 1,
       .baseArrayLayer = 0,
       .layerCount = 6,
   });
@@ -219,8 +219,65 @@ void EnvironmentMap::RecordUpload(ICommandList &cmd) {
     cmd.CopyBufferToImage(stagingBuffer_, image_, region);
   }
 
-  cmd.GenerateMipmaps(image_, faceSize_, faceSize_, mipLevels_, 6,
-                      ImageLayout::TransferDst);
+  cmd.Barrier({
+      .image = image_,
+      .newLayout = ImageLayout::TransferSrc,
+      .aspect = ImageAspect::Color,
+      .baseMipLevel = 0,
+      .mipLevelCount = 1,
+      .baseArrayLayer = 0,
+      .layerCount = 6,
+  });
+
+  cmd.Barrier({
+      .image = image_,
+      .oldLayout = ImageLayout::Undefined,
+      .newLayout = ImageLayout::TransferDst,
+      .aspect = ImageAspect::Color,
+      .baseMipLevel = 1,
+      .mipLevelCount = mipLevels_ - 1,
+      .baseArrayLayer = 0,
+      .layerCount = 6,
+  });
+
+  for (uint32_t mip = 1; mip < mipLevels_; ++mip) {
+    cmd.BlitMip(image_, faceSize_, faceSize_, mip - 1, mip, 6);
+
+    if (mip + 1 < mipLevels_) {
+      cmd.Barrier({
+          .image = image_,
+          .oldLayout = ImageLayout::TransferDst,
+          .newLayout = ImageLayout::TransferSrc,
+          .aspect = ImageAspect::Color,
+          .baseMipLevel = mip,
+          .mipLevelCount = 1,
+          .baseArrayLayer = 0,
+          .layerCount = 6,
+      });
+    }
+  }
+
+  cmd.Barrier({
+      .image = image_,
+      .oldLayout = ImageLayout::TransferSrc,
+      .newLayout = ImageLayout::ShaderReadOnly,
+      .aspect = ImageAspect::Color,
+      .baseMipLevel = 0,
+      .mipLevelCount = mipLevels_ - 1,
+      .baseArrayLayer = 0,
+      .layerCount = 6,
+  });
+
+  cmd.Barrier({
+      .image = image_,
+      .oldLayout = ImageLayout::TransferDst,
+      .newLayout = ImageLayout::ShaderReadOnly,
+      .aspect = ImageAspect::Color,
+      .baseMipLevel = mipLevels_ - 1,
+      .mipLevelCount = 1,
+      .baseArrayLayer = 0,
+      .layerCount = 6,
+  });
 
   uploaded_ = true;
 }

@@ -7,6 +7,7 @@
 #include "graphics/mesh_resource.h"
 #include "renderer/mesh_renderer.h"
 #include "renderer/passes/skybox_pass.h"
+#include "renderer/render_graph/render_graph.h"
 #include "rhi/rhi_command_list.h"
 #include "rhi/rhi_handles.h"
 #include "rhi/rhi_types.h"
@@ -141,7 +142,7 @@ private:
   void RenderShadowMaps(ICommandList &cmd, const RenderWorld &world);
   void BuildStaticMeshRenderList(const RenderWorld &world);
   void RenderOpaqueMeshes(ICommandList &cmd, const Camera &camera,
-                          DebugContext dbgCtx);
+                          DebugContext dbgCtx, DescriptorSetHandle set);
   void RenderTransmissionMeshes(ICommandList &cmd, const Camera &camera,
                                 DebugContext dbgCtx);
 
@@ -149,7 +150,8 @@ private:
                               DebugContext dbgCtx);
   void RenderStaticMeshes(ICommandList &cmd, const Camera &camera,
                           DebugContext dbgCtx,
-                          const std::vector<StaticMeshRenderItem> &items);
+                          const std::vector<StaticMeshRenderItem> &items,
+                          DescriptorSetHandle sceneSet);
 
   void RenderPostProcessingEffect(ICommandList &cmd,
                                   const FrameRenderContext &frame,
@@ -184,13 +186,10 @@ private:
   void EndOpaquePass(ICommandList &cmd);
   void EndTonemappingPass(ICommandList &cmd);
 
-  void EnsureShadowMapReadable(ICommandList &cmd);
   void EnsureOpaqueSceneTarget(const FrameRenderContext &frame);
   void EnsureFinalSceneTarget(const FrameRenderContext &frame);
   void UpdateOpaqueSceneDescriptor();
   void UpdateFinalSceneDescriptor();
-
-  void TransitionOpaqueSceneToReadable(ICommandList &cmd);
 
   void UploadMaterialBuffer(ICommandList &command, const RenderWorld &world);
 
@@ -200,8 +199,6 @@ private:
 
   Format colorFormat_ = Format::Undefined;
   Format depthFormat_ = Format::Undefined;
-
-  ImageLayout shadowLayout_ = ImageLayout::Undefined;
 
   ShaderHandle staticMeshVS_;
   ShaderHandle staticMeshFS_;
@@ -263,7 +260,6 @@ private:
     Texture dummy{};
     ImageViewHandle renderView{};
     Extent2D extent{};
-    ImageLayout layout = ImageLayout::Undefined;
     uint32_t mipLevels;
   };
 
@@ -273,7 +269,6 @@ private:
     Texture colorTexture{};
     Texture depthTexture{};
     Extent2D extent{};
-    ImageLayout layout = ImageLayout::Undefined;
   };
 
   FinalSceneTarget finalScene_;
@@ -281,6 +276,8 @@ private:
   bool recreated = false;
 
   std::unordered_map<uint32_t, uint32_t> materialGpuIndex_;
+
+  RenderGraph graph_;
 };
 
 } // namespace Rodan
