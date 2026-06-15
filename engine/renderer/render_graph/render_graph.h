@@ -27,7 +27,12 @@ public:
 
   void ImportImage(const std::string &name, Velos::RHI::ImageHandle image,
                    Velos::RHI::ImageAspect aspect, uint32_t mipLevels = 1,
-                   uint32_t arrayLayers = 1);
+                   uint32_t arrayLayers = 1,
+                   Velos::RHI::ImageLayout currentLayout =
+                       Velos::RHI::ImageLayout::Undefined,
+                   Velos::RHI::ResourceState currentState =
+                       Velos::RHI::ResourceState::Undefined,
+                   bool hasCurrentState = false);
 
   void Reset();
 
@@ -50,6 +55,8 @@ private:
     std::string fromPass;
     std::string toPass;
     Velos::RHI::ImageLayout newLayout;
+    Velos::RHI::ResourceState oldState = Velos::RHI::ResourceState::Undefined;
+    Velos::RHI::ResourceState newState = Velos::RHI::ResourceState::Undefined;
 
     SubresourceRange range;
   };
@@ -60,6 +67,11 @@ private:
     uint32_t mipLevels = 1;
     uint32_t arrayLayers = 1;
     std::vector<Velos::RHI::ImageLayout> mipLayouts;
+    std::vector<Velos::RHI::ResourceState> mipStates;
+    std::unordered_map<uint32_t, std::vector<Velos::RHI::ImageLayout>>
+        layoutsByImage;
+    std::unordered_map<uint32_t, std::vector<Velos::RHI::ResourceState>>
+        statesByImage;
   };
 
   struct Pass {

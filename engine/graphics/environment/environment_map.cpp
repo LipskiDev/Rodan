@@ -221,6 +221,7 @@ void EnvironmentMap::RecordUpload(ICommandList &cmd) {
 
   cmd.Barrier({
       .image = image_,
+      .oldLayout = ImageLayout::TransferDst,
       .newLayout = ImageLayout::TransferSrc,
       .aspect = ImageAspect::Color,
       .baseMipLevel = 0,

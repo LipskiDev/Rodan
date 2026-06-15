@@ -266,6 +266,7 @@ void Application::RenderFrame() {
     FrameRenderContext frameCtx{};
     frameCtx.backbufferImage = frame.backbufferImage;
     frameCtx.backbufferView = frame.backbuffer;
+    frameCtx.backbufferLayout = device_->GetImageLayout(frame.backbufferImage, 0);
     frameCtx.depthImage = depthImage_;
     frameCtx.depthView = depthImageView_;
     frameCtx.extent = dims;

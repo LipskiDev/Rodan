@@ -172,12 +172,15 @@ void RenderGraph::BuildResourceLifetimes() {
 void RenderGraph::BuildTransitions() {
   std::unordered_map<std::string, std::vector<Velos::RHI::ImageLayout>>
       currentLayouts;
+  std::unordered_map<std::string, std::vector<Velos::RHI::ResourceState>>
+      currentStates;
 
   std::unordered_map<std::string, std::vector<std::string>>
       lastPassUsingResource;
 
   for (const auto &[name, image] : importedImages_) {
     currentLayouts[name] = image.mipLayouts;
+    currentStates[name] = image.mipStates;
     lastPassUsingResource[name].assign(image.mipLevels, "External");
   }
 
@@ -210,13 +213,18 @@ void RenderGraph::BuildTransitions() {
         const Velos::RHI::ImageLayout oldLayout =
             currentLayouts[access.name][mip];
         const Velos::RHI::ImageLayout newLayout = access.requiredLayout;
+        const Velos::RHI::ResourceState oldState =
+            currentStates[access.name][mip];
+        const Velos::RHI::ResourceState newState = access.requiredState;
 
-        if (oldLayout != newLayout) {
+        if (oldLayout != newLayout || oldState != newState) {
           CompiledTransition transition{
               .resource = access.name,
               .fromPass = lastPassUsingResource[access.name][mip],
               .toPass = passName,
               .newLayout = newLayout,
+              .oldState = oldState,
+              .newState = newState,
               .range =
                   {
                       .baseMip = mip,
@@ -234,6 +242,7 @@ void RenderGraph::BuildTransitions() {
           }
 
           currentLayouts[access.name][mip] = newLayout;
+          currentStates[access.name][mip] = newState;
         }
 
         lastPassUsingResource[access.name][mip] = passName;
@@ -372,8 +381,10 @@ void RenderGraph::EmitTransitions(
         baseMip + mipCount, static_cast<uint32_t>(resource.mipLayouts.size()));
 
     const Velos::RHI::ImageLayout oldLayout = resource.mipLayouts[baseMip];
+    const Velos::RHI::ResourceState oldState = resource.mipStates[baseMip];
 
-    if (oldLayout == transition.newLayout) {
+    if (oldLayout == transition.newLayout &&
+        oldState == transition.newState) {
       continue;
     }
 
@@ -385,6 +396,9 @@ void RenderGraph::EmitTransitions(
         .image = resource.image,
         .oldLayout = oldLayout,
         .newLayout = transition.newLayout,
+        .oldState = oldState,
+        .newState = transition.newState,
+        .useExplicitStates = true,
         .aspect = resource.aspect,
         .baseMipLevel = baseMip,
         .mipLevelCount = mipCount,
@@ -394,6 +408,7 @@ void RenderGraph::EmitTransitions(
 
     for (uint32_t mip = baseMip; mip < endMip; ++mip) {
       resource.mipLayouts[mip] = transition.newLayout;
+      resource.mipStates[mip] = transition.newState;
     }
   }
 }
@@ -401,15 +416,54 @@ void RenderGraph::EmitTransitions(
 void RenderGraph::ImportImage(const std::string &name,
                               Velos::RHI::ImageHandle image,
                               Velos::RHI::ImageAspect aspect,
-                              uint32_t mipLevels, uint32_t arrayLayers) {
+                              uint32_t mipLevels, uint32_t arrayLayers,
+                              Velos::RHI::ImageLayout currentLayout,
+                              Velos::RHI::ResourceState currentState,
+                              bool hasCurrentState) {
   ImportedImage &imported = importedImages_[name];
+  if (imported.image.IsValid() && !imported.mipLayouts.empty()) {
+    imported.layoutsByImage[imported.image.id] = imported.mipLayouts;
+  }
+
+  if (imported.image.IsValid() && !imported.mipStates.empty()) {
+    imported.statesByImage[imported.image.id] = imported.mipStates;
+  }
+
+  const bool isNewImage = !imported.image.IsValid() ||
+                          imported.image.id != image.id;
+  const bool subresourceShapeChanged = imported.mipLevels != mipLevels ||
+                                       imported.arrayLayers != arrayLayers;
 
   imported.image = image;
   imported.aspect = aspect;
   imported.mipLevels = mipLevels;
   imported.arrayLayers = arrayLayers;
 
-  imported.mipLayouts.assign(mipLevels, Velos::RHI::ImageLayout::Undefined);
+  auto layoutIt = imported.layoutsByImage.find(image.id);
+  if (hasCurrentState) {
+    imported.mipLayouts.assign(mipLevels, currentLayout);
+  } else if (!subresourceShapeChanged &&
+      layoutIt != imported.layoutsByImage.end() &&
+      layoutIt->second.size() == mipLevels) {
+    imported.mipLayouts = layoutIt->second;
+  } else if (!isNewImage && imported.mipLayouts.size() == mipLevels) {
+    // Keep tracking state for stable imported images across frames.
+  } else {
+    imported.mipLayouts.assign(mipLevels, Velos::RHI::ImageLayout::Undefined);
+  }
+
+  auto stateIt = imported.statesByImage.find(image.id);
+  if (hasCurrentState) {
+    imported.mipStates.assign(mipLevels, currentState);
+  } else if (!subresourceShapeChanged &&
+      stateIt != imported.statesByImage.end() &&
+      stateIt->second.size() == mipLevels) {
+    imported.mipStates = stateIt->second;
+  } else if (!isNewImage && imported.mipStates.size() == mipLevels) {
+    // Keep tracking state for stable imported images across frames.
+  } else {
+    imported.mipStates.assign(mipLevels, Velos::RHI::ResourceState::Undefined);
+  }
 }
 
 void RenderGraph::Reset() {

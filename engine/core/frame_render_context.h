@@ -10,6 +10,7 @@ namespace Rodan {
 struct FrameRenderContext {
   Velos::RHI::ImageHandle backbufferImage;
   Velos::RHI::ImageViewHandle backbufferView;
+  Velos::RHI::ImageLayout backbufferLayout = Velos::RHI::ImageLayout::Undefined;
 
   Velos::RHI::ImageHandle depthImage;
   Velos::RHI::ImageViewHandle depthView;

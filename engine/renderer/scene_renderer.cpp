@@ -535,7 +535,7 @@ void SceneRenderer::Render(ICommandList &cmd, const RenderWorld &world,
   graph_.AddPass(
       "Upload Materials",
       [](RenderGraphBuilder &builder) {
-        builder.Write("MaterialBuffer", ImageLayout::General);
+        builder.StorageWrite("MaterialBuffer");
       },
       [&](ICommandList &cmd) {
         UploadMaterialBuffer(cmd, world);
@@ -546,7 +546,7 @@ void SceneRenderer::Render(ICommandList &cmd, const RenderWorld &world,
   graph_.AddPass(
       "Shadow Maps",
       [](RenderGraphBuilder &builder) {
-        builder.Write("DirectionalShadowMap", ImageLayout::DepthAttachment);
+        builder.WriteDepthAttachment("DirectionalShadowMap");
       },
       [&](ICommandList &cmd) {
         RenderShadowMaps(cmd, world);
@@ -557,7 +557,7 @@ void SceneRenderer::Render(ICommandList &cmd, const RenderWorld &world,
   graph_.AddPass(
       "Environment Upload",
       [](RenderGraphBuilder &builder) {
-        builder.Write("EnvironmentMap", ImageLayout::TransferDst);
+        builder.CopyDst("EnvironmentMap");
       },
       [&](ICommandList &cmd) {
         if (environment_ && environment_->NeedsUpload()) {
@@ -570,8 +570,8 @@ void SceneRenderer::Render(ICommandList &cmd, const RenderWorld &world,
   graph_.AddPass(
       "IBL Bake",
       [](RenderGraphBuilder &builder) {
-        builder.Read("EnvironmentMap", ImageLayout::ShaderReadOnly);
-        builder.Write("IBLResources", ImageLayout::General);
+        builder.ReadTexture("EnvironmentMap");
+        builder.StorageWrite("IBLResources");
       },
       [&](ICommandList &cmd) {
         if (environment_ && !iblReady_) {
@@ -585,16 +585,16 @@ void SceneRenderer::Render(ICommandList &cmd, const RenderWorld &world,
   graph_.AddPass(
       "Opaque Prepass For Transmission",
       [](RenderGraphBuilder &builder) {
-        builder.Read("MaterialBuffer", ImageLayout::General);
-        builder.Read("DirectionalShadowMap", ImageLayout::ShaderReadOnly);
-        builder.Read("IBLResources", ImageLayout::ShaderReadOnly);
+        builder.StorageRead("MaterialBuffer");
+        builder.ReadTexture("DirectionalShadowMap");
+        builder.ReadTexture("IBLResources");
 
-        builder.Write("OpaqueScene", ImageLayout::ColorAttachment,
-                      {
-                          .baseMip = 0,
-                          .mipCount = 1,
-                      });
-        builder.Write("FrameDepth", ImageLayout::DepthAttachment);
+        builder.WriteColorAttachment("OpaqueScene",
+                                     {
+                                         .baseMip = 0,
+                                         .mipCount = 1,
+                                     });
+        builder.WriteDepthAttachment("FrameDepth");
       },
       [&](ICommandList &cmd) {
         if (!transmissions_.empty()) {
@@ -608,10 +608,8 @@ void SceneRenderer::Render(ICommandList &cmd, const RenderWorld &world,
     graph_.AddPass(
         "Generate Opaque Scene Mip" + std::to_string(i),
         [this, i](RenderGraphBuilder &builder) {
-          builder.Read("OpaqueScene", ImageLayout::TransferSrc,
-                       {.baseMip = i - 1, .mipCount = 1});
-          builder.Write("OpaqueScene", ImageLayout::TransferDst,
-                        {.baseMip = i, .mipCount = 1});
+          builder.CopySrc("OpaqueScene", {.baseMip = i - 1, .mipCount = 1});
+          builder.CopyDst("OpaqueScene", {.baseMip = i, .mipCount = 1});
         },
         [this, &frame, i](ICommandList &cmd) {
           if (!transmissions_.empty()) {
@@ -624,14 +622,15 @@ void SceneRenderer::Render(ICommandList &cmd, const RenderWorld &world,
   graph_.AddPass(
       "Main Pass",
       [this](RenderGraphBuilder &builder) {
-        builder.Read("MaterialBuffer", ImageLayout::General);
-        builder.Read("DirectionalShadowMap", ImageLayout::ShaderReadOnly);
-        builder.Read("IBLResources", ImageLayout::ShaderReadOnly);
-        builder.Read("OpaqueScene", ImageLayout::ShaderReadOnly,
-                     {.baseMip = 0, .mipCount = opaqueScene_.mipLevels});
+        builder.StorageRead("MaterialBuffer");
+        builder.ReadTexture("DirectionalShadowMap");
+        builder.ReadTexture("IBLResources");
+        builder.ReadTexture("OpaqueScene",
+                            {.baseMip = 0,
+                             .mipCount = opaqueScene_.mipLevels});
 
-        builder.Write("FinalSceneColor", ImageLayout::ColorAttachment);
-        builder.Write("FinalSceneDepth", ImageLayout::DepthAttachment);
+        builder.WriteColorAttachment("FinalSceneColor");
+        builder.WriteDepthAttachment("FinalSceneDepth");
       },
       [&](ICommandList &cmd) {
         RenderMainPass(cmd, world, frame, camera, dbgCtx);
@@ -642,8 +641,8 @@ void SceneRenderer::Render(ICommandList &cmd, const RenderWorld &world,
   graph_.AddPass(
       "Tonemapping",
       [](RenderGraphBuilder &builder) {
-        builder.Read("FinalSceneColor", ImageLayout::ShaderReadOnly);
-        builder.Write("Backbuffer", ImageLayout::ColorAttachment);
+        builder.ReadTexture("FinalSceneColor");
+        builder.WriteColorAttachment("Backbuffer");
       },
       [&](ICommandList &cmd) {
         RenderTonemappingPass(cmd, world, frame, camera, dbgCtx);
@@ -654,8 +653,8 @@ void SceneRenderer::Render(ICommandList &cmd, const RenderWorld &world,
   graph_.AddPass(
       "UI",
       [](RenderGraphBuilder &builder) {
-        builder.Read("Backbuffer", ImageLayout::ColorAttachment);
-        builder.Write("Backbuffer", ImageLayout::ColorAttachment);
+        builder.ReadColorAttachment("Backbuffer");
+        builder.WriteColorAttachment("Backbuffer");
       },
       [&](ICommandList &cmd) {
         RenderUIPass(cmd, frame);
@@ -675,7 +674,11 @@ void SceneRenderer::Render(ICommandList &cmd, const RenderWorld &world,
   graph_.ImportImage("FinalSceneDepth", finalScene_.depthTexture.image,
                      ImageAspect::Depth);
 
-  graph_.ImportImage("Backbuffer", frame.backbufferImage, ImageAspect::Color);
+  const ResourceState backbufferState =
+      frame.backbufferLayout == ImageLayout::Present ? ResourceState::Present
+                                                     : ResourceState::Undefined;
+  graph_.ImportImage("Backbuffer", frame.backbufferImage, ImageAspect::Color, 1,
+                     1, frame.backbufferLayout, backbufferState, true);
 
   graph_.ImportImage("FrameDepth", frame.depthImage, ImageAspect::Depth);
 
