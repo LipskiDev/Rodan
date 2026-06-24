@@ -9,6 +9,7 @@
 #include "samples/scene_factory.h"
 #include <ui/imgui_input_bridge.h>
 
+#include <algorithm>
 #include <iostream>
 
 namespace Rodan {
@@ -181,15 +182,22 @@ void Application::MainLoop() {
     deltaSeconds_ = static_cast<float>(now - timeStamp_);
     timeStamp_ = now;
 
+    double stageStart = glfwGetTime();
     input_->BeginFrame();
     window_->PollEvents();
+    timings_.pollEventsMs =
+        static_cast<float>((glfwGetTime() - stageStart) * 1000.0);
 
     if (HandleResize()) {
       continue;
     }
 
+    stageStart = glfwGetTime();
     Update(deltaSeconds_);
+    timings_.updateMs =
+        static_cast<float>((glfwGetTime() - stageStart) * 1000.0);
 
+    stageStart = glfwGetTime();
     BeginImGuiFrame(deltaSeconds_);
     BuildApplicationImGui();
 
@@ -197,7 +205,26 @@ void Application::MainLoop() {
       currentScene_->RenderImGui();
 
     ImGui::Render();
+    timings_.imguiMs =
+        static_cast<float>((glfwGetTime() - stageStart) * 1000.0);
+
     RenderFrame();
+
+    peakTimings_.pollEventsMs =
+        std::max(peakTimings_.pollEventsMs, timings_.pollEventsMs);
+    peakTimings_.updateMs = std::max(peakTimings_.updateMs, timings_.updateMs);
+    peakTimings_.imguiMs = std::max(peakTimings_.imguiMs, timings_.imguiMs);
+    peakTimings_.beginFrameMs =
+        std::max(peakTimings_.beginFrameMs, timings_.beginFrameMs);
+    peakTimings_.recordMs = std::max(peakTimings_.recordMs, timings_.recordMs);
+    peakTimings_.presentMs =
+        std::max(peakTimings_.presentMs, timings_.presentMs);
+
+    const double timingNow = glfwGetTime();
+    if (timingNow >= peakTimingResetAt_) {
+      peakTimings_ = timings_;
+      peakTimingResetAt_ = timingNow + 1.0;
+    }
   }
 }
 
@@ -250,11 +277,15 @@ void Application::RenderFrame() {
     return;
   }
 
+  double stageStart = glfwGetTime();
   FrameBeginResult frame = device_->BeginFrame(swapchain_);
+  timings_.beginFrameMs =
+      static_cast<float>((glfwGetTime() - stageStart) * 1000.0);
   if (!frame.success) {
     return;
   }
 
+  stageStart = glfwGetTime();
   imguiRenderer_->SetCurrentFrame(frame.frameIndex);
 
   ICommandList &cmd = device_->GetCommandList();
@@ -283,7 +314,13 @@ void Application::RenderFrame() {
   });
 
   cmd.End();
+  timings_.recordMs =
+      static_cast<float>((glfwGetTime() - stageStart) * 1000.0);
+
+  stageStart = glfwGetTime();
   device_->SubmitAndPresent(swapchain_);
+  timings_.presentMs =
+      static_cast<float>((glfwGetTime() - stageStart) * 1000.0);
 }
 
 void Application::BeginImGuiFrame(float deltaTime) {
@@ -337,6 +374,20 @@ void Application::BuildApplicationImGui() {
 
     ImGui::Text("FPS: %.1f", fps);
     ImGui::Text("Frame: %.2f ms", ms);
+    ImGui::Separator();
+    ImGui::Text("Stage ms (now / 1s peak)");
+    ImGui::Text("Events:  %6.2f / %6.2f", timings_.pollEventsMs,
+                peakTimings_.pollEventsMs);
+    ImGui::Text("Update:  %6.2f / %6.2f", timings_.updateMs,
+                peakTimings_.updateMs);
+    ImGui::Text("ImGui:   %6.2f / %6.2f", timings_.imguiMs,
+                peakTimings_.imguiMs);
+    ImGui::Text("GPU wait:%6.2f / %6.2f", timings_.beginFrameMs,
+                peakTimings_.beginFrameMs);
+    ImGui::Text("Record:  %6.2f / %6.2f", timings_.recordMs,
+                peakTimings_.recordMs);
+    ImGui::Text("Present: %6.2f / %6.2f", timings_.presentMs,
+                peakTimings_.presentMs);
 
     ImGui::End();
   }

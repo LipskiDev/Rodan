@@ -44,6 +44,15 @@ private:
   void SwitchScene(SceneType type);
 
 private:
+  struct FrameTimings {
+    float pollEventsMs = 0.0f;
+    float updateMs = 0.0f;
+    float imguiMs = 0.0f;
+    float beginFrameMs = 0.0f;
+    float recordMs = 0.0f;
+    float presentMs = 0.0f;
+  };
+
   std::unique_ptr<GlfwWindow> window_;
   std::unique_ptr<InputSystem> input_;
 
@@ -63,6 +72,9 @@ private:
 
   double timeStamp_ = 0.0;
   float deltaSeconds_ = 0.0f;
+  FrameTimings timings_{};
+  FrameTimings peakTimings_{};
+  double peakTimingResetAt_ = 0.0;
 
   std::unique_ptr<ImGuiRenderer> imguiRenderer_;
   bool showDemoWindow_ = false;
