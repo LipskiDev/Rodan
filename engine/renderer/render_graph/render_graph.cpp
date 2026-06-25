@@ -55,10 +55,6 @@ void RenderGraph::Compile() {
 
   static uint32_t frameCounter = 0;
   frameCounter++;
-
-  if (frameCounter % 600 == 0) {
-    PrintDebugInfo();
-  }
 }
 
 void RenderGraph::ResetCompiledData() {
@@ -383,8 +379,7 @@ void RenderGraph::EmitTransitions(
     const Velos::RHI::ImageLayout oldLayout = resource.mipLayouts[baseMip];
     const Velos::RHI::ResourceState oldState = resource.mipStates[baseMip];
 
-    if (oldLayout == transition.newLayout &&
-        oldState == transition.newState) {
+    if (oldLayout == transition.newLayout && oldState == transition.newState) {
       continue;
     }
 
@@ -429,10 +424,10 @@ void RenderGraph::ImportImage(const std::string &name,
     imported.statesByImage[imported.image.id] = imported.mipStates;
   }
 
-  const bool isNewImage = !imported.image.IsValid() ||
-                          imported.image.id != image.id;
-  const bool subresourceShapeChanged = imported.mipLevels != mipLevels ||
-                                       imported.arrayLayers != arrayLayers;
+  const bool isNewImage =
+      !imported.image.IsValid() || imported.image.id != image.id;
+  const bool subresourceShapeChanged =
+      imported.mipLevels != mipLevels || imported.arrayLayers != arrayLayers;
 
   imported.image = image;
   imported.aspect = aspect;
@@ -443,8 +438,8 @@ void RenderGraph::ImportImage(const std::string &name,
   if (hasCurrentState) {
     imported.mipLayouts.assign(mipLevels, currentLayout);
   } else if (!subresourceShapeChanged &&
-      layoutIt != imported.layoutsByImage.end() &&
-      layoutIt->second.size() == mipLevels) {
+             layoutIt != imported.layoutsByImage.end() &&
+             layoutIt->second.size() == mipLevels) {
     imported.mipLayouts = layoutIt->second;
   } else if (!isNewImage && imported.mipLayouts.size() == mipLevels) {
     // Keep tracking state for stable imported images across frames.
@@ -456,8 +451,8 @@ void RenderGraph::ImportImage(const std::string &name,
   if (hasCurrentState) {
     imported.mipStates.assign(mipLevels, currentState);
   } else if (!subresourceShapeChanged &&
-      stateIt != imported.statesByImage.end() &&
-      stateIt->second.size() == mipLevels) {
+             stateIt != imported.statesByImage.end() &&
+             stateIt->second.size() == mipLevels) {
     imported.mipStates = stateIt->second;
   } else if (!isNewImage && imported.mipStates.size() == mipLevels) {
     // Keep tracking state for stable imported images across frames.

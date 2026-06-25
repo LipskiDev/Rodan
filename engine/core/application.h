@@ -49,7 +49,9 @@ private:
     float updateMs = 0.0f;
     float imguiMs = 0.0f;
     float beginFrameMs = 0.0f;
-    float recordMs = 0.0f;
+    float prepareFrameMs = 0.0f;
+    float renderFrameMs = 0.0f;
+    float endFrameMs = 0.0f;
     float presentMs = 0.0f;
   };
 

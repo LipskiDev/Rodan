@@ -216,7 +216,12 @@ void Application::MainLoop() {
     peakTimings_.imguiMs = std::max(peakTimings_.imguiMs, timings_.imguiMs);
     peakTimings_.beginFrameMs =
         std::max(peakTimings_.beginFrameMs, timings_.beginFrameMs);
-    peakTimings_.recordMs = std::max(peakTimings_.recordMs, timings_.recordMs);
+    peakTimings_.prepareFrameMs =
+        std::max(peakTimings_.prepareFrameMs, timings_.prepareFrameMs);
+    peakTimings_.renderFrameMs =
+        std::max(peakTimings_.renderFrameMs, timings_.renderFrameMs);
+    peakTimings_.endFrameMs =
+        std::max(peakTimings_.endFrameMs, timings_.endFrameMs);
     peakTimings_.presentMs =
         std::max(peakTimings_.presentMs, timings_.presentMs);
 
@@ -285,25 +290,32 @@ void Application::RenderFrame() {
     return;
   }
 
-  stageStart = glfwGetTime();
   imguiRenderer_->SetCurrentFrame(frame.frameIndex);
 
   ICommandList &cmd = device_->GetCommandList();
   cmd.Begin();
 
   if (currentScene_) {
+    stageStart = glfwGetTime();
     currentScene_->Prepare(cmd);
+    timings_.prepareFrameMs =
+        static_cast<float>((glfwGetTime() - stageStart) * 1000.0);
 
     FrameRenderContext frameCtx{};
     frameCtx.backbufferImage = frame.backbufferImage;
     frameCtx.backbufferView = frame.backbuffer;
-    frameCtx.backbufferLayout = device_->GetImageLayout(frame.backbufferImage, 0);
+    frameCtx.backbufferLayout =
+        device_->GetImageLayout(frame.backbufferImage, 0);
     frameCtx.depthImage = depthImage_;
     frameCtx.depthView = depthImageView_;
     frameCtx.extent = dims;
     frameCtx.renderUi = [this](ICommandList &cmd) { RenderImGui(cmd); };
 
+    stageStart = glfwGetTime();
     currentScene_->Render(cmd, frameCtx);
+
+    timings_.renderFrameMs =
+        static_cast<float>((glfwGetTime() - stageStart) * 1000.0);
   }
 
   cmd.Barrier({
@@ -313,8 +325,9 @@ void Application::RenderFrame() {
       .aspect = ImageAspect::Color,
   });
 
+  stageStart = glfwGetTime();
   cmd.End();
-  timings_.recordMs =
+  timings_.endFrameMs =
       static_cast<float>((glfwGetTime() - stageStart) * 1000.0);
 
   stageStart = glfwGetTime();
@@ -384,8 +397,12 @@ void Application::BuildApplicationImGui() {
                 peakTimings_.imguiMs);
     ImGui::Text("GPU wait:%6.2f / %6.2f", timings_.beginFrameMs,
                 peakTimings_.beginFrameMs);
-    ImGui::Text("Record:  %6.2f / %6.2f", timings_.recordMs,
-                peakTimings_.recordMs);
+    ImGui::Text("Prepare:%6.2f / %6.2f", timings_.prepareFrameMs,
+                peakTimings_.prepareFrameMs);
+    ImGui::Text("Render:%6.2f / %6.2f", timings_.renderFrameMs,
+                peakTimings_.renderFrameMs);
+    ImGui::Text("End:%6.2f / %6.2f", timings_.endFrameMs,
+                peakTimings_.endFrameMs);
     ImGui::Text("Present: %6.2f / %6.2f", timings_.presentMs,
                 peakTimings_.presentMs);
 

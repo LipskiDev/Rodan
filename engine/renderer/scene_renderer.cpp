@@ -15,6 +15,7 @@
 #include "rhi/vulkan/vk_device.h"
 #include "scene/handles.h"
 #include "scene/render_world.h"
+#include "tracy/Tracy.hpp"
 #include <core/path.h>
 #include <iostream>
 #include <renderer/scene_renderer.h>
@@ -497,7 +498,6 @@ void SceneRenderer::Render(ICommandList &cmd, const RenderWorld &world,
                            const Camera &camera,
                            const FrameRenderContext &frame,
                            DebugContext dbgCtx) {
-
   EnsureOpaqueSceneTarget(frame);
   EnsureFinalSceneTarget(frame);
   graph_.Reset();
@@ -556,9 +556,7 @@ void SceneRenderer::Render(ICommandList &cmd, const RenderWorld &world,
 
   graph_.AddPass(
       "Environment Upload",
-      [](RenderGraphBuilder &builder) {
-        builder.CopyDst("EnvironmentMap");
-      },
+      [](RenderGraphBuilder &builder) { builder.CopyDst("EnvironmentMap"); },
       [&](ICommandList &cmd) {
         if (environment_ && environment_->NeedsUpload()) {
           environment_->RecordUpload(cmd);
@@ -589,11 +587,10 @@ void SceneRenderer::Render(ICommandList &cmd, const RenderWorld &world,
         builder.ReadTexture("DirectionalShadowMap");
         builder.ReadTexture("IBLResources");
 
-        builder.WriteColorAttachment("OpaqueScene",
-                                     {
-                                         .baseMip = 0,
-                                         .mipCount = 1,
-                                     });
+        builder.WriteColorAttachment("OpaqueScene", {
+                                                        .baseMip = 0,
+                                                        .mipCount = 1,
+                                                    });
         builder.WriteDepthAttachment("FrameDepth");
       },
       [&](ICommandList &cmd) {
@@ -626,8 +623,7 @@ void SceneRenderer::Render(ICommandList &cmd, const RenderWorld &world,
         builder.ReadTexture("DirectionalShadowMap");
         builder.ReadTexture("IBLResources");
         builder.ReadTexture("OpaqueScene",
-                            {.baseMip = 0,
-                             .mipCount = opaqueScene_.mipLevels});
+                            {.baseMip = 0, .mipCount = opaqueScene_.mipLevels});
 
         builder.WriteColorAttachment("FinalSceneColor");
         builder.WriteDepthAttachment("FinalSceneDepth");
@@ -1458,25 +1454,28 @@ void SceneRenderer::RenderDebug(ICommandList &cmd, const RenderWorld &world,
 
   AABB sceneBounds;
 
-  for (const auto &mesh : opaques_) {
-    const glm::mat4 model =
-        mesh.worldTransform.ToMatrix() * mesh.localTransform.ToMatrix();
+  if (dbgCtx.drawSceneBounds || dbgCtx.drawMeshBounds) {
 
-    AABB objectBounds = mesh.mesh->aabb.Transform(model);
+    for (const auto &mesh : opaques_) {
+      const glm::mat4 model =
+          mesh.worldTransform.ToMatrix() * mesh.localTransform.ToMatrix();
 
-    sceneBounds.Expand(objectBounds.lower);
-    sceneBounds.Expand(objectBounds.upper);
+      AABB objectBounds = mesh.mesh->aabb.Transform(model);
 
-    if (dbgCtx.drawSceneBounds) {
-      lineRenderer3D_->aabb(objectBounds.lower, objectBounds.upper,
-                            objectBoundsColor);
-    }
+      sceneBounds.Expand(objectBounds.lower);
+      sceneBounds.Expand(objectBounds.upper);
 
-    if (dbgCtx.drawMeshBounds) {
-      for (const auto &submesh : mesh.mesh->submeshes) {
-        AABB submeshBounds = submesh.aabb.Transform(model);
-        lineRenderer3D_->aabb(submeshBounds.lower, submeshBounds.upper,
-                              submeshBoundsColor);
+      if (dbgCtx.drawSceneBounds) {
+        lineRenderer3D_->aabb(objectBounds.lower, objectBounds.upper,
+                              objectBoundsColor);
+      }
+
+      if (dbgCtx.drawMeshBounds) {
+        for (const auto &submesh : mesh.mesh->submeshes) {
+          AABB submeshBounds = submesh.aabb.Transform(model);
+          lineRenderer3D_->aabb(submeshBounds.lower, submeshBounds.upper,
+                                submeshBoundsColor);
+        }
       }
     }
   }
@@ -1530,24 +1529,53 @@ void SceneRenderer::RenderMainPass(ICommandList &cmd, const RenderWorld &world,
                                    const FrameRenderContext &frame,
                                    const Camera &camera,
                                    const DebugContext &dbgCtx) {
-  BeginMainPass(cmd, frame, camera, dbgCtx);
-  RenderOpaqueMeshes(cmd, camera, dbgCtx, opaqueSceneSet_);
+  ZoneScopedN("SceneRenderer::RenderMainPass");
 
-  if (environment_) {
-    skyboxPass_.Render(cmd, *environment_, camera.GetView(),
-                       camera.GetProjection());
+  {
+    ZoneScopedN("BeginMainPass");
+    BeginMainPass(cmd, frame, camera, dbgCtx);
   }
 
-  RenderTransmissionMeshes(cmd, camera, dbgCtx);
-  RenderAlphaBlendMeshes(cmd, camera, dbgCtx);
-
-  RenderDebug(cmd, world, camera, dbgCtx);
-
-  if (frame.renderUi) {
-    frame.renderUi(cmd);
+  {
+    ZoneScopedN("RenderOpaqueMeshes");
+    RenderOpaqueMeshes(cmd, camera, dbgCtx, opaqueSceneSet_);
   }
 
-  EndMainPass(cmd);
+  {
+    ZoneScopedN("Skybox");
+    if (environment_) {
+      skyboxPass_.Render(cmd, *environment_, camera.GetView(),
+                         camera.GetProjection());
+    }
+  }
+
+  {
+    ZoneScopedN("RenderTransmissionMeshes");
+    RenderTransmissionMeshes(cmd, camera, dbgCtx);
+  }
+
+  {
+    ZoneScopedN("RenderAlphaBlendMeshes");
+    RenderAlphaBlendMeshes(cmd, camera, dbgCtx);
+  }
+
+  {
+    ZoneScopedN("RenderDebug");
+    RenderDebug(cmd, world, camera, dbgCtx);
+  }
+
+  {
+    ZoneScopedN("RenderUI");
+
+    if (frame.renderUi) {
+      frame.renderUi(cmd);
+    }
+  }
+
+  {
+    ZoneScopedN("EndMainPass");
+    EndMainPass(cmd);
+  }
 }
 
 void SceneRenderer::RenderTonemappingPass(ICommandList &cmd,

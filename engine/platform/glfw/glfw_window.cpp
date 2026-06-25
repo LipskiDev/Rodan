@@ -280,12 +280,7 @@ GlfwWindow::~GlfwWindow() {
 }
 
 void GlfwWindow::PollEvents() {
-    auto start = glfwGetTime();
   glfwPollEvents();
-  auto end = glfwGetTime();
-  double elapsedMs = (end - start) * 1000.0;
-
-  std::cout << "glfwPollEvents took " << elapsedMs << " ms\n";
 
   glfwGetWindowSize(window_, &windowWidth_, &windowHeight_);
   glfwGetFramebufferSize(window_, &framebufferWidth_, &framebufferHeight_);
