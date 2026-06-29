@@ -46,7 +46,6 @@
 git clone --recursive https://github.com/LipskiDev/Rodan.git
 cd Rodan
 premake5 vs2026
-make -j$(nproc)
 ```
 
 ### Linux
