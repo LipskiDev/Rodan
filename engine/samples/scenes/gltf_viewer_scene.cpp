@@ -145,6 +145,57 @@ void GltfViewerScene::Update(float deltaSeconds,
           camera_->OnMouseMove(dx, dy);
         }
       }
+
+      if (event.key.key == Key::N) {
+
+        nfdu8char_t *outPath = nullptr;
+
+        nfdu8filteritem_t filters[] = {
+            {"glTF files", "gltf,glb"},
+        };
+
+        nfdopendialogu8args_t args = {};
+        args.filterList = filters;
+        args.filterCount = 1;
+
+        nfdresult_t result = NFD_OpenDialogU8_With(&outPath, &args);
+
+        if (result == NFD_OKAY) {
+          std::string selectedPath = outPath;
+          NFD_FreePathU8(outPath);
+
+          if (IsGltfPath(selectedPath)) {
+            pendingScenePath_ = selectedPath;
+            pendingReload_ = true;
+          }
+        } else if (result == NFD_CANCEL) {
+          // User cancelled; do nothing.
+        } else {
+          std::cerr << "NFD error: " << NFD_GetError() << std::endl;
+        }
+      }
+
+      if (event.key.key == Key::M) {
+        nfdu8char_t *outPath = nullptr;
+
+        nfdu8filteritem_t filters[] = {
+            {"Environment maps", "hdr,exr,ktx,ktx2,png,jpg,jpeg"},
+        };
+
+        nfdopendialogu8args_t args = {};
+        args.filterList = filters;
+        args.filterCount = 1;
+
+        nfdresult_t result = NFD_OpenDialogU8_With(&outPath, &args);
+
+        if (result == NFD_OKAY) {
+          pendingSkyboxPath_ = outPath;
+          NFD_FreePathU8(outPath);
+          pendingSkyboxReload_ = true;
+        } else if (result != NFD_CANCEL) {
+          std::cerr << "NFD error: " << NFD_GetError() << std::endl;
+        }
+      }
     }
   }
 
@@ -165,61 +216,6 @@ void GltfViewerScene::RenderImGui() {
 
   ImGui::Text("Loaded file:");
   ImGui::TextWrapped("%s", currentScenePath_.c_str());
-
-  if (ImGui::Button("Open glTF / GLB")) {
-    nfdu8char_t *outPath = nullptr;
-
-    nfdu8filteritem_t filters[] = {
-        {"glTF files", "gltf,glb"},
-    };
-
-    nfdopendialogu8args_t args = {};
-    args.filterList = filters;
-    args.filterCount = 1;
-
-    nfdresult_t result = NFD_OpenDialogU8_With(&outPath, &args);
-
-    if (result == NFD_OKAY) {
-      std::string selectedPath = outPath;
-      NFD_FreePathU8(outPath);
-
-      if (IsGltfPath(selectedPath)) {
-        pendingScenePath_ = selectedPath;
-        pendingReload_ = true;
-      }
-    } else if (result == NFD_CANCEL) {
-      // User cancelled; do nothing.
-    } else {
-      std::cerr << "NFD error: " << NFD_GetError() << std::endl;
-    }
-  }
-
-  ImGui::SeparatorText("Environment");
-
-  ImGui::Text("Skybox:");
-  ImGui::TextWrapped("%s", currentSkyboxPath_.c_str());
-
-  if (ImGui::Button("Open HDR / Skybox")) {
-    nfdu8char_t *outPath = nullptr;
-
-    nfdu8filteritem_t filters[] = {
-        {"Environment maps", "hdr,exr,ktx,ktx2,png,jpg,jpeg"},
-    };
-
-    nfdopendialogu8args_t args = {};
-    args.filterList = filters;
-    args.filterCount = 1;
-
-    nfdresult_t result = NFD_OpenDialogU8_With(&outPath, &args);
-
-    if (result == NFD_OKAY) {
-      pendingSkyboxPath_ = outPath;
-      NFD_FreePathU8(outPath);
-      pendingSkyboxReload_ = true;
-    } else if (result != NFD_CANCEL) {
-      std::cerr << "NFD error: " << NFD_GetError() << std::endl;
-    }
-  }
 
   ImGui::Separator();
   ImGui::Text("Model Transform");

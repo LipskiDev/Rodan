@@ -111,6 +111,9 @@ private:
   bool autoScaleModel_ = true;
   bool autoCenterModel_ = true;
 
+  bool autoRotate = false;
+  float autoRotateSpeed_ = glm::radians(20.0f); // degrees/sec
+
   Transform currentTransform_;
   std::vector<RenderObjectHandle> currentRenderTargets_;
   bool lockUniformScale_ = true;

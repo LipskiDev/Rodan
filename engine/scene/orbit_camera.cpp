@@ -8,6 +8,9 @@ namespace Rodan {
 
 void OrbitCamera::Update(float dt) {
   (void)dt;
+  if (autoRotate_) {
+    yaw_ += dt * autoRotateSpeed_ * 100;
+  }
   UpdateViewMatrix();
 }
 
@@ -31,6 +34,12 @@ void OrbitCamera::OnKeyboard(InputEvent input) {
     distance_ *= 0.9f; // zoom in
   } else if (input.key.key == Key::S) {
     distance_ *= 1.1f; // zoom out
+  } else if (input.key.key == Key::P) {
+    SetAutoRotate(!autoRotate_);
+  } else if (input.key.key == Key::UpArrow) {
+    SetAutoRotateSpeed(autoRotateSpeed_ + 1);
+  } else if (input.key.key == Key::DownArrow) {
+    SetAutoRotateSpeed(autoRotateSpeed_ - 1);
   }
 
   distance_ = glm::clamp(distance_, 0.1f, 1000.0f);

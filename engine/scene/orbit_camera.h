@@ -2,16 +2,16 @@
 #pragma once
 
 #include "core/input_types.h"
+#include "glm/trigonometric.hpp"
 #include "scene/camera.h"
-#include <cwchar>
 
 namespace Rodan {
 
 class OrbitCamera : public Camera {
 public:
-  void Update(float dt);
-  void OnMouseMove(float dx, float dy);
-  void OnKeyboard(InputEvent input);
+  void Update(float dt) override;
+  void OnMouseMove(float dx, float dy) override;
+  void OnKeyboard(InputEvent input) override;
 
   void SetPerspective(float fovDegrees, float aspect, float nearPlane,
                       float farPlane) override;
@@ -23,6 +23,12 @@ public:
   void SetDistance(float distance);
 
   void Reset() override;
+
+  void SetAutoRotate(bool enabled) { autoRotate_ = enabled; }
+  void SetAutoRotateSpeed(float radiansPerSecond) {
+    autoRotateSpeed_ = radiansPerSecond;
+  }
+  float GetAutoRotateSpeed() { return autoRotateSpeed_; }
 
 private:
   glm::vec3 position_;
@@ -38,6 +44,9 @@ private:
 
   float distance_ = 50.0f;
   glm::vec3 target_ = {};
+
+  bool autoRotate_ = false;
+  float autoRotateSpeed_ = glm::radians(20.0f); // degrees/sec
 
   glm::vec3 GetForward() const;
   glm::vec3 GetRight() const;
