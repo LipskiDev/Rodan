@@ -13,6 +13,7 @@
 #include "rhi/rhi_resources.h"
 #include "rhi/rhi_types.h"
 #include "rhi/vulkan/vk_device.h"
+#include "rhi/vulkan/vk_upload_context.h"
 #include "scene/handles.h"
 #include "scene/render_world.h"
 #include "tracy/Tracy.hpp"
@@ -264,11 +265,6 @@ void SceneRenderer::Initialize(IDevice *device, SwapchainHandle swapchain,
                                      .memoryUsage = MemoryUsage::CPUToGPU,
                                      .debugName = "Scene Frame UBO"});
 
-  DescriptorImageInfo finalImageInfo{};
-  finalImageInfo.imageView = finalScene_.colorTexture.view;
-  finalImageInfo.sampler = finalScene_.colorTexture.sampler;
-  finalImageInfo.imageLayout = ImageLayout::ShaderReadOnly;
-
   materialBuffer_ = device_->CreateBuffer({
       .size = sizeof(MaterialDataGPU) * k_MaxMaterials,
       .usage = BufferUsage::Storage,
@@ -309,6 +305,34 @@ void SceneRenderer::Initialize(IDevice *device, SwapchainHandle swapchain,
 
   dummmyOpaqueSceneSet_ =
       device_->AllocateDescriptorSet(opaqueScenePool_, opaqueSceneLayout_);
+
+  auto uploadCtx = device_->CreateUploadContext(4 * 1024 * 1024);
+  uploadCtx->Begin();
+
+  const uint8_t whitePixel[] = {255, 255, 255, 255};
+
+  opaqueSceneFallback_.dummy = CreateTexture2D(
+      device_, uploadCtx.get(),
+      {
+          .width = 1,
+          .height = 1,
+          .format = Format::RGBA8_UNORM,
+          .usage = ImageUsage::Sampled | ImageUsage::TransferDst,
+          .minFilter = Filter::Nearest,
+          .magFilter = Filter::Nearest,
+          .addressU = SamplerAddressMode::ClampToEdge,
+          .addressV = SamplerAddressMode::ClampToEdge,
+          .addressW = SamplerAddressMode::ClampToEdge,
+          .debugName = "Dummy Opaque Scene",
+      },
+      whitePixel, sizeof(whitePixel));
+
+  uploadCtx->Flush();
+
+  DescriptorImageInfo dummyImageInfo{};
+  dummyImageInfo.imageView = opaqueSceneFallback_.dummy.view;
+  dummyImageInfo.sampler = opaqueSceneFallback_.dummy.sampler;
+  dummyImageInfo.imageLayout = ImageLayout::ShaderReadOnly;
 
   DescriptorImageInfo shadowImage{};
   shadowImage.imageView = directionalShadow_.texture.view;
@@ -362,23 +386,13 @@ void SceneRenderer::Initialize(IDevice *device, SwapchainHandle swapchain,
 }
 
 void SceneRenderer::Shutdown(IDevice *device) {
+  graph_.Shutdown(*device);
+  DestroyTexture(device, opaqueSceneFallback_.dummy);
+
   for (auto &[key, pipeline] : pipelines_) {
     device->DestroyPipeline(pipeline);
   }
   pipelines_.clear();
-
-  if (opaqueScene_.renderView.IsValid()) {
-    device->DestroyImageView(opaqueScene_.renderView);
-    opaqueScene_.renderView = {};
-  }
-  DestroyTexture(device, opaqueScene_.texture);
-  DestroyTexture(device, opaqueScene_.dummy);
-  opaqueScene_ = {};
-
-  // Tonemapping / final scene target
-  DestroyTexture(device, finalScene_.colorTexture);
-  DestroyTexture(device, finalScene_.depthTexture);
-  finalScene_ = {};
 
   if (tonemappingPipeline_) {
     device->DestroyPipeline(tonemappingPipeline_);
@@ -498,9 +512,66 @@ void SceneRenderer::Render(ICommandList &cmd, const RenderWorld &world,
                            const Camera &camera,
                            const FrameRenderContext &frame,
                            DebugContext dbgCtx) {
-  EnsureOpaqueSceneTarget(frame);
-  EnsureFinalSceneTarget(frame);
   graph_.Reset();
+
+  const uint32_t opaqueMipLevels =
+      1u + static_cast<uint32_t>(std::floor(
+               std::log2(std::max(frame.extent.width, frame.extent.height))));
+
+  if (graph_.RegisterImage(
+          *device_, "OpaqueScene",
+          {
+              .width = frame.extent.width,
+              .height = frame.extent.height,
+              .format = colorFormat_,
+              .mipLevels = opaqueMipLevels,
+              .arrayLayers = 1,
+              .usage = ImageUsage::ColorAttachment | ImageUsage::Sampled |
+                       ImageUsage::TransferSrc | ImageUsage::TransferDst,
+              .aspect = ImageAspect::Color,
+              .viewType = ImageViewType::View2D,
+              .minFilter = Filter::Linear,
+              .magFilter = Filter::Linear,
+              .addressU = SamplerAddressMode::ClampToEdge,
+              .addressV = SamplerAddressMode::ClampToEdge,
+              .addressW = SamplerAddressMode::ClampToEdge,
+              .debugName = "Opaque Scene Color",
+          })) {
+    UpdateOpaqueSceneDescriptor();
+  }
+  bool recreatedColor = graph_.RegisterImage(
+      *device_, "FinalSceneColor",
+      {
+          .width = frame.extent.width,
+          .height = frame.extent.height,
+          .format = colorFormat_,
+          .mipLevels = 1,
+          .arrayLayers = 1,
+          .usage = ImageUsage::ColorAttachment | ImageUsage::Sampled |
+                   ImageUsage::TransferSrc | ImageUsage::TransferDst,
+          .aspect = ImageAspect::Color,
+          .viewType = ImageViewType::View2D,
+          .debugName = "Final Scene Color",
+      });
+
+  bool recreatedDepth = graph_.RegisterImage(
+      *device_, "FinalSceneDepth",
+      {
+          .width = frame.extent.width,
+          .height = frame.extent.height,
+          .format = depthFormat_,
+          .mipLevels = 1,
+          .arrayLayers = 1,
+          .usage = ImageUsage::DepthStencil | ImageUsage::Sampled,
+          .aspect = ImageAspect::Depth,
+          .viewType = ImageViewType::View2D,
+          .debugName = "Final Scene Depth",
+      });
+
+  if (recreatedColor || recreatedDepth) {
+    UpdateFinalSceneDescriptor();
+  }
+
   using Clock = std::chrono::high_resolution_clock;
 
   auto now = []() { return Clock::now(); };
@@ -601,7 +672,7 @@ void SceneRenderer::Render(ICommandList &cmd, const RenderWorld &world,
         tOpaquePass = now();
       });
 
-  for (uint32_t i = 1; i < opaqueScene_.mipLevels; i++) {
+  for (uint32_t i = 1; i < opaqueMipLevels; i++) {
     graph_.AddPass(
         "Generate Opaque Scene Mip" + std::to_string(i),
         [this, i](RenderGraphBuilder &builder) {
@@ -610,7 +681,8 @@ void SceneRenderer::Render(ICommandList &cmd, const RenderWorld &world,
         },
         [this, &frame, i](ICommandList &cmd) {
           if (!transmissions_.empty()) {
-            cmd.BlitMip(opaqueScene_.texture.image, frame.extent.width,
+            const auto &opaqueScene = graph_.GetImage("OpaqueScene");
+            cmd.BlitMip(opaqueScene.image, frame.extent.width,
                         frame.extent.height, i - 1, i, 1);
           }
         });
@@ -619,11 +691,13 @@ void SceneRenderer::Render(ICommandList &cmd, const RenderWorld &world,
   graph_.AddPass(
       "Main Pass",
       [this](RenderGraphBuilder &builder) {
+        const auto &opaque = graph_.GetImage("OpaqueScene");
+
         builder.StorageRead("MaterialBuffer");
         builder.ReadTexture("DirectionalShadowMap");
         builder.ReadTexture("IBLResources");
         builder.ReadTexture("OpaqueScene",
-                            {.baseMip = 0, .mipCount = opaqueScene_.mipLevels});
+                            {.baseMip = 0, .mipCount = opaque.mipLevels});
 
         builder.WriteColorAttachment("FinalSceneColor");
         builder.WriteDepthAttachment("FinalSceneDepth");
@@ -659,15 +733,6 @@ void SceneRenderer::Render(ICommandList &cmd, const RenderWorld &world,
       });
 
   graph_.ImportImage("DirectionalShadowMap", directionalShadow_.texture.image,
-                     ImageAspect::Depth);
-
-  graph_.ImportImage("OpaqueScene", opaqueScene_.texture.image,
-                     ImageAspect::Color, opaqueScene_.mipLevels, 1);
-
-  graph_.ImportImage("FinalSceneColor", finalScene_.colorTexture.image,
-                     ImageAspect::Color);
-
-  graph_.ImportImage("FinalSceneDepth", finalScene_.depthTexture.image,
                      ImageAspect::Depth);
 
   const ResourceState backbufferState =
@@ -909,103 +974,18 @@ PipelineHandle SceneRenderer::GetOrCreateTonemappingPipeline() {
   return tonemappingPipeline_;
 }
 
-void SceneRenderer::EnsureOpaqueSceneTarget(const FrameRenderContext &frame) {
-  bool recreated = false;
-
-  if (opaqueScene_.texture.image.IsValid() &&
-      opaqueScene_.extent.width == frame.extent.width &&
-      opaqueScene_.extent.height == frame.extent.height) {
-    return;
-  }
-
-  if (opaqueScene_.texture.image.IsValid()) {
-    if (opaqueScene_.renderView.IsValid()) {
-      device_->DestroyImageView(opaqueScene_.renderView);
-      opaqueScene_.renderView = {};
-    }
-    DestroyTexture(device_, opaqueScene_.texture);
-    DestroyTexture(device_, opaqueScene_.dummy);
-    opaqueScene_ = {};
-  }
-
-  recreated = true;
-
-  opaqueScene_.extent = frame.extent;
-
-  uint32_t mipLevels =
-      1u + static_cast<uint32_t>(std::floor(
-               std::log2(std::max(frame.extent.width, frame.extent.height))));
-
-  opaqueScene_.texture.image = device_->CreateImage({
-      .width = frame.extent.width,
-      .height = frame.extent.height,
-      .mipLevels = mipLevels,
-      .format = colorFormat_,
-      .usage = ImageUsage::ColorAttachment | ImageUsage::Sampled |
-               ImageUsage::TransferSrc | ImageUsage::TransferDst,
-      .debugName = "Opaque Scene Color",
-  });
-  opaqueScene_.mipLevels = mipLevels;
-
-  opaqueScene_.texture.view = device_->CreateImageView({
-      .image = opaqueScene_.texture.image,
-      .format = colorFormat_,
-      .aspect = ImageAspect::Color,
-      .baseMipLevel = 0,
-      .mipLevelCount = opaqueScene_.mipLevels,
-  });
-
-  opaqueScene_.renderView = device_->CreateImageView({
-      .image = opaqueScene_.texture.image,
-      .format = colorFormat_,
-      .aspect = ImageAspect::Color,
-      .baseMipLevel = 0,
-      .mipLevelCount = 1,
-      .debugName = "Opaque Scene Color Render View",
-  });
-
-  opaqueScene_.texture.sampler = device_->CreateSampler({
-      .minFilter = Filter::Linear,
-      .magFilter = Filter::Linear,
-      .addressU = SamplerAddressMode::ClampToEdge,
-      .addressV = SamplerAddressMode::ClampToEdge,
-      .addressW = SamplerAddressMode::ClampToEdge,
-      .minLod = 0.0f,
-      .maxLod = static_cast<float>(mipLevels - 1),
-  });
-
-  auto upload = device_->CreateUploadContext(4 * 256 * 1024 * 1024);
-  upload->Begin();
-
-  const std::uint8_t whitePixel[4] = {255, 255, 255, 255};
-
-  opaqueScene_.dummy =
-      CreateTexture2D(device_, upload.get(),
-                      TextureDesc{
-                          .width = 1,
-                          .height = 1,
-                          .format = Format::RGBA8_UNORM,
-                          .minFilter = Filter::Linear,
-                          .magFilter = Filter::Linear,
-                          .addressU = SamplerAddressMode::Repeat,
-                          .addressV = SamplerAddressMode::Repeat,
-                          .addressW = SamplerAddressMode::Repeat,
-                          .debugName = "Dummy OpaqueScene Texture",
-                      },
-                      whitePixel, 4);
-
-  upload->Flush();
-
-  if (recreated) {
-    UpdateOpaqueSceneDescriptor();
-  }
-}
-
 void SceneRenderer::UpdateOpaqueSceneDescriptor() {
+  const auto &opaqueScene = graph_.GetImage("OpaqueScene");
+
   DescriptorImageInfo opaqueSceneImage{};
-  opaqueSceneImage.imageView = opaqueScene_.texture.view;
-  opaqueSceneImage.sampler = opaqueScene_.texture.sampler;
+  opaqueSceneImage.imageView = opaqueScene.view;
+  opaqueSceneImage.sampler = opaqueScene.sampler;
   opaqueSceneImage.imageLayout = ImageLayout::ShaderReadOnly;
+
+  DescriptorImageInfo dummyImageInfo{};
+  dummyImageInfo.imageView = opaqueSceneFallback_.dummy.view;
+  dummyImageInfo.sampler = opaqueSceneFallback_.dummy.sampler;
+  dummyImageInfo.imageLayout = ImageLayout::ShaderReadOnly;
 
   device_->UpdateDescriptorSet({
       .dstSet = opaqueSceneSet_,
@@ -1015,24 +995,21 @@ void SceneRenderer::UpdateOpaqueSceneDescriptor() {
       .descriptorCount = 1,
   });
 
-  DescriptorImageInfo dummyImage{};
-  dummyImage.imageView = opaqueScene_.dummy.view;
-  dummyImage.sampler = opaqueScene_.dummy.sampler;
-  dummyImage.imageLayout = ImageLayout::ShaderReadOnly;
-
   device_->UpdateDescriptorSet({
       .dstSet = dummmyOpaqueSceneSet_,
       .binding = 0,
       .type = DescriptorType::CombinedImageSampler,
-      .imageInfo = &dummyImage,
+      .imageInfo = &dummyImageInfo,
       .descriptorCount = 1,
   });
 }
 
 void SceneRenderer::UpdateFinalSceneDescriptor() {
+  const auto &finalScene = graph_.GetImage("FinalSceneColor");
+
   DescriptorImageInfo finalSceneImage{};
-  finalSceneImage.imageView = finalScene_.colorTexture.view;
-  finalSceneImage.sampler = finalScene_.colorTexture.sampler;
+  finalSceneImage.imageView = finalScene.view;
+  finalSceneImage.sampler = finalScene.sampler;
   finalSceneImage.imageLayout = ImageLayout::ShaderReadOnly;
 
   device_->UpdateDescriptorSet({
@@ -1042,82 +1019,6 @@ void SceneRenderer::UpdateFinalSceneDescriptor() {
       .imageInfo = &finalSceneImage,
       .descriptorCount = 1,
   });
-}
-
-void SceneRenderer::EnsureFinalSceneTarget(const FrameRenderContext &frame) {
-  bool recreated = false;
-
-  if (finalScene_.colorTexture.image.IsValid() &&
-      finalScene_.depthTexture.image.IsValid() &&
-      finalScene_.extent.width == frame.extent.width &&
-      finalScene_.extent.height == frame.extent.height) {
-    return;
-  }
-
-  if (finalScene_.colorTexture.image.IsValid() ||
-      finalScene_.depthTexture.image.IsValid()) {
-    DestroyTexture(device_, finalScene_.colorTexture);
-    DestroyTexture(device_, finalScene_.depthTexture);
-    finalScene_ = {};
-  }
-
-  recreated = true;
-
-  finalScene_.extent = frame.extent;
-
-  finalScene_.colorTexture.image = device_->CreateImage({
-      .width = frame.extent.width,
-      .height = frame.extent.height,
-      .mipLevels = 1,
-      .format = colorFormat_,
-      .usage = ImageUsage::ColorAttachment | ImageUsage::Sampled |
-               ImageUsage::TransferSrc | ImageUsage::TransferDst,
-      .debugName = "Opaque Scene Color",
-  });
-
-  finalScene_.colorTexture.view = device_->CreateImageView({
-      .image = finalScene_.colorTexture.image,
-      .format = colorFormat_,
-      .aspect = ImageAspect::Color,
-      .baseMipLevel = 0,
-  });
-
-  finalScene_.colorTexture.sampler = device_->CreateSampler({
-      .minFilter = Filter::Linear,
-      .magFilter = Filter::Linear,
-      .addressU = SamplerAddressMode::ClampToEdge,
-      .addressV = SamplerAddressMode::ClampToEdge,
-      .addressW = SamplerAddressMode::ClampToEdge,
-  });
-
-  finalScene_.depthTexture.image = device_->CreateImage({
-      .width = frame.extent.width,
-      .height = frame.extent.height,
-      .mipLevels = 1,
-      .format = depthFormat_,
-      .usage = ImageUsage::DepthStencil | ImageUsage::Sampled |
-               ImageUsage::TransferSrc | ImageUsage::TransferDst,
-      .debugName = "Opaque Scene Color",
-  });
-
-  finalScene_.depthTexture.view = device_->CreateImageView({
-      .image = finalScene_.depthTexture.image,
-      .format = depthFormat_,
-      .aspect = ImageAspect::Depth,
-      .baseMipLevel = 0,
-  });
-
-  finalScene_.depthTexture.sampler = device_->CreateSampler({
-      .minFilter = Filter::Linear,
-      .magFilter = Filter::Linear,
-      .addressU = SamplerAddressMode::ClampToEdge,
-      .addressV = SamplerAddressMode::ClampToEdge,
-      .addressW = SamplerAddressMode::ClampToEdge,
-  });
-
-  if (recreated) {
-    UpdateFinalSceneDescriptor();
-  }
 }
 
 void SceneRenderer::RenderShadowMaps(ICommandList &cmd,
@@ -1614,20 +1515,17 @@ void SceneRenderer::BeginMainPass(ICommandList &cmd,
   cmd.UpdateBuffer(
       {.buffer = frameUBO_, .data = &frameData, .size = sizeof(FrameDataGPU)});
 
-  auto currentLayout =
-      device_->GetImageLayout(finalScene_.colorTexture.image, 0);
-
-  auto currentDepthLayout =
-      device_->GetImageLayout(finalScene_.depthTexture.image, 0);
+  const auto &finalColor = graph_.GetImage("FinalSceneColor");
+  const auto &finalDepth = graph_.GetImage("FinalSceneDepth");
 
   ColorAttachmentDesc colorAttachment{};
-  colorAttachment.view = finalScene_.colorTexture.view;
+  colorAttachment.view = finalColor.view;
   colorAttachment.loadOp = LoadOp::Clear;
   colorAttachment.storeOp = StoreOp::Store;
   colorAttachment.clearValue = {1.0f, 0.0f, 0.0f, 1.0f};
 
   DepthAttachmentDesc depthAttachment{};
-  depthAttachment.view = finalScene_.depthTexture.view;
+  depthAttachment.view = finalDepth.view;
   depthAttachment.loadOp = LoadOp::Clear;
   depthAttachment.storeOp = StoreOp::Store;
   depthAttachment.clearDepth = 1.0f;
@@ -1681,12 +1579,10 @@ void SceneRenderer::BeginOpaquePass(ICommandList &cmd,
   cmd.UpdateBuffer(
       {.buffer = frameUBO_, .data = &frameData, .size = sizeof(FrameDataGPU)});
 
-  auto currentLayout = device_->GetImageLayout(opaqueScene_.texture.image, 0);
-
-  auto currentDepth = device_->GetImageLayout(frame.depthImage, 0);
+  const auto &opaqueScene = graph_.GetImage("OpaqueScene");
 
   ColorAttachmentDesc colorAttachment{};
-  colorAttachment.view = opaqueScene_.renderView;
+  colorAttachment.view = opaqueScene.renderView;
   colorAttachment.loadOp = LoadOp::Clear;
   colorAttachment.storeOp = StoreOp::Store;
   colorAttachment.clearValue = {0.1f, 0.1f, 0.1f, 1.0f};
@@ -1729,13 +1625,6 @@ void SceneRenderer::BeginTonemappingPass(ICommandList &cmd,
                                          const FrameRenderContext &frame,
                                          const Camera &camera,
                                          const DebugContext &dbgCtx) {
-  auto currentLayout =
-      device_->GetImageLayout(finalScene_.colorTexture.image, 0);
-
-  auto currentLayoutBB = device_->GetImageLayout(frame.backbufferImage, 0);
-
-  auto currentDepthLayout = device_->GetImageLayout(frame.depthImage, 0);
-
   ColorAttachmentDesc colorAttachment{};
   colorAttachment.view = frame.backbufferView;
   colorAttachment.loadOp = LoadOp::Clear;

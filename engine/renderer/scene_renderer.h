@@ -255,23 +255,11 @@ private:
   IBLResources iblResources_;
   bool iblReady_ = false;
 
-  struct OpaqueSceneTarget {
-    Texture texture{};
+  struct OpaqueSceneFallback {
     Texture dummy{};
-    ImageViewHandle renderView{};
-    Extent2D extent{};
-    uint32_t mipLevels;
   };
 
-  OpaqueSceneTarget opaqueScene_;
-
-  struct FinalSceneTarget {
-    Texture colorTexture{};
-    Texture depthTexture{};
-    Extent2D extent{};
-  };
-
-  FinalSceneTarget finalScene_;
+  OpaqueSceneFallback opaqueSceneFallback_;
 
   bool recreated = false;
 

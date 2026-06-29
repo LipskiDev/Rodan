@@ -332,8 +332,8 @@ void GltfViewerScene::LoadScene(IDevice *device, std::string path) {
   auto upload = device->CreateUploadContext(4 * 256 * 1024 * 1024);
   upload->Begin();
 
-  asset_ =
-      StaticGltfAsset::Load(device, upload.get(), Velos::Path::Resolve(path).string());
+  asset_ = StaticGltfAsset::Load(device, upload.get(),
+                                 Velos::Path::Resolve(path).string());
 
   upload->Flush();
 

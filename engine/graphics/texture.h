@@ -12,6 +12,11 @@ struct TextureDesc {
   uint32_t width = 0;
   uint32_t height = 0;
   Format format = Format::Undefined;
+  uint32_t mipLevels = 1;
+  uint32_t arrayLayers = 1;
+  ImageUsage usage = ImageUsage::None;
+  ImageAspect aspect = ImageAspect::None;
+  ImageViewType viewType = ImageViewType::View2D;
 
   Filter minFilter = Filter::Linear;
   Filter magFilter = Filter::Linear;
@@ -19,6 +24,9 @@ struct TextureDesc {
   SamplerAddressMode addressU = SamplerAddressMode::Repeat;
   SamplerAddressMode addressV = SamplerAddressMode::Repeat;
   SamplerAddressMode addressW = SamplerAddressMode::Repeat;
+
+  bool enableAnisotropy = false;
+  float maxAnisotropy = 1.0f;
 
   bool generateMipmaps = false;
   const char *debugName = nullptr;

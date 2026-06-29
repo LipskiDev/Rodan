@@ -1,5 +1,6 @@
 #include "render_graph.h"
 #include "renderer/render_graph/render_graph_builder.h"
+#include "rhi/rhi_resources.h"
 #include "rhi/rhi_types.h"
 
 #include <iostream>
@@ -174,7 +175,7 @@ void RenderGraph::BuildTransitions() {
   std::unordered_map<std::string, std::vector<std::string>>
       lastPassUsingResource;
 
-  for (const auto &[name, image] : importedImages_) {
+  for (const auto &[name, image] : imageResources_) {
     currentLayouts[name] = image.mipLayouts;
     currentStates[name] = image.mipStates;
     lastPassUsingResource[name].assign(image.mipLevels, "External");
@@ -187,12 +188,12 @@ void RenderGraph::BuildTransitions() {
     }
 
     for (const ResourceAccess &access : currentPass->accesses) {
-      auto importedIt = importedImages_.find(access.name);
-      if (importedIt == importedImages_.end()) {
+      auto importedIt = imageResources_.find(access.name);
+      if (importedIt == imageResources_.end()) {
         continue;
       }
 
-      const ImportedImage &image = importedIt->second;
+      const ImageResource &image = importedIt->second;
 
       const uint32_t baseMip = access.range.baseMip;
       const uint32_t mipCount = access.range.mipCount == UINT32_MAX
@@ -352,12 +353,12 @@ const RenderGraph::Pass *RenderGraph::FindPass(const std::string &name) const {
 void RenderGraph::EmitTransitions(
     ICommandList &cmd, const std::vector<CompiledTransition> &transitions) {
   for (const CompiledTransition &transition : transitions) {
-    auto it = importedImages_.find(transition.resource);
-    if (it == importedImages_.end()) {
+    auto it = imageResources_.find(transition.resource);
+    if (it == imageResources_.end()) {
       continue;
     }
 
-    ImportedImage &resource = it->second;
+    ImageResource &resource = it->second;
     if (!resource.image.IsValid()) {
       continue;
     }
@@ -415,7 +416,7 @@ void RenderGraph::ImportImage(const std::string &name,
                               Velos::RHI::ImageLayout currentLayout,
                               Velos::RHI::ResourceState currentState,
                               bool hasCurrentState) {
-  ImportedImage &imported = importedImages_[name];
+  ImageResource &imported = imageResources_[name];
   if (imported.image.IsValid() && !imported.mipLayouts.empty()) {
     imported.layoutsByImage[imported.image.id] = imported.mipLayouts;
   }
@@ -433,6 +434,7 @@ void RenderGraph::ImportImage(const std::string &name,
   imported.aspect = aspect;
   imported.mipLevels = mipLevels;
   imported.arrayLayers = arrayLayers;
+  imported.imported = true;
 
   auto layoutIt = imported.layoutsByImage.find(image.id);
   if (hasCurrentState) {
@@ -461,12 +463,150 @@ void RenderGraph::ImportImage(const std::string &name,
   }
 }
 
+bool RenderGraph::RegisterImage(Velos::RHI::IDevice &device,
+                                const std::string &name, TextureDesc desc) {
+  ImageResource &registeredImage = imageResources_[name];
+
+  const bool isNewImage =
+      !registeredImage.image.IsValid() ||
+      registeredImage.desc.width != desc.width ||
+      registeredImage.desc.height != desc.height ||
+      registeredImage.desc.format != desc.format ||
+      registeredImage.desc.mipLevels != desc.mipLevels ||
+      registeredImage.desc.arrayLayers != desc.arrayLayers ||
+      registeredImage.desc.usage != desc.usage;
+
+  if (!isNewImage) {
+    return false;
+  }
+
+  if (registeredImage.renderView.IsValid()) {
+    device.DestroyImageView(registeredImage.renderView);
+    registeredImage.renderView = {};
+  }
+
+  if (registeredImage.view.IsValid()) {
+    device.DestroyImageView(registeredImage.view);
+    registeredImage.view = {};
+  }
+
+  if (registeredImage.sampler.IsValid()) {
+    device.DestroySampler(registeredImage.sampler);
+    registeredImage.sampler = {};
+  }
+
+  if (registeredImage.image.IsValid()) {
+    device.DestroyImage(registeredImage.image);
+    registeredImage.image = {};
+  }
+
+  registeredImage.desc = desc;
+
+  Velos::RHI::ImageDesc imageDesc{};
+  imageDesc.debugName = desc.debugName;
+  imageDesc.width = desc.width;
+  imageDesc.height = desc.height;
+  imageDesc.depth = 1;
+  imageDesc.mipLevels = desc.mipLevels;
+  imageDesc.arrayLayers = desc.arrayLayers;
+  imageDesc.format = desc.format;
+  imageDesc.usage = desc.usage;
+
+  registeredImage.image = device.CreateImage(imageDesc);
+
+  // Full sampled view
+  registeredImage.view = device.CreateImageView({
+      .image = registeredImage.image,
+      .format = desc.format,
+      .type = desc.viewType,
+      .aspect = desc.aspect,
+      .baseMipLevel = 0,
+      .mipLevelCount = desc.mipLevels,
+      .baseArrayLayer = 0,
+      .arrayLayerCount = desc.arrayLayers,
+      .debugName = desc.debugName,
+  });
+
+  // Attachment view: mip 0 only
+  registeredImage.renderView = device.CreateImageView({
+      .image = registeredImage.image,
+      .format = desc.format,
+      .type = desc.viewType,
+      .aspect = desc.aspect,
+      .baseMipLevel = 0,
+      .mipLevelCount = 1,
+      .baseArrayLayer = 0,
+      .arrayLayerCount = desc.arrayLayers,
+      .debugName = desc.debugName,
+  });
+
+  Velos::RHI::SamplerDesc samplerDesc{};
+  samplerDesc.debugName = desc.debugName;
+  samplerDesc.addressU = desc.addressU;
+  samplerDesc.addressV = desc.addressV;
+  samplerDesc.addressW = desc.addressW;
+  samplerDesc.minFilter = desc.minFilter;
+  samplerDesc.magFilter = desc.magFilter;
+  samplerDesc.enableAnisotropy = desc.enableAnisotropy;
+  samplerDesc.maxAnisotropy = desc.maxAnisotropy;
+
+  registeredImage.sampler = device.CreateSampler(samplerDesc);
+
+  registeredImage.mipLayouts.assign(desc.mipLevels,
+                                    Velos::RHI::ImageLayout::Undefined);
+
+  registeredImage.mipStates.assign(desc.mipLevels,
+                                   Velos::RHI::ResourceState::Undefined);
+
+  registeredImage.aspect = desc.aspect;
+  registeredImage.mipLevels = desc.mipLevels;
+  registeredImage.arrayLayers = desc.arrayLayers;
+
+  registeredImage.imported = false;
+
+  return true;
+}
+
+const ImageResource &RenderGraph::GetImage(const std::string &name) const {
+  return imageResources_.at(name);
+}
+
 void RenderGraph::Reset() {
   passes_.clear();
   edges_.clear();
   executionOrder_.clear();
   lifetimes_.clear();
   transitions_.clear();
+}
+
+void RenderGraph::Shutdown(Velos::RHI::IDevice &device) {
+  for (auto &[name, resource] : imageResources_) {
+    if (resource.imported) {
+      continue;
+    }
+
+    if (resource.renderView.IsValid()) {
+      device.DestroyImageView(resource.renderView);
+      resource.renderView = {};
+    }
+
+    if (resource.view.IsValid()) {
+      device.DestroyImageView(resource.view);
+      resource.view = {};
+    }
+
+    if (resource.sampler.IsValid()) {
+      device.DestroySampler(resource.sampler);
+      resource.sampler = {};
+    }
+
+    if (resource.image.IsValid()) {
+      device.DestroyImage(resource.image);
+      resource.image = {};
+    }
+  }
+
+  imageResources_.clear();
 }
 
 } // namespace Rodan

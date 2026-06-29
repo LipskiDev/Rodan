@@ -1,6 +1,7 @@
 #pragma once
 
 #include "assets/imported_scene.h"
+#include "graphics/texture.h"
 #include "render_graph_builder.h"
 
 #include <functional>
@@ -8,11 +9,36 @@
 #include <vector>
 
 #include "rhi/rhi_command_list.h"
+#include "rhi/rhi_device.h"
+#include "rhi/rhi_handles.h"
 #include "rhi/rhi_types.h"
 
 namespace Rodan {
 
 using Velos::RHI::ICommandList;
+
+struct ImageResource {
+  TextureDesc desc;
+
+  Velos::RHI::ImageHandle image;
+  Velos::RHI::ImageViewHandle view;
+  Velos::RHI::ImageViewHandle renderView;
+  Velos::RHI::SamplerHandle sampler;
+
+  Velos::RHI::ImageAspect aspect = Velos::RHI::ImageAspect::Color;
+  uint32_t mipLevels = 1;
+  uint32_t arrayLayers = 1;
+
+  std::vector<Velos::RHI::ImageLayout> mipLayouts;
+  std::vector<Velos::RHI::ResourceState> mipStates;
+
+  std::unordered_map<uint32_t, std::vector<Velos::RHI::ImageLayout>>
+      layoutsByImage;
+  std::unordered_map<uint32_t, std::vector<Velos::RHI::ResourceState>>
+      statesByImage;
+
+  bool imported = false;
+};
 
 class RenderGraph {
 public:
@@ -34,7 +60,13 @@ public:
                        Velos::RHI::ResourceState::Undefined,
                    bool hasCurrentState = false);
 
+  bool RegisterImage(Velos::RHI::IDevice &device, const std::string &name,
+                     TextureDesc desc);
+
+  const ImageResource &GetImage(const std::string &name) const;
+
   void Reset();
+  void Shutdown(IDevice &device);
 
 private:
   struct CompiledEdge {
@@ -61,19 +93,6 @@ private:
     SubresourceRange range;
   };
 
-  struct ImportedImage {
-    Velos::RHI::ImageHandle image;
-    Velos::RHI::ImageAspect aspect;
-    uint32_t mipLevels = 1;
-    uint32_t arrayLayers = 1;
-    std::vector<Velos::RHI::ImageLayout> mipLayouts;
-    std::vector<Velos::RHI::ResourceState> mipStates;
-    std::unordered_map<uint32_t, std::vector<Velos::RHI::ImageLayout>>
-        layoutsByImage;
-    std::unordered_map<uint32_t, std::vector<Velos::RHI::ResourceState>>
-        statesByImage;
-  };
-
   struct Pass {
     std::string name;
 
@@ -92,7 +111,7 @@ private:
   std::vector<ResourceLifetime> lifetimes_;
 
   std::vector<CompiledTransition> transitions_;
-  std::unordered_map<std::string, ImportedImage> importedImages_;
+  std::unordered_map<std::string, ImageResource> imageResources_;
 
 private:
   Pass *FindPass(const std::string &name);
