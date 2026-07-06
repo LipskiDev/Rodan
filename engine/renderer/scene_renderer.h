@@ -51,6 +51,12 @@ struct alignas(16) MaterialDataGPU {
   float transmissionFactor;
   float thicknessFactor;
   float ior;
+  float clearcoatFactor;
+  float clearcoatRoughnessFactor;
+  float pad0_;
+  float pad1_;
+  glm::vec3 emissiveFactor;
+  float emissiveStrength;
 
   glm::vec4 attenuationColorDistance;
 };

@@ -467,6 +467,95 @@ static ImportedMaterial LoadMaterial(const tinygltf::Model &model,
     }
   }
 
+  if (material.extensions.contains("KHR_materials_ior")) {
+    const auto &ext = material.extensions.at("KHR_materials_ior");
+    if (ext.Has("ior")) {
+      out.ior = static_cast<float>(ext.Get("ior").GetNumberAsDouble());
+    }
+  }
+
+  if (material.extensions.contains("KHR_materials_clearcoat")) {
+    const auto &ext = material.extensions.at("KHR_materials_clearcoat");
+    if (ext.Has("clearcoatFactor")) {
+      out.clearCoat.factor =
+          static_cast<float>(ext.Get("clearcoatFactor").GetNumberAsDouble());
+    }
+
+    if (ext.Has("clearcoatTexture")) {
+      const auto &texInfo = ext.Get("clearcoatTexture");
+      int textureIndex = texInfo.Get("index").Get<int>();
+
+      const tinygltf::Texture &tex = model.textures.at(textureIndex);
+
+      out.clearCoat.texture.imageIndex = tex.source;
+      out.clearCoat.texture.samplerIndex = tex.sampler;
+      out.clearCoat.texture.texCoord =
+          texInfo.Has("texCoord") ? texInfo.Get("texCoord").Get<int>() : 0;
+    }
+
+    if (ext.Has("clearcoatRoughnessFactor")) {
+      out.clearCoat.roughnessFactor = static_cast<float>(
+          ext.Get("clearcoatRoughnessFactor").GetNumberAsDouble());
+    }
+
+    if (ext.Has("clearcoatRoughnessTexture")) {
+      const auto &texInfo = ext.Get("clearcoatRoughnessTexture");
+      int textureIndex = texInfo.Get("index").Get<int>();
+
+      const tinygltf::Texture &tex = model.textures.at(textureIndex);
+
+      out.clearCoat.roughnessTexture.imageIndex = tex.source;
+      out.clearCoat.roughnessTexture.samplerIndex = tex.sampler;
+      out.clearCoat.roughnessTexture.texCoord =
+          texInfo.Has("texCoord") ? texInfo.Get("texCoord").Get<int>() : 0;
+    }
+
+    if (ext.Has("clearcoatNormalTexture")) {
+      const auto &texInfo = ext.Get("clearcoatNormalTexture");
+      int textureIndex = texInfo.Get("index").Get<int>();
+
+      const tinygltf::Texture &tex = model.textures.at(textureIndex);
+
+      out.clearCoat.normalTexture.imageIndex = tex.source;
+      out.clearCoat.normalTexture.samplerIndex = tex.sampler;
+      out.clearCoat.normalTexture.texCoord =
+          texInfo.Has("texCoord") ? texInfo.Get("texCoord").Get<int>() : 0;
+    }
+  }
+
+  out.emissive.factor = {material.emissiveFactor[0], material.emissiveFactor[1],
+                         material.emissiveFactor[2]};
+
+  if (material.emissiveTexture.index >= 0) {
+    const int textureIndex = material.emissiveTexture.index;
+    if (textureIndex < 0 ||
+        textureIndex >= static_cast<int>(model.textures.size())) {
+      throw std::runtime_error(
+          "glTF material references invalid emissive texture");
+    }
+
+    const tinygltf::Texture &tex = model.textures[textureIndex];
+    out.emissive.texture.imageIndex = tex.source;
+    out.emissive.texture.samplerIndex = tex.sampler;
+    out.emissive.texture.texCoord = material.emissiveTexture.texCoord;
+
+    if (tex.source < 0 || tex.source >= static_cast<int>(model.images.size())) {
+      throw std::runtime_error(
+          "glTF material references invalid emissive image");
+    }
+  }
+
+  if (material.extensions.contains("KHR_materials_emissive_strength")) {
+    const auto &ext = material.extensions.at("KHR_materials_emissive_strength");
+
+    if (ext.Has("emissiveStrength")) {
+      out.emissive.emissiveStrength =
+          static_cast<float>(ext.Get("emissiveStrength").GetNumberAsDouble());
+      std::cout << "SETTING EMISSIVE STRENGHT: "
+                << out.emissive.emissiveStrength << std::endl;
+    }
+  }
+
   return out;
 }
 

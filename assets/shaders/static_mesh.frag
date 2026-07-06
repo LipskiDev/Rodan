@@ -13,6 +13,10 @@ layout(set = 0, binding = 2) uniform sampler2D u_MetallicRoughness;
 layout(set = 0, binding = 3) uniform sampler2D u_OcclusionTexture;
 layout(set = 0, binding = 4) uniform sampler2D u_TransmissionTexture;
 layout(set = 0, binding = 5) uniform sampler2D u_ThicknessTexture;
+layout(set = 0, binding = 6) uniform sampler2D u_ClearcoatTexture;
+layout(set = 0, binding = 7) uniform sampler2D u_ClearcoatRoughness;
+layout(set = 0, binding = 8) uniform sampler2D u_ClearcoatNormal;
+layout(set = 0, binding = 9) uniform sampler2D u_EmissiveTexture;
 
 layout(set = 1, binding = 0) uniform sampler2D u_ShadowMap;
 layout(set = 1, binding = 1) uniform FrameData {
@@ -43,6 +47,10 @@ struct MaterialData {
   float transmissionFactor;
   float thicknessFactor;
   float ior;
+  float clearcoatFactor;
+  float clearcoatRoughnessFactor;
+  vec3 emissiveFactor;
+  float emissiveStrength;
 
   vec4 attenuationColorDistance;
 };
@@ -125,6 +133,11 @@ float GeometrySmith(vec3 N, vec3 V, vec3 L, float roughness) {
     float ggxV = GeometrySchlickGGX(max(dot(N, V), 0.0), roughness);
     float ggxL = GeometrySchlickGGX(max(dot(N, L), 0.0), roughness);
     return ggxV * ggxL;
+}
+
+vec3 FresnelSchlick(float cosTheta, vec3 F0)
+{
+    return F0 + (1.0 - F0) * pow(1.0 - cosTheta, 5.0);
 }
 
 vec3 FresnelSchlickRoughness(
@@ -210,6 +223,28 @@ vec3 getNormal()
     return N;
 }
 
+vec3 getClearcoatNormal()
+{
+    vec3 N = normalize(vWorldNormal);
+
+    if (length(vTangent) > 0.001 &&
+        length(vBitangent) > 0.001 &&
+        length(vNormal) > 0.001)
+    {
+        vec3 normalSample = texture(u_ClearcoatNormal, vUV).xyz * 2.0 - 1.0;
+
+        mat3 TBN = mat3(
+            normalize(vTangent),
+            normalize(vBitangent),
+            normalize(vNormal)
+        );
+
+        N = normalize(TBN * normalSample);
+    }
+
+    return N;
+}
+
 void main() {
     vec4 baseTex = texture(u_BaseColor, vUV);
     vec4 mrTex   = texture(u_MetallicRoughness, vUV);
@@ -261,6 +296,25 @@ void main() {
     float maxReflectionLod =
         float(textureQueryLevels(u_PrefilterMap) - 1);
 
+    vec3 ccNormal = getClearcoatNormal();
+    float ccFactor = material.clearcoatFactor * texture(u_ClearcoatTexture, vUV).r;
+    float ccRoughness = material.clearcoatRoughnessFactor * texture(u_ClearcoatRoughness, vUV).g;
+    ccFactor = clamp(ccFactor, 0.0, 1.0);
+    ccRoughness = clamp(ccRoughness, 0.001, 1.0);
+    vec3 ccF0 = vec3(0.04f);
+
+    float ccNDF = DistributionGGX(ccNormal, H, ccRoughness);
+    float ccG = GeometrySmith(ccNormal, V, L, ccRoughness);
+    vec3 ccF = FresnelSchlick(HdotV, ccF0);
+    float ccNdotV = max(dot(ccNormal, V), 0.0);
+    float ccNdotL = max(dot(ccNormal, L), 0.0);
+
+    vec3 ccSpecular = (ccNDF * ccG * ccF) / max(4.0 * ccNdotV * ccNdotL, 0.0001);
+    vec3 ccPrefilter = textureLod(u_PrefilterMap, R, ccRoughness * maxReflectionLod).rgb;
+
+    vec2 ccBrdf = texture(u_BRDFLUT, vec2(NdotV, ccRoughness)).rg;
+    vec3 clearCoatIBL = ccFactor * ccPrefilter * (ccF * ccBrdf.x + ccBrdf.y);
+
     vec3 prefilteredColor =
         textureLod(
             u_PrefilterMap,
@@ -302,6 +356,11 @@ void main() {
         shadow = ComputeShadow(vWorldPos, N, L);
     }
 
+    vec3 clearcoatDirect =
+        ccSpecular*
+        radiance *
+        NdotL *
+        shadow;
     vec3 direct =
         (diffuse + specular) *
         radiance *
@@ -318,8 +377,8 @@ void main() {
     vec3 directSpecular =
         specular * radiance * NdotL * shadow;
 
-    vec3 f_diffuse = diffuseIBL + directDiffuse;
-    vec3 f_specular = specularIBL + directSpecular;
+    vec3 baseDiffuse = diffuseIBL + directDiffuse;
+    vec3 baseSpecular = specularIBL + directSpecular;
 
     float transmission =
         saturate(
@@ -327,7 +386,13 @@ void main() {
             texture(u_TransmissionTexture, vUV).r
         );
 
-    vec3 color = mix(f_diffuse, f_specular, F_ibl);
+    vec3 attenuation = 1.0 - ccFactor * ccF;
+
+    vec3 color =
+        attenuation *
+        (baseDiffuse + baseSpecular)
+        + clearCoatIBL
+        + clearcoatDirect;
 
     if(transmission > 0.001) {
       float ior = material.ior > 0.0 ? material.ior : 1.5;
@@ -383,6 +448,13 @@ void main() {
 
       color = mix(color, glass, transmissionVisibility);
     }
+
+vec3 emissive =
+    material.emissiveFactor *
+    texture(u_EmissiveTexture, vUV).rgb *
+    material.emissiveStrength;
+
+color += emissive;
 
     outColor = vec4(color, alpha);
 }

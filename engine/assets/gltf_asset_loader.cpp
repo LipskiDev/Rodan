@@ -86,7 +86,24 @@ void StaticGltfAsset::Destroy(IDevice *device) {
     if (mat.volume.ownsVolumeTexture) {
       DestroyTexture(device, mat.volume.thicknessTexture);
     }
+
+    if (mat.clearcoat.ownsClearcoatTexture) {
+      DestroyTexture(device, mat.clearcoat.texture);
+    }
+
+    if (mat.clearcoat.ownsClearcoatRoughnessTexture) {
+      DestroyTexture(device, mat.clearcoat.roughnessTexture);
+    }
+
+    if (mat.clearcoat.ownsClearcoatNormalTexture) {
+      DestroyTexture(device, mat.clearcoat.normalTexture);
+    }
+
+    if (mat.emissive.ownsEmissiveTexture) {
+      DestroyTexture(device, mat.emissive.texture);
+    }
   }
+
   materials_.clear();
 
   DestroyTexture(device, fallbackTexture_);
@@ -133,11 +150,27 @@ void StaticGltfAsset::CreateMaterialLayout(IDevice *device) {
        .type = DescriptorType::CombinedImageSampler,
        .count = 1,
        .visibility = ShaderStage::Fragment}, // thickness
+      {.binding = 6,
+       .type = DescriptorType::CombinedImageSampler,
+       .count = 1,
+       .visibility = ShaderStage::Fragment}, // clearcoat texture
+      {.binding = 7,
+       .type = DescriptorType::CombinedImageSampler,
+       .count = 1,
+       .visibility = ShaderStage::Fragment}, // clearcoat roughness
+      {.binding = 8,
+       .type = DescriptorType::CombinedImageSampler,
+       .count = 1,
+       .visibility = ShaderStage::Fragment}, // clearcoat normal
+      {.binding = 9,
+       .type = DescriptorType::CombinedImageSampler,
+       .count = 1,
+       .visibility = ShaderStage::Fragment}, // emissive texture
   };
 
   DescriptorSetLayoutDesc layout{};
   layout.bindings = bindings;
-  layout.bindingCount = 6;
+  layout.bindingCount = 10;
   layout.debugName = "GLTF Material Layout";
 
   materialLayout_ = device->CreateDescriptorSetLayout(layout);
@@ -151,7 +184,7 @@ void StaticGltfAsset::CreateDescriptorPool(IDevice *device,
 
   DescriptorPoolSize poolSize{};
   poolSize.type = DescriptorType::CombinedImageSampler;
-  poolSize.count = materialCount * 6;
+  poolSize.count = materialCount * 10;
 
   DescriptorPoolDesc poolDesc{};
   poolDesc.poolSizes = &poolSize;
@@ -206,6 +239,11 @@ void StaticGltfAsset::UploadMaterials(IDevice *device, IUploadContext *upload,
     gpuMat.roughnessFactor = mat.roughnessFactor;
     gpuMat.alphaCutoff = mat.alphaCutoff;
     gpuMat.alphaMode = mat.alphaMode;
+    gpuMat.ior = mat.ior;
+    gpuMat.clearcoat.factor = mat.clearCoat.factor;
+    gpuMat.clearcoat.roughnessFactor = mat.clearCoat.roughnessFactor;
+    gpuMat.emissive.factor = mat.emissive.factor;
+    gpuMat.emissive.strength = mat.emissive.emissiveStrength;
 
     if (mat.baseColorTexture.imageIndex >= 0 &&
         mat.baseColorTexture.imageIndex <
@@ -340,6 +378,7 @@ void StaticGltfAsset::UploadMaterials(IDevice *device, IUploadContext *upload,
     } else {
       gpuMat.transmission.transmissionTexture =
           fallbackTexture_; // white = multiplier 1
+      gpuMat.transmission.ownsTransmissionTexture = false;
     }
 
     if (mat.volume.thicknessTexture.imageIndex >= 0) {
@@ -363,6 +402,96 @@ void StaticGltfAsset::UploadMaterials(IDevice *device, IUploadContext *upload,
 
     } else {
       gpuMat.volume.thicknessTexture = fallbackTexture_; // white = multiplier 1
+    }
+
+    if (mat.clearCoat.texture.imageIndex >= 0) {
+      const ImportedImage &img =
+          importedScene.images[mat.clearCoat.texture.imageIndex];
+
+      gpuMat.clearcoat.texture = CreateTexture2D(
+          device, upload,
+          TextureDesc{.width = static_cast<uint32_t>(img.width),
+                      .height = static_cast<uint32_t>(img.height),
+                      .format = Format::RGBA8_UNORM,
+                      .minFilter = Filter::Linear,
+                      .magFilter = Filter::Linear,
+                      .addressU = SamplerAddressMode::Repeat,
+                      .addressV = SamplerAddressMode::Repeat,
+                      .addressW = SamplerAddressMode::Repeat,
+                      .debugName = "GLTF Clearcoat Texture"},
+          img.pixelsRGBA8.data(),
+          static_cast<uint64_t>(img.pixelsRGBA8.size()));
+      gpuMat.clearcoat.ownsClearcoatTexture = true;
+    } else {
+      gpuMat.clearcoat.texture = fallbackTexture_; // white = multiplier 1
+    }
+
+    if (mat.clearCoat.roughnessTexture.imageIndex >= 0) {
+      const ImportedImage &img =
+          importedScene.images[mat.clearCoat.roughnessTexture.imageIndex];
+
+      gpuMat.clearcoat.roughnessTexture = CreateTexture2D(
+          device, upload,
+          TextureDesc{.width = static_cast<uint32_t>(img.width),
+                      .height = static_cast<uint32_t>(img.height),
+                      .format = Format::RGBA8_UNORM,
+                      .minFilter = Filter::Linear,
+                      .magFilter = Filter::Linear,
+                      .addressU = SamplerAddressMode::Repeat,
+                      .addressV = SamplerAddressMode::Repeat,
+                      .addressW = SamplerAddressMode::Repeat,
+                      .debugName = "GLTF Clearcoat Roughness Texture"},
+          img.pixelsRGBA8.data(),
+          static_cast<uint64_t>(img.pixelsRGBA8.size()));
+      gpuMat.clearcoat.ownsClearcoatRoughnessTexture = true;
+    } else {
+      gpuMat.clearcoat.roughnessTexture =
+          fallbackTexture_; // white = multiplier 1
+    }
+
+    if (mat.clearCoat.normalTexture.imageIndex >= 0) {
+      const ImportedImage &img =
+          importedScene.images[mat.clearCoat.normalTexture.imageIndex];
+
+      gpuMat.clearcoat.normalTexture = CreateTexture2D(
+          device, upload,
+          TextureDesc{.width = static_cast<uint32_t>(img.width),
+                      .height = static_cast<uint32_t>(img.height),
+                      .format = Format::RGBA8_UNORM,
+                      .minFilter = Filter::Linear,
+                      .magFilter = Filter::Linear,
+                      .addressU = SamplerAddressMode::Repeat,
+                      .addressV = SamplerAddressMode::Repeat,
+                      .addressW = SamplerAddressMode::Repeat,
+                      .debugName = "GLTF Clearcoat Normal Texture"},
+          img.pixelsRGBA8.data(),
+          static_cast<uint64_t>(img.pixelsRGBA8.size()));
+      gpuMat.clearcoat.ownsClearcoatNormalTexture = true;
+    } else {
+      gpuMat.clearcoat.normalTexture =
+          neutralNormalFallbackTexture_; // white = multiplier 1
+    }
+
+    if (mat.emissive.texture.imageIndex >= 0) {
+      const ImportedImage &img =
+          importedScene.images[mat.emissive.texture.imageIndex];
+
+      gpuMat.emissive.texture = CreateTexture2D(
+          device, upload,
+          TextureDesc{.width = static_cast<uint32_t>(img.width),
+                      .height = static_cast<uint32_t>(img.height),
+                      .format = Format::RGBA8_UNORM,
+                      .minFilter = Filter::Linear,
+                      .magFilter = Filter::Linear,
+                      .addressU = SamplerAddressMode::Repeat,
+                      .addressV = SamplerAddressMode::Repeat,
+                      .addressW = SamplerAddressMode::Repeat,
+                      .debugName = "GLTF Clearcoat Normal Texture"},
+          img.pixelsRGBA8.data(),
+          static_cast<uint64_t>(img.pixelsRGBA8.size()));
+      gpuMat.emissive.ownsEmissiveTexture = true;
+    } else {
+      gpuMat.emissive.texture = fallbackTexture_; // white = multiplier 1
     }
 
     gpuMat.descriptorSet =
@@ -400,6 +529,28 @@ void StaticGltfAsset::UploadMaterials(IDevice *device, IUploadContext *upload,
     thicknessImageInfo.sampler = gpuMat.volume.thicknessTexture.sampler;
     thicknessImageInfo.imageView = gpuMat.volume.thicknessTexture.view;
     thicknessImageInfo.imageLayout = ImageLayout::ShaderReadOnly;
+
+    DescriptorImageInfo clearcoatTextureInfo{};
+    clearcoatTextureInfo.sampler = gpuMat.clearcoat.texture.sampler;
+    clearcoatTextureInfo.imageView = gpuMat.clearcoat.texture.view;
+    clearcoatTextureInfo.imageLayout = ImageLayout::ShaderReadOnly;
+
+    DescriptorImageInfo clearcoatRoughnessTextureInfo{};
+    clearcoatRoughnessTextureInfo.sampler =
+        gpuMat.clearcoat.roughnessTexture.sampler;
+    clearcoatRoughnessTextureInfo.imageView =
+        gpuMat.clearcoat.roughnessTexture.view;
+    clearcoatRoughnessTextureInfo.imageLayout = ImageLayout::ShaderReadOnly;
+
+    DescriptorImageInfo clearcoatNormalTextureInfo{};
+    clearcoatNormalTextureInfo.sampler = gpuMat.clearcoat.normalTexture.sampler;
+    clearcoatNormalTextureInfo.imageView = gpuMat.clearcoat.normalTexture.view;
+    clearcoatNormalTextureInfo.imageLayout = ImageLayout::ShaderReadOnly;
+
+    DescriptorImageInfo emissiveTextureInfo{};
+    emissiveTextureInfo.sampler = gpuMat.emissive.texture.sampler;
+    emissiveTextureInfo.imageView = gpuMat.emissive.texture.view;
+    emissiveTextureInfo.imageLayout = ImageLayout::ShaderReadOnly;
 
     device->UpdateDescriptorSet({
         .dstSet = gpuMat.descriptorSet,
@@ -454,6 +605,38 @@ void StaticGltfAsset::UploadMaterials(IDevice *device, IUploadContext *upload,
         .binding = 5,
         .type = DescriptorType::CombinedImageSampler,
         .imageInfo = &thicknessImageInfo,
+        .descriptorCount = 1,
+    });
+
+    device->UpdateDescriptorSet({
+        .dstSet = gpuMat.descriptorSet,
+        .binding = 6,
+        .type = DescriptorType::CombinedImageSampler,
+        .imageInfo = &clearcoatTextureInfo,
+        .descriptorCount = 1,
+    });
+
+    device->UpdateDescriptorSet({
+        .dstSet = gpuMat.descriptorSet,
+        .binding = 7,
+        .type = DescriptorType::CombinedImageSampler,
+        .imageInfo = &clearcoatRoughnessTextureInfo,
+        .descriptorCount = 1,
+    });
+
+    device->UpdateDescriptorSet({
+        .dstSet = gpuMat.descriptorSet,
+        .binding = 8,
+        .type = DescriptorType::CombinedImageSampler,
+        .imageInfo = &clearcoatNormalTextureInfo,
+        .descriptorCount = 1,
+    });
+
+    device->UpdateDescriptorSet({
+        .dstSet = gpuMat.descriptorSet,
+        .binding = 9,
+        .type = DescriptorType::CombinedImageSampler,
+        .imageInfo = &emissiveTextureInfo,
         .descriptorCount = 1,
     });
 

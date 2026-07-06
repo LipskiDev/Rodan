@@ -42,6 +42,20 @@ struct ImportedVolume {
   float attenuationDistance = 0.0f;
 };
 
+struct ImportedClearCoat {
+  float factor = 0.0f;
+  ImportedTextureRef texture;
+  float roughnessFactor = 0.0f;
+  ImportedTextureRef roughnessTexture;
+  ImportedTextureRef normalTexture;
+};
+
+struct ImportedEmissive {
+  glm::vec3 factor{0.0f};
+  ImportedTextureRef texture;
+  float emissiveStrength = 1.0f;
+};
+
 struct ImportedMaterial {
   glm::vec4 baseColorFactor{1.0f};
   float metallicFactor = 1.0f;
@@ -59,6 +73,9 @@ struct ImportedMaterial {
   // Imported Extensions
   ImportedTransmission transmission;
   ImportedVolume volume;
+  float ior;
+  ImportedClearCoat clearCoat;
+  ImportedEmissive emissive;
 };
 
 struct ImportedImage {

@@ -23,6 +23,24 @@ struct VolumeMaterial {
   float attenuationDistance = 0.0f;
 };
 
+struct ClearcoatMaterial {
+  float factor = 0.0f;
+  Texture texture;
+  bool ownsClearcoatTexture = false;
+  float roughnessFactor = 0.0f;
+  Texture roughnessTexture;
+  bool ownsClearcoatRoughnessTexture = false;
+  Texture normalTexture;
+  bool ownsClearcoatNormalTexture = false;
+};
+
+struct EmissiveMaterial {
+  glm::vec3 factor{0.0, 0.0, 0.0};
+  Texture texture;
+  bool ownsEmissiveTexture = false;
+  float strength = 0.0;
+};
+
 struct MaterialResource {
   Texture baseColorTexture{};
   Texture normalTexture{};
@@ -32,7 +50,6 @@ struct MaterialResource {
   glm::vec4 baseColorFactor{1.0f};
   float metallicFactor = 1.0f;
   float roughnessFactor = 1.0f;
-
   DescriptorSetHandle descriptorSet{};
 
   bool ownsBaseColorResources = false;
@@ -44,6 +61,8 @@ struct MaterialResource {
   bool hasNormalTexture = false;
   bool hasMetallicRoughnessTexture = false;
 
+  float ior = 1.5f;
+
   AlphaMode alphaMode;
   float alphaCutoff;
   bool doubleSided;
@@ -51,6 +70,8 @@ struct MaterialResource {
   // Extensions
   TransmissionMaterial transmission;
   VolumeMaterial volume;
+  ClearcoatMaterial clearcoat;
+  EmissiveMaterial emissive;
 };
 
 } // namespace Rodan

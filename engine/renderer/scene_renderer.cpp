@@ -751,6 +751,28 @@ void SceneRenderer::Render(ICommandList &cmd, const RenderWorld &world,
   alphaBlends_.clear();
 
   const auto tFrameEnd = now();
+
+  static int frameCounter = 0;
+  frameCounter++;
+
+  if (frameCounter % 600 == 0) {
+    std::cout << "\nCPU frame timings:\n"
+              << "  Ensure targets:   " << ms(t0, tTargets) << " ms\n"
+              << "  Build list:       " << ms(tTargets, tBuildList) << " ms\n"
+              << "  Upload materials: " << ms(tBuildList, tUploadMaterials)
+              << " ms\n"
+              << "  Shadow maps:      " << ms(tUploadMaterials, tShadow)
+              << " ms\n"
+              << "  Env upload:       " << ms(tShadow, tEnvUpload) << " ms\n"
+              << "  IBL bake:         " << ms(tEnvUpload, tIBL) << " ms\n"
+              << "  Opaque pass:      " << ms(tIBL, tOpaquePass) << " ms\n"
+              << "  Generate mips:    " << ms(tOpaquePass, tMips) << " ms\n"
+              << "  Main pass:        " << ms(tMips, tMainPass) << " ms\n"
+              << "  Tonemapping:      " << ms(tMainPass, tTonemap) << " ms\n"
+              << "  UI pass:          " << ms(tTonemap, tUI) << " ms\n"
+              << "  Total Render():   " << ms(tFrameStart, tFrameEnd)
+              << " ms\n";
+  }
 }
 
 void SceneRenderer::SubmitStaticMesh(StaticMeshRenderItem item) {
@@ -1695,9 +1717,13 @@ void SceneRenderer::UploadMaterialBuffer(ICommandList &command,
 
     gpu.transmissionFactor = material.transmission.transmissionFactor;
     gpu.thicknessFactor = material.volume.thicknessFactor;
-    gpu.ior = 1.5f;
+    gpu.ior = material.ior;
+    gpu.clearcoatFactor = material.clearcoat.factor;
+    gpu.clearcoatRoughnessFactor = material.clearcoat.roughnessFactor;
     gpu.attenuationColorDistance = glm::vec4(
         material.volume.attenuationColor, material.volume.attenuationDistance);
+    gpu.emissiveFactor = material.emissive.factor;
+    gpu.emissiveStrength = material.emissive.strength;
 
     gpuMaterials.push_back(gpu);
   }
