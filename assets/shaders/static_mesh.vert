@@ -15,27 +15,26 @@ layout(location = 5) out vec3 vNormal;
 layout(set = 1, binding = 1) uniform FrameData {
   mat4 view;
   mat4 proj;
-
   mat4 lightViewProj;
+
   vec4 lightDirection;
   vec4 lightColor;
+
+  vec2 viewportSize;
+
   float lightIntensity;
   float shadowsEnabled;
   int showMode;
+  float pad0_;
 } u_Frame;
 
 layout(push_constant) uniform PushConstants {
     mat4 model;              // offset 0,   size 64
-    vec4 baseColorFactor;    // offset 64,  size 16
 
-    float metallicFactor;    // offset 80
-    float roughnessFactor;   // offset 84
-    float alphaCutoff;       // offset 88
-
-    int showMode;            // offset 92
-    int hasMaterial;         // offset 96
-    int alphaMode;           // offset 100
-    int hasTangents;         // offset 104
+    int showMode;           
+    int hasTangents;    
+    int materialIndex;
+    int _pad0;
 } pc;
 
 void main() {
