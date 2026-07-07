@@ -244,6 +244,7 @@ void StaticGltfAsset::UploadMaterials(IDevice *device, IUploadContext *upload,
     gpuMat.clearcoat.roughnessFactor = mat.clearCoat.roughnessFactor;
     gpuMat.emissive.factor = mat.emissive.factor;
     gpuMat.emissive.strength = mat.emissive.emissiveStrength;
+    gpuMat.useUnlit = mat.useUnlit;
 
     if (mat.baseColorTexture.imageIndex >= 0 &&
         mat.baseColorTexture.imageIndex <

@@ -57,6 +57,7 @@ struct alignas(16) MaterialDataGPU {
   float pad1_;
   glm::vec3 emissiveFactor;
   float emissiveStrength;
+  bool useUnlit;
 
   glm::vec4 attenuationColorDistance;
 };

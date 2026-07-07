@@ -76,6 +76,7 @@ struct ImportedMaterial {
   float ior;
   ImportedClearCoat clearCoat;
   ImportedEmissive emissive;
+  bool useUnlit = false;
 };
 
 struct ImportedImage {

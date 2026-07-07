@@ -72,6 +72,7 @@ struct MaterialResource {
   VolumeMaterial volume;
   ClearcoatMaterial clearcoat;
   EmissiveMaterial emissive;
+  bool useUnlit = false;
 };
 
 } // namespace Rodan

@@ -51,6 +51,7 @@ struct MaterialData {
   float clearcoatRoughnessFactor;
   vec3 emissiveFactor;
   float emissiveStrength;
+  bool useUnlit;
 
   vec4 attenuationColorDistance;
 };
@@ -455,6 +456,10 @@ vec3 emissive =
     material.emissiveStrength;
 
 color += emissive;
+
+    if(material.useUnlit) {
+      color = baseColor;
+    }
 
     outColor = vec4(color, alpha);
 }

@@ -1724,6 +1724,7 @@ void SceneRenderer::UploadMaterialBuffer(ICommandList &command,
         material.volume.attenuationColor, material.volume.attenuationDistance);
     gpu.emissiveFactor = material.emissive.factor;
     gpu.emissiveStrength = material.emissive.strength;
+    gpu.useUnlit = material.useUnlit;
 
     gpuMaterials.push_back(gpu);
   }

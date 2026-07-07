@@ -556,6 +556,10 @@ static ImportedMaterial LoadMaterial(const tinygltf::Model &model,
     }
   }
 
+  if (material.extensions.contains("KHR_materials_unlit")) {
+    out.useUnlit = true;
+  }
+
   return out;
 }
 
