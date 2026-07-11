@@ -2,8 +2,8 @@
 
 #include "assets/imported_scene.h"
 #include "graphics/mesh_resource.h"
-#include "rhi/rhi_device.h"
-#include "rhi/rhi_upload_context.h"
+#include "rhi/device.h"
+#include "rhi/upload_context.h"
 #include <memory>
 namespace Rodan {
 

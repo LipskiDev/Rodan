@@ -2,10 +2,10 @@
 #include "glm/ext/matrix_float4x4.hpp"
 #include "glm/ext/matrix_transform.hpp"
 #include "graphics/texture.h"
-#include "rhi/rhi_handles.h"
-#include "rhi/rhi_pipeline.h"
-#include "rhi/rhi_resources.h"
-#include "rhi/rhi_types.h"
+#include "rhi/handles.h"
+#include "rhi/pipeline.h"
+#include "rhi/resources.h"
+#include "rhi/types.h"
 #include <core/path.h>
 #include <graphics/environment/ibl_baker.h>
 
@@ -68,7 +68,7 @@ std::vector<glm::vec3> CreateCubeVertices() {
 } // namespace
 
 void IBLBaker::Initialize(IDevice *device,
-                          DescriptorSetLayoutHandle environmentSetLayout) {
+                          BindingLayoutHandle environmentSetLayout) {
   if (!device) {
     throw std::runtime_error("IBLBaker::Initialize: device is null");
   }
@@ -180,7 +180,7 @@ void IBLBaker::Initialize(IDevice *device,
       }},
   };
 
-  DescriptorSetLayoutHandle setLayouts[] = {
+  BindingLayoutHandle setLayouts[] = {
       environmentSetLayout,
   };
 
@@ -244,22 +244,22 @@ void IBLBaker::Initialize(IDevice *device,
         "IBLBaker::Initialize: failed to create prefilter pipeline");
   }
 
-  DescriptorBindingDesc brdfLutBindings[] = {
+  BindingDesc brdfLutBindings[] = {
       {
           .binding = 0,
-          .type = DescriptorType::StorageImage,
+          .type = BindingType::StorageImage,
           .count = 1,
           .visibility = ShaderStage::Compute,
       },
   };
 
-  brdfLutSetLayout_ = device_->CreateDescriptorSetLayout({
+  brdfLutSetLayout_ = device_->CreateBindingLayout({
       .bindings = brdfLutBindings,
       .bindingCount = 1,
       .debugName = "BRDF LUT Bake Set Layout",
   });
 
-  DescriptorSetLayoutHandle brdfSetLayouts[] = {brdfLutSetLayout_};
+  BindingLayoutHandle brdfSetLayouts[] = {brdfLutSetLayout_};
 
   ComputePipelineDesc brdfLutDesc{};
   brdfLutDesc.computeShader = brdfLutCS_;
@@ -287,7 +287,7 @@ IBLResources IBLBaker::BakeIrradiance(ICommandList &cmd,
   RenderIrradiance(cmd, environment, result);
   RenderPrefilter(cmd, environment, result);
   RenderBRDFLut(cmd, environment, result);
-  CreateIBLDescriptorSet(result);
+  CreateIBLBindingSet(result);
 
   return result;
 }
@@ -480,8 +480,8 @@ void IBLBaker::RenderIrradiance(ICommandList &cmd,
     push.proj = captureProj;
 
     cmd.BindPipeline(irradiancePipeline_);
-    cmd.BindDescriptorSet(irradiancePipeline_, 0,
-                          environment.GetDescriptorSet());
+    cmd.SetBindings(irradiancePipeline_, 0,
+                          environment.GetBindingSet());
     cmd.BindVertexBuffer(0, cubeVertexBuffer_, 0);
     cmd.PushConstants(ShaderStage::Vertex, 0, sizeof(IrradiancePushConstants),
                       &push);
@@ -573,8 +573,8 @@ void IBLBaker::RenderPrefilter(ICommandList &cmd,
 
       cmd.BindPipeline(prefilterPipeline_);
 
-      cmd.BindDescriptorSet(prefilterPipeline_, 0,
-                            environment.GetDescriptorSet());
+      cmd.SetBindings(prefilterPipeline_, 0,
+                            environment.GetBindingSet());
 
       cmd.BindVertexBuffer(0, cubeVertexBuffer_, 0);
 
@@ -604,39 +604,39 @@ void IBLBaker::RenderBRDFLut(Velos::RHI::ICommandList &cmd,
                              IBLResources &result) {
   (void)environment;
 
-  if (brdfBakeDescriptorPool_.IsValid()) {
-    device_->DestroyDescriptorPool(brdfBakeDescriptorPool_);
-    brdfBakeDescriptorPool_ = {};
-    brdfBakeDescriptorSet_ = {};
+  if (brdfBakeBindingPool_.IsValid()) {
+    device_->DestroyBindingPool(brdfBakeBindingPool_);
+    brdfBakeBindingPool_ = {};
+    brdfBakeBindingSet_ = {};
   }
 
-  DescriptorPoolSize poolSizes[] = {
+  BindingPoolSize poolSizes[] = {
       {
-          .type = DescriptorType::StorageImage,
+          .type = BindingType::StorageImage,
           .count = 1,
       },
   };
 
-  brdfBakeDescriptorPool_ = device_->CreateDescriptorPool({
+  brdfBakeBindingPool_ = device_->CreateBindingPool({
       .poolSizes = poolSizes,
       .poolSizeCount = 1,
       .maxSets = 1,
       .debugName = "BRDF LUT Bake Descriptor Pool",
   });
 
-  brdfBakeDescriptorSet_ =
-      device_->AllocateDescriptorSet(brdfBakeDescriptorPool_, brdfLutSetLayout_,
+  brdfBakeBindingSet_ =
+      device_->AllocateBindingSet(brdfBakeBindingPool_, brdfLutSetLayout_,
                                      "BRDF LUT Bake Descriptor Set");
 
-  DescriptorImageInfo imageInfo{};
+  BindingImageInfo imageInfo{};
   imageInfo.imageView = result.brdfLutTexture.view;
   imageInfo.imageLayout = ImageLayout::General;
 
-  device_->UpdateDescriptorSet({
-      .dstSet = brdfBakeDescriptorSet_,
+  device_->UpdateBindingSet({
+      .dstSet = brdfBakeBindingSet_,
       .binding = 0,
       .arrayElement = 0,
-      .type = DescriptorType::StorageImage,
+      .type = BindingType::StorageImage,
       .bufferInfo = nullptr,
       .imageInfo = &imageInfo,
       .descriptorCount = 1,
@@ -654,7 +654,7 @@ void IBLBaker::RenderBRDFLut(Velos::RHI::ICommandList &cmd,
   });
 
   cmd.BindComputePipeline(brdfLutPipeline_);
-  cmd.BindComputeDescriptorSet(brdfLutPipeline_, 0, brdfBakeDescriptorSet_);
+  cmd.SetComputeBindings(brdfLutPipeline_, 0, brdfBakeBindingSet_);
 
   cmd.Dispatch((k_BRDFLutSize + 7) / 8, (k_BRDFLutSize + 7) / 8, 1);
 
@@ -670,91 +670,91 @@ void IBLBaker::RenderBRDFLut(Velos::RHI::ICommandList &cmd,
   });
 }
 
-void IBLBaker::CreateIBLDescriptorSet(IBLResources &result) {
-  DescriptorBindingDesc bindings[] = {
+void IBLBaker::CreateIBLBindingSet(IBLResources &result) {
+  BindingDesc bindings[] = {
       {
           .binding = 0,
-          .type = DescriptorType::CombinedImageSampler,
+          .type = BindingType::CombinedImageSampler,
           .count = 1,
           .visibility = ShaderStage::Fragment,
       },
       {
           .binding = 1,
-          .type = DescriptorType::CombinedImageSampler,
+          .type = BindingType::CombinedImageSampler,
           .count = 1,
           .visibility = ShaderStage::Fragment,
       },
       {
           .binding = 2,
-          .type = DescriptorType::CombinedImageSampler,
+          .type = BindingType::CombinedImageSampler,
           .count = 1,
           .visibility = ShaderStage::Fragment,
       },
   };
 
-  result.descriptorSetLayout = device_->CreateDescriptorSetLayout({
+  result.descriptorSetLayout = device_->CreateBindingLayout({
       .bindings = bindings,
       .bindingCount = 3,
       .debugName = "IBL Descriptor Set Layout",
   });
 
-  DescriptorPoolSize poolSizes[] = {
+  BindingPoolSize poolSizes[] = {
       {
-          .type = DescriptorType::CombinedImageSampler,
+          .type = BindingType::CombinedImageSampler,
           .count = 3,
       },
   };
 
-  result.descriptorPool = device_->CreateDescriptorPool({
+  result.descriptorPool = device_->CreateBindingPool({
       .poolSizes = poolSizes,
       .poolSizeCount = 1,
       .maxSets = 1,
       .debugName = "IBL Descriptor Pool",
   });
 
-  result.descriptorSet = device_->AllocateDescriptorSet(
+  result.descriptorSet = device_->AllocateBindingSet(
       result.descriptorPool, result.descriptorSetLayout, "IBL Descriptor Set");
 
-  DescriptorImageInfo irradianceInfo{};
+  BindingImageInfo irradianceInfo{};
   irradianceInfo.sampler = result.irradianceTexture.sampler;
   irradianceInfo.imageView = result.irradianceTexture.view;
   irradianceInfo.imageLayout = ImageLayout::ShaderReadOnly;
 
-  DescriptorImageInfo prefilterInfo{};
+  BindingImageInfo prefilterInfo{};
   prefilterInfo.sampler = result.prefilterTexture.sampler;
   prefilterInfo.imageView = result.prefilterTexture.view;
   prefilterInfo.imageLayout = ImageLayout::ShaderReadOnly;
 
-  DescriptorImageInfo brdfLutInfo{};
+  BindingImageInfo brdfLutInfo{};
   brdfLutInfo.sampler = result.brdfLutTexture.sampler;
   brdfLutInfo.imageView = result.brdfLutTexture.view;
   brdfLutInfo.imageLayout = ImageLayout::ShaderReadOnly;
 
-  device_->UpdateDescriptorSet({
+  device_->UpdateBindingSet({
       .dstSet = result.descriptorSet,
       .binding = 0,
       .arrayElement = 0,
-      .type = DescriptorType::CombinedImageSampler,
+      .type = BindingType::CombinedImageSampler,
       .bufferInfo = nullptr,
       .imageInfo = &irradianceInfo,
       .descriptorCount = 1,
   });
 
-  device_->UpdateDescriptorSet({
+  device_->UpdateBindingSet({
       .dstSet = result.descriptorSet,
       .binding = 1,
       .arrayElement = 0,
-      .type = DescriptorType::CombinedImageSampler,
+      .type = BindingType::CombinedImageSampler,
       .bufferInfo = nullptr,
       .imageInfo = &prefilterInfo,
       .descriptorCount = 1,
   });
 
-  device_->UpdateDescriptorSet({
+  device_->UpdateBindingSet({
       .dstSet = result.descriptorSet,
       .binding = 2,
       .arrayElement = 0,
-      .type = DescriptorType::CombinedImageSampler,
+      .type = BindingType::CombinedImageSampler,
       .bufferInfo = nullptr,
       .imageInfo = &brdfLutInfo,
       .descriptorCount = 1,
@@ -806,14 +806,14 @@ void IBLBaker::Shutdown(IDevice *device) {
     irradianceVS_ = {};
   }
 
-  if (brdfBakeDescriptorPool_.IsValid()) {
-    device->DestroyDescriptorPool(brdfBakeDescriptorPool_);
-    brdfBakeDescriptorPool_ = {};
-    brdfBakeDescriptorSet_ = {};
+  if (brdfBakeBindingPool_.IsValid()) {
+    device->DestroyBindingPool(brdfBakeBindingPool_);
+    brdfBakeBindingPool_ = {};
+    brdfBakeBindingSet_ = {};
   }
 
   if (brdfLutSetLayout_.IsValid()) {
-    device->DestroyDescriptorSetLayout(brdfLutSetLayout_);
+    device->DestroyBindingLayout(brdfLutSetLayout_);
     brdfLutSetLayout_ = {};
   }
 

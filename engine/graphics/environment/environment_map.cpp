@@ -123,48 +123,48 @@ void EnvironmentMap::CreateFromHDR(IDevice *device,
 }
 
 void EnvironmentMap::CreateDescriptorResources() {
-  DescriptorBindingDesc bindings[] = {
+  BindingDesc bindings[] = {
       {
           .binding = 0,
-          .type = DescriptorType::CombinedImageSampler,
+          .type = BindingType::CombinedImageSampler,
           .count = 1,
           .visibility = ShaderStage::Fragment,
       },
   };
 
-  setLayout_ = device_->CreateDescriptorSetLayout({
+  setLayout_ = device_->CreateBindingLayout({
       .bindings = bindings,
       .bindingCount = 1,
       .debugName = "Environment Descriptor Set Layout",
   });
 
-  DescriptorPoolSize poolSizes[] = {
+  BindingPoolSize poolSizes[] = {
       {
-          .type = DescriptorType::CombinedImageSampler,
+          .type = BindingType::CombinedImageSampler,
           .count = 1,
       },
   };
 
-  descriptorPool_ = device_->CreateDescriptorPool({
+  bindingPool_ = device_->CreateBindingPool({
       .poolSizes = poolSizes,
       .poolSizeCount = 1,
       .maxSets = 1,
       .debugName = "Environment Descriptor Pool",
   });
 
-  descriptorSet_ = device_->AllocateDescriptorSet(descriptorPool_, setLayout_,
+  bindingSet_ = device_->AllocateBindingSet(bindingPool_, setLayout_,
                                                   "Environment Descriptor Set");
 
-  DescriptorImageInfo imageInfo{};
+  BindingImageInfo imageInfo{};
   imageInfo.sampler = sampler_;
   imageInfo.imageView = view_;
   imageInfo.imageLayout = ImageLayout::ShaderReadOnly;
 
-  device_->UpdateDescriptorSet({
-      .dstSet = descriptorSet_,
+  device_->UpdateBindingSet({
+      .dstSet = bindingSet_,
       .binding = 0,
       .arrayElement = 0,
-      .type = DescriptorType::CombinedImageSampler,
+      .type = BindingType::CombinedImageSampler,
       .bufferInfo = nullptr,
       .imageInfo = &imageInfo,
       .descriptorCount = 1,
@@ -288,12 +288,12 @@ void EnvironmentMap::Destroy() {
     return;
   }
 
-  if (descriptorPool_) {
-    device_->DestroyDescriptorPool(descriptorPool_);
+  if (bindingPool_) {
+    device_->DestroyBindingPool(bindingPool_);
   }
 
   if (setLayout_) {
-    device_->DestroyDescriptorSetLayout(setLayout_);
+    device_->DestroyBindingLayout(setLayout_);
   }
 
   if (sampler_) {
@@ -312,8 +312,8 @@ void EnvironmentMap::Destroy() {
     device_->DestroyBuffer(stagingBuffer_);
   }
 
-  descriptorSet_ = {};
-  descriptorPool_ = {};
+  bindingSet_ = {};
+  bindingPool_ = {};
   setLayout_ = {};
 
   sampler_ = {};

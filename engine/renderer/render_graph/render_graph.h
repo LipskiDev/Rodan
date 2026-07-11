@@ -8,10 +8,10 @@
 #include <string>
 #include <vector>
 
-#include "rhi/rhi_command_list.h"
-#include "rhi/rhi_device.h"
-#include "rhi/rhi_handles.h"
-#include "rhi/rhi_types.h"
+#include "rhi/command_list.h"
+#include "rhi/device.h"
+#include "rhi/handles.h"
+#include "rhi/types.h"
 
 namespace Rodan {
 

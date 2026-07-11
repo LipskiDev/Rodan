@@ -1,7 +1,7 @@
 #pragma once
 
-#include "rhi/rhi_handles.h"
-#include "rhi/rhi_types.h"
+#include "rhi/handles.h"
+#include "rhi/types.h"
 #include "samples/scene.h"
 
 namespace Rodan {
@@ -41,9 +41,9 @@ private:
   Velos::RHI::ShaderHandle computeShader_{};
   Velos::RHI::PipelineHandle computePipeline_{};
 
-  Velos::RHI::DescriptorSetLayoutHandle descriptorSetLayout_{};
-  Velos::RHI::DescriptorPoolHandle descriptorPool_{};
-  Velos::RHI::DescriptorSetHandle descriptorSet_{};
+  Velos::RHI::BindingLayoutHandle descriptorSetLayout_{};
+  Velos::RHI::BindingPoolHandle bindingPool_{};
+  Velos::RHI::BindingSetHandle bindingSet_{};
 
   Velos::RHI::ImageHandle outputImage_{};
   Velos::RHI::ImageViewHandle outputImageView_{};
@@ -52,9 +52,9 @@ private:
 
   Velos::RHI::SamplerHandle outputSampler_{};
 
-  Velos::RHI::DescriptorSetLayoutHandle displaySetLayout_{};
-  Velos::RHI::DescriptorPoolHandle displayDescriptorPool_{};
-  Velos::RHI::DescriptorSetHandle displayDescriptorSet_{};
+  Velos::RHI::BindingLayoutHandle displaySetLayout_{};
+  Velos::RHI::BindingPoolHandle displayBindingPool_{};
+  Velos::RHI::BindingSetHandle displayBindingSet_{};
 
   Velos::RHI::ShaderHandle fullscreenVS_{};
   Velos::RHI::ShaderHandle fullscreenFS_{};

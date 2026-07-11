@@ -8,9 +8,9 @@
 #include "renderer/mesh_renderer.h"
 #include "renderer/passes/skybox_pass.h"
 #include "renderer/render_graph/render_graph.h"
-#include "rhi/rhi_command_list.h"
-#include "rhi/rhi_handles.h"
-#include "rhi/rhi_types.h"
+#include "rhi/command_list.h"
+#include "rhi/handles.h"
+#include "rhi/types.h"
 #include "scene/camera.h"
 #include "scene/render_world.h"
 #include <renderer/graph_renderer.h>
@@ -131,7 +131,7 @@ class SceneRenderer {
 public:
   void Initialize(IDevice *device, SwapchainHandle swapchain,
                   Format colorFormat, Format depthFormat,
-                  DescriptorSetLayoutHandle materialLayout);
+                  BindingLayoutHandle materialLayout);
   void Shutdown(IDevice *device);
   void Render(ICommandList &cmd, const RenderWorld &world, const Camera &camera,
               const FrameRenderContext &frame,
@@ -149,7 +149,7 @@ private:
   void RenderShadowMaps(ICommandList &cmd, const RenderWorld &world);
   void BuildStaticMeshRenderList(const RenderWorld &world);
   void RenderOpaqueMeshes(ICommandList &cmd, const Camera &camera,
-                          DebugContext dbgCtx, DescriptorSetHandle set);
+                          DebugContext dbgCtx, BindingSetHandle set);
   void RenderTransmissionMeshes(ICommandList &cmd, const Camera &camera,
                                 DebugContext dbgCtx);
 
@@ -158,7 +158,7 @@ private:
   void RenderStaticMeshes(ICommandList &cmd, const Camera &camera,
                           DebugContext dbgCtx,
                           const std::vector<StaticMeshRenderItem> &items,
-                          DescriptorSetHandle sceneSet);
+                          BindingSetHandle sceneSet);
 
   void RenderPostProcessingEffect(ICommandList &cmd,
                                   const FrameRenderContext &frame,
@@ -219,20 +219,20 @@ private:
   PipelineHandle transmissionPipeline_{};
   PipelineHandle tonemappingPipeline_{};
 
-  DescriptorSetLayoutHandle materialLayout_{};
-  DescriptorSetLayoutHandle frameLayout_{};
+  BindingLayoutHandle materialLayout_{};
+  BindingLayoutHandle frameLayout_{};
 
-  DescriptorPoolHandle postProcessingDescriptorPool_{};
-  DescriptorSetLayoutHandle postProcessingLayout_{};
-  DescriptorSetHandle postProcessingSet_{};
+  BindingPoolHandle postProcessingBindingPool_{};
+  BindingLayoutHandle postProcessingLayout_{};
+  BindingSetHandle postProcessingSet_{};
 
-  DescriptorPoolHandle frameDescriptorPool_{};
-  DescriptorSetHandle frameSet_{};
+  BindingPoolHandle frameBindingPool_{};
+  BindingSetHandle frameSet_{};
 
-  DescriptorSetLayoutHandle opaqueSceneLayout_{};
-  DescriptorPoolHandle opaqueScenePool_{};
-  DescriptorSetHandle opaqueSceneSet_{};
-  DescriptorSetHandle dummmyOpaqueSceneSet_{};
+  BindingLayoutHandle opaqueSceneLayout_{};
+  BindingPoolHandle opaqueScenePool_{};
+  BindingSetHandle opaqueSceneSet_{};
+  BindingSetHandle dummmyOpaqueSceneSet_{};
 
   BufferHandle frameUBO_;
   BufferHandle materialBuffer_;

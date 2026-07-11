@@ -1,8 +1,8 @@
 #pragma once
 
 #include "graphics/texture.h"
-#include "rhi/rhi_device.h"
-#include "rhi/rhi_handles.h"
+#include "rhi/device.h"
+#include "rhi/handles.h"
 
 #include <array>
 
@@ -17,9 +17,9 @@ struct IBLResources {
   std::array<Velos::RHI::ImageViewHandle, 6 * 8> prefilterFaceMipViews{};
   ImageViewHandle brdfLutView{};
 
-  Velos::RHI::DescriptorSetLayoutHandle descriptorSetLayout{};
-  Velos::RHI::DescriptorPoolHandle descriptorPool{};
-  Velos::RHI::DescriptorSetHandle descriptorSet{};
+  Velos::RHI::BindingLayoutHandle descriptorSetLayout{};
+  Velos::RHI::BindingPoolHandle descriptorPool{};
+  Velos::RHI::BindingSetHandle descriptorSet{};
 
   void Destroy(Velos::RHI::IDevice *device);
 };

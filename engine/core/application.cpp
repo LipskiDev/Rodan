@@ -81,7 +81,7 @@ void Application::InitializeWindowAndDevice() {
                                     "Rodan Renderer", true, input_.get());
 
   device_ = Velos::RHI::CreateDevice({
-      .backend = BackendAPI::Vulkan,
+      .graphicsAPI = GraphicsAPI::Vulkan,
       .enableValidation = true,
       .applicationName = "Rodan Renderer",
   });

@@ -1,8 +1,8 @@
 #include "glm/ext/vector_float4.hpp"
-#include "rhi/rhi_types.h"
+#include "rhi/types.h"
 #include <glm/gtc/random.hpp>
 #include <path.h>
-#include <rhi/vulkan/vk_upload_context.h>
+#include <rhi/vulkan/upload_context.h>
 #include <samples/scenes/million_cubes.h>
 
 namespace Rodan {
@@ -35,8 +35,8 @@ void MillionCubesScene::Shutdown(Velos::RHI::IDevice *device) {
   device->DestroyShader(cubes_.fragmentShader);
   device->DestroyShader(cubes_.vertexShader);
 
-  device->DestroyDescriptorPool(cubes_.descriptorPool);
-  device->DestroyDescriptorSetLayout(cubes_.setLayout);
+  device->DestroyBindingPool(cubes_.descriptorPool);
+  device->DestroyBindingLayout(cubes_.setLayout);
 
   device->DestroySampler(cubes_.xorPatternSampler);
   device->DestroyImageView(cubes_.xorPatternImageView);
@@ -180,48 +180,48 @@ void MillionCubesScene::CreateResources(Velos::RHI::IDevice *device) {
 
 void MillionCubesScene::CreateDescriptors(Velos::RHI::IDevice *device) {
 
-  DescriptorBindingDesc bindings[] = {
+  BindingDesc bindings[] = {
       {
           .binding = 0,
-          .type = DescriptorType::CombinedImageSampler,
+          .type = BindingType::CombinedImageSampler,
           .count = 1,
           .visibility = ShaderStage::Fragment,
       },
   };
 
-  cubes_.setLayout = device->CreateDescriptorSetLayout({
+  cubes_.setLayout = device->CreateBindingLayout({
       .bindings = bindings,
       .bindingCount = 1,
       .debugName = "Cubes Descriptor Set Layout",
   });
 
-  DescriptorPoolSize poolSizes[] = {
+  BindingPoolSize poolSizes[] = {
       {
-          .type = DescriptorType::CombinedImageSampler,
+          .type = BindingType::CombinedImageSampler,
           .count = 1,
       },
   };
 
-  cubes_.descriptorPool = device->CreateDescriptorPool({
+  cubes_.descriptorPool = device->CreateBindingPool({
       .poolSizes = poolSizes,
       .poolSizeCount = 1,
       .maxSets = 1,
       .debugName = "Cubes Descriptor Pool",
   });
 
-  cubes_.descriptorSet = device->AllocateDescriptorSet(
+  cubes_.descriptorSet = device->AllocateBindingSet(
       cubes_.descriptorPool, cubes_.setLayout, "Cubes Descriptor Set");
 
-  DescriptorImageInfo imageInfo{};
+  BindingImageInfo imageInfo{};
   imageInfo.sampler = cubes_.xorPatternSampler;
   imageInfo.imageView = cubes_.xorPatternImageView;
   imageInfo.imageLayout = ImageLayout::ShaderReadOnly;
 
-  device->UpdateDescriptorSet({
+  device->UpdateBindingSet({
       .dstSet = cubes_.descriptorSet,
       .binding = 0,
       .arrayElement = 0,
-      .type = DescriptorType::CombinedImageSampler,
+      .type = BindingType::CombinedImageSampler,
       .bufferInfo = nullptr,
       .imageInfo = &imageInfo,
       .descriptorCount = 1,
@@ -262,7 +262,7 @@ void MillionCubesScene::CreatePipeline(Velos::RHI::IDevice *device) {
       .debugName = "Million Cubes Fragment Shader",
   });
 
-  DescriptorSetLayoutHandle setLayouts[] = {cubes_.setLayout};
+  BindingLayoutHandle setLayouts[] = {cubes_.setLayout};
 
   GraphicsPipelineDesc pipelineDesc{};
   pipelineDesc.vertexShader = cubes_.vertexShader;
@@ -328,7 +328,7 @@ void MillionCubesScene::RenderMillionCubes(Velos::RHI::ICommandList &cmd) {
   push.bufIdHi = static_cast<uint32_t>((addr >> 32) & 0xffffffffull);
 
   cmd.BindPipeline(cubes_.pipeline);
-  cmd.BindDescriptorSet(cubes_.pipeline, 0, cubes_.descriptorSet);
+  cmd.SetBindings(cubes_.pipeline, 0, cubes_.descriptorSet);
   cmd.PushConstants(ShaderStage::Vertex, 0, sizeof(MillionCubesPushConstants),
                     &push);
 

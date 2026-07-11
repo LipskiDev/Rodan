@@ -7,7 +7,7 @@
 #include "glm/geometric.hpp"
 #include "imgui.h"
 #include "imgui_internal.h"
-#include "rhi/rhi_types.h"
+#include "rhi/types.h"
 #include "scene/handles.h"
 #include "scene/orbit_camera.h"
 

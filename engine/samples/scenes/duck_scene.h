@@ -56,9 +56,9 @@ private:
     Velos::RHI::ImageViewHandle imageView{};
     Velos::RHI::SamplerHandle sampler{};
 
-    Velos::RHI::DescriptorSetLayoutHandle setLayout{};
-    Velos::RHI::DescriptorPoolHandle descriptorPool{};
-    Velos::RHI::DescriptorSetHandle descriptorSet{};
+    Velos::RHI::BindingLayoutHandle setLayout{};
+    Velos::RHI::BindingPoolHandle descriptorPool{};
+    Velos::RHI::BindingSetHandle descriptorSet{};
 
     Velos::RHI::ShaderHandle vertexShader{};
     Velos::RHI::ShaderHandle fragmentShader{};

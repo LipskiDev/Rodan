@@ -2,8 +2,8 @@
 
 #include "glm/ext/matrix_float4x4.hpp"
 #include "glm/ext/vector_float4.hpp"
-#include "rhi/rhi_handles.h"
-#include "rhi/rhi_pipeline.h"
+#include "rhi/handles.h"
+#include "rhi/pipeline.h"
 #include "scene/bounding_box.h"
 #include <cstdint>
 #include <vector>

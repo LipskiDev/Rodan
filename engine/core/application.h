@@ -1,7 +1,7 @@
 #pragma once
 
-#include "rhi/rhi_device.h"
-#include "rhi/rhi_types.h"
+#include "rhi/device.h"
+#include "rhi/types.h"
 #include "samples/scene.h"
 #include "ui/imgui_renderer.h"
 

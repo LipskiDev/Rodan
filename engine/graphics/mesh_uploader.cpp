@@ -1,5 +1,5 @@
 #include "graphics/mesh_uploader.h"
-#include "rhi/rhi_upload_context.h"
+#include "rhi/upload_context.h"
 
 #include <stdexcept>
 #include <vector>

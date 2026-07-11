@@ -1,7 +1,7 @@
 #include "core/input_types.h"
 #include "imgui.h"
-#include "rhi/rhi_pipeline.h"
-#include "rhi/rhi_types.h"
+#include "rhi/pipeline.h"
+#include "rhi/types.h"
 #include "scene/transform.h"
 #include "shader/shader_compiler.h"
 #include <renderer/line_renderer.h>

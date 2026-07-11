@@ -3,10 +3,10 @@
 #include "core/frame_render_context.h"
 #include "core/input_system.h"
 #include "core/types.h"
-#include "rhi/rhi_command_list.h"
-#include "rhi/rhi_device.h"
-#include "rhi/rhi_handles.h"
-#include "rhi/rhi_types.h"
+#include "rhi/command_list.h"
+#include "rhi/device.h"
+#include "rhi/handles.h"
+#include "rhi/types.h"
 #include <glm/glm.hpp>
 
 namespace Rodan {

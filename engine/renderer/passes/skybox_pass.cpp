@@ -6,7 +6,7 @@ namespace Rodan {
 using namespace Velos;
 using namespace Velos::RHI;
 void SkyboxPass::Initialize(IDevice *device, Format colorFormat,
-                            DescriptorSetLayoutHandle environmentSetLayout) {
+                            BindingLayoutHandle environmentSetLayout) {
 
   device_ = device;
 
@@ -82,7 +82,7 @@ void SkyboxPass::Initialize(IDevice *device, Format colorFormat,
       }},
   };
 
-  DescriptorSetLayoutHandle setLayouts[] = {
+  BindingLayoutHandle setLayouts[] = {
       environmentSetLayout,
   };
 
@@ -124,7 +124,7 @@ void SkyboxPass::Render(ICommandList &cmd, const EnvironmentMap &environment,
   push.proj = proj;
 
   cmd.BindPipeline(pipeline_);
-  cmd.BindDescriptorSet(pipeline_, 0, environment.GetDescriptorSet());
+  cmd.SetBindings(pipeline_, 0, environment.GetBindingSet());
   cmd.BindVertexBuffer(0, vertexBuffer_, 0);
   cmd.PushConstants(ShaderStage::Vertex, 0, sizeof(PushConstants), &push);
   cmd.Draw(vertexCount_);

@@ -1,7 +1,7 @@
 
 #pragma once
 
-#include "rhi/rhi_handles.h"
+#include "rhi/handles.h"
 #include "samples/scene.h"
 #include "scene/first_person_camera.h"
 #include "scene/handles.h"

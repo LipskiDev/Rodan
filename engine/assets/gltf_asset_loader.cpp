@@ -1,8 +1,8 @@
 #include "graphics/texture.h"
 #include "imgui_internal.h"
-#include "rhi/rhi_resources.h"
-#include "rhi/rhi_types.h"
-#include "rhi/rhi_upload_context.h"
+#include "rhi/resources.h"
+#include "rhi/types.h"
+#include "rhi/upload_context.h"
 #include "scene/transform.h"
 #include <assets/gltf_asset_loader.h>
 #include <assets/gltf_loader.h>
@@ -28,7 +28,7 @@ StaticGltfAsset::Load(IDevice *device, IUploadContext *upload,
 
   auto importedScene = GltfLoader::Load(path);
   asset->CreateMaterialLayout(device);
-  asset->CreateDescriptorPool(device, importedScene);
+  asset->CreateBindingPool(device, importedScene);
   asset->CreateFallbackResources(device, upload);
   asset->UploadMeshes(device, upload, importedScene);
   asset->UploadMaterials(device, upload, importedScene);
@@ -109,13 +109,13 @@ void StaticGltfAsset::Destroy(IDevice *device) {
   DestroyTexture(device, fallbackTexture_);
   DestroyTexture(device, neutralNormalFallbackTexture_);
 
-  if (descriptorPool_.IsValid()) {
-    device->DestroyDescriptorPool(descriptorPool_);
-    descriptorPool_ = {};
+  if (bindingPool_.IsValid()) {
+    device->DestroyBindingPool(bindingPool_);
+    bindingPool_ = {};
   }
 
   if (materialLayout_.IsValid()) {
-    device->DestroyDescriptorSetLayout(materialLayout_);
+    device->DestroyBindingLayout(materialLayout_);
     materialLayout_ = {};
   }
 
@@ -125,73 +125,73 @@ void StaticGltfAsset::Destroy(IDevice *device) {
 
 void StaticGltfAsset::CreateMaterialLayout(IDevice *device) {
 
-  DescriptorBindingDesc bindings[] = {
+  BindingDesc bindings[] = {
       {.binding = 0,
-       .type = DescriptorType::CombinedImageSampler,
+       .type = BindingType::CombinedImageSampler,
        .count = 1,
        .visibility = ShaderStage::Fragment},
       {.binding = 1,
-       .type = DescriptorType::CombinedImageSampler,
+       .type = BindingType::CombinedImageSampler,
        .count = 1,
        .visibility = ShaderStage::Fragment},
       {.binding = 2,
-       .type = DescriptorType::CombinedImageSampler,
+       .type = BindingType::CombinedImageSampler,
        .count = 1,
        .visibility = ShaderStage::Fragment},
       {.binding = 3,
-       .type = DescriptorType::CombinedImageSampler,
+       .type = BindingType::CombinedImageSampler,
        .count = 1,
        .visibility = ShaderStage::Fragment},
       {.binding = 4,
-       .type = DescriptorType::CombinedImageSampler,
+       .type = BindingType::CombinedImageSampler,
        .count = 1,
        .visibility = ShaderStage::Fragment}, // transmission
       {.binding = 5,
-       .type = DescriptorType::CombinedImageSampler,
+       .type = BindingType::CombinedImageSampler,
        .count = 1,
        .visibility = ShaderStage::Fragment}, // thickness
       {.binding = 6,
-       .type = DescriptorType::CombinedImageSampler,
+       .type = BindingType::CombinedImageSampler,
        .count = 1,
        .visibility = ShaderStage::Fragment}, // clearcoat texture
       {.binding = 7,
-       .type = DescriptorType::CombinedImageSampler,
+       .type = BindingType::CombinedImageSampler,
        .count = 1,
        .visibility = ShaderStage::Fragment}, // clearcoat roughness
       {.binding = 8,
-       .type = DescriptorType::CombinedImageSampler,
+       .type = BindingType::CombinedImageSampler,
        .count = 1,
        .visibility = ShaderStage::Fragment}, // clearcoat normal
       {.binding = 9,
-       .type = DescriptorType::CombinedImageSampler,
+       .type = BindingType::CombinedImageSampler,
        .count = 1,
        .visibility = ShaderStage::Fragment}, // emissive texture
   };
 
-  DescriptorSetLayoutDesc layout{};
+  BindingLayoutDesc layout{};
   layout.bindings = bindings;
   layout.bindingCount = 10;
   layout.debugName = "GLTF Material Layout";
 
-  materialLayout_ = device->CreateDescriptorSetLayout(layout);
+  materialLayout_ = device->CreateBindingLayout(layout);
 }
 
-void StaticGltfAsset::CreateDescriptorPool(IDevice *device,
+void StaticGltfAsset::CreateBindingPool(IDevice *device,
                                            ImportedScene importedScene) {
 
   const Velos::u32 materialCount = std::max<Velos::u32>(
       1, static_cast<Velos::u32>(importedScene.materials.size()));
 
-  DescriptorPoolSize poolSize{};
-  poolSize.type = DescriptorType::CombinedImageSampler;
+  BindingPoolSize poolSize{};
+  poolSize.type = BindingType::CombinedImageSampler;
   poolSize.count = materialCount * 10;
 
-  DescriptorPoolDesc poolDesc{};
+  BindingPoolDesc poolDesc{};
   poolDesc.poolSizes = &poolSize;
   poolDesc.poolSizeCount = 1;
   poolDesc.maxSets = materialCount;
 
-  descriptorPool_ = device->CreateDescriptorPool(poolDesc);
+  bindingPool_ = device->CreateBindingPool(poolDesc);
 }
 
 void StaticGltfAsset::Prepare(ICommandList &cmd) { prepared_ = true; }
@@ -496,147 +496,147 @@ void StaticGltfAsset::UploadMaterials(IDevice *device, IUploadContext *upload,
     }
 
     gpuMat.descriptorSet =
-        device->AllocateDescriptorSet(descriptorPool_, materialLayout_);
+        device->AllocateBindingSet(bindingPool_, materialLayout_);
 
-    DescriptorImageInfo baseColorImageInfo{};
+    BindingImageInfo baseColorImageInfo{};
     baseColorImageInfo.sampler = gpuMat.baseColorTexture.sampler;
     baseColorImageInfo.imageView = gpuMat.baseColorTexture.view;
     baseColorImageInfo.imageLayout = ImageLayout::ShaderReadOnly;
 
-    DescriptorImageInfo normalImageInfo{};
+    BindingImageInfo normalImageInfo{};
     normalImageInfo.sampler = gpuMat.normalTexture.sampler;
     normalImageInfo.imageView = gpuMat.normalTexture.view;
     normalImageInfo.imageLayout = ImageLayout::ShaderReadOnly;
 
-    DescriptorImageInfo metallicRoughnessImageInfo{};
+    BindingImageInfo metallicRoughnessImageInfo{};
     metallicRoughnessImageInfo.sampler =
         gpuMat.metallicRoughnessTexture.sampler;
     metallicRoughnessImageInfo.imageView = gpuMat.metallicRoughnessTexture.view;
     metallicRoughnessImageInfo.imageLayout = ImageLayout::ShaderReadOnly;
 
-    DescriptorImageInfo occlusionImageInfo{};
+    BindingImageInfo occlusionImageInfo{};
     occlusionImageInfo.sampler = gpuMat.occlusionTexture.sampler;
     occlusionImageInfo.imageView = gpuMat.occlusionTexture.view;
     occlusionImageInfo.imageLayout = ImageLayout::ShaderReadOnly;
 
-    DescriptorImageInfo transmissionImageInfo{};
+    BindingImageInfo transmissionImageInfo{};
     transmissionImageInfo.sampler =
         gpuMat.transmission.transmissionTexture.sampler;
     transmissionImageInfo.imageView =
         gpuMat.transmission.transmissionTexture.view;
     transmissionImageInfo.imageLayout = ImageLayout::ShaderReadOnly;
 
-    DescriptorImageInfo thicknessImageInfo{};
+    BindingImageInfo thicknessImageInfo{};
     thicknessImageInfo.sampler = gpuMat.volume.thicknessTexture.sampler;
     thicknessImageInfo.imageView = gpuMat.volume.thicknessTexture.view;
     thicknessImageInfo.imageLayout = ImageLayout::ShaderReadOnly;
 
-    DescriptorImageInfo clearcoatTextureInfo{};
+    BindingImageInfo clearcoatTextureInfo{};
     clearcoatTextureInfo.sampler = gpuMat.clearcoat.texture.sampler;
     clearcoatTextureInfo.imageView = gpuMat.clearcoat.texture.view;
     clearcoatTextureInfo.imageLayout = ImageLayout::ShaderReadOnly;
 
-    DescriptorImageInfo clearcoatRoughnessTextureInfo{};
+    BindingImageInfo clearcoatRoughnessTextureInfo{};
     clearcoatRoughnessTextureInfo.sampler =
         gpuMat.clearcoat.roughnessTexture.sampler;
     clearcoatRoughnessTextureInfo.imageView =
         gpuMat.clearcoat.roughnessTexture.view;
     clearcoatRoughnessTextureInfo.imageLayout = ImageLayout::ShaderReadOnly;
 
-    DescriptorImageInfo clearcoatNormalTextureInfo{};
+    BindingImageInfo clearcoatNormalTextureInfo{};
     clearcoatNormalTextureInfo.sampler = gpuMat.clearcoat.normalTexture.sampler;
     clearcoatNormalTextureInfo.imageView = gpuMat.clearcoat.normalTexture.view;
     clearcoatNormalTextureInfo.imageLayout = ImageLayout::ShaderReadOnly;
 
-    DescriptorImageInfo emissiveTextureInfo{};
+    BindingImageInfo emissiveTextureInfo{};
     emissiveTextureInfo.sampler = gpuMat.emissive.texture.sampler;
     emissiveTextureInfo.imageView = gpuMat.emissive.texture.view;
     emissiveTextureInfo.imageLayout = ImageLayout::ShaderReadOnly;
 
-    device->UpdateDescriptorSet({
+    device->UpdateBindingSet({
         .dstSet = gpuMat.descriptorSet,
         .binding = 0,
         .arrayElement = 0,
-        .type = DescriptorType::CombinedImageSampler,
+        .type = BindingType::CombinedImageSampler,
         .bufferInfo = nullptr,
         .imageInfo = &baseColorImageInfo,
         .descriptorCount = 1,
     });
 
-    device->UpdateDescriptorSet({
+    device->UpdateBindingSet({
         .dstSet = gpuMat.descriptorSet,
         .binding = 1,
         .arrayElement = 0,
-        .type = DescriptorType::CombinedImageSampler,
+        .type = BindingType::CombinedImageSampler,
         .bufferInfo = nullptr,
         .imageInfo = &normalImageInfo,
         .descriptorCount = 1,
     });
 
-    device->UpdateDescriptorSet({
+    device->UpdateBindingSet({
         .dstSet = gpuMat.descriptorSet,
         .binding = 2,
         .arrayElement = 0,
-        .type = DescriptorType::CombinedImageSampler,
+        .type = BindingType::CombinedImageSampler,
         .bufferInfo = nullptr,
         .imageInfo = &metallicRoughnessImageInfo,
         .descriptorCount = 1,
     });
 
-    device->UpdateDescriptorSet({
+    device->UpdateBindingSet({
         .dstSet = gpuMat.descriptorSet,
         .binding = 3,
         .arrayElement = 0,
-        .type = DescriptorType::CombinedImageSampler,
+        .type = BindingType::CombinedImageSampler,
         .bufferInfo = nullptr,
         .imageInfo = &occlusionImageInfo,
         .descriptorCount = 1,
     });
 
-    device->UpdateDescriptorSet({
+    device->UpdateBindingSet({
         .dstSet = gpuMat.descriptorSet,
         .binding = 4,
-        .type = DescriptorType::CombinedImageSampler,
+        .type = BindingType::CombinedImageSampler,
         .imageInfo = &transmissionImageInfo,
         .descriptorCount = 1,
     });
 
-    device->UpdateDescriptorSet({
+    device->UpdateBindingSet({
         .dstSet = gpuMat.descriptorSet,
         .binding = 5,
-        .type = DescriptorType::CombinedImageSampler,
+        .type = BindingType::CombinedImageSampler,
         .imageInfo = &thicknessImageInfo,
         .descriptorCount = 1,
     });
 
-    device->UpdateDescriptorSet({
+    device->UpdateBindingSet({
         .dstSet = gpuMat.descriptorSet,
         .binding = 6,
-        .type = DescriptorType::CombinedImageSampler,
+        .type = BindingType::CombinedImageSampler,
         .imageInfo = &clearcoatTextureInfo,
         .descriptorCount = 1,
     });
 
-    device->UpdateDescriptorSet({
+    device->UpdateBindingSet({
         .dstSet = gpuMat.descriptorSet,
         .binding = 7,
-        .type = DescriptorType::CombinedImageSampler,
+        .type = BindingType::CombinedImageSampler,
         .imageInfo = &clearcoatRoughnessTextureInfo,
         .descriptorCount = 1,
     });
 
-    device->UpdateDescriptorSet({
+    device->UpdateBindingSet({
         .dstSet = gpuMat.descriptorSet,
         .binding = 8,
-        .type = DescriptorType::CombinedImageSampler,
+        .type = BindingType::CombinedImageSampler,
         .imageInfo = &clearcoatNormalTextureInfo,
         .descriptorCount = 1,
     });
 
-    device->UpdateDescriptorSet({
+    device->UpdateBindingSet({
         .dstSet = gpuMat.descriptorSet,
         .binding = 9,
-        .type = DescriptorType::CombinedImageSampler,
+        .type = BindingType::CombinedImageSampler,
         .imageInfo = &emissiveTextureInfo,
         .descriptorCount = 1,
     });

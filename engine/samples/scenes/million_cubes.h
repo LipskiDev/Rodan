@@ -1,6 +1,6 @@
 #pragma once
 
-#include "rhi/rhi_handles.h"
+#include "rhi/handles.h"
 #include "samples/scene.h"
 #include "scene/first_person_camera.h"
 
@@ -56,9 +56,9 @@ private:
     Velos::RHI::BufferHandle positionBuffer;
     Velos::RHI::BufferHandle stagingBuffer;
 
-    Velos::RHI::DescriptorSetLayoutHandle setLayout{};
-    Velos::RHI::DescriptorPoolHandle descriptorPool{};
-    Velos::RHI::DescriptorSetHandle descriptorSet{};
+    Velos::RHI::BindingLayoutHandle setLayout{};
+    Velos::RHI::BindingPoolHandle descriptorPool{};
+    Velos::RHI::BindingSetHandle descriptorSet{};
 
     Velos::RHI::ShaderHandle vertexShader{};
     Velos::RHI::ShaderHandle fragmentShader{};

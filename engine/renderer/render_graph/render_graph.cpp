@@ -1,7 +1,7 @@
 #include "render_graph.h"
 #include "renderer/render_graph/render_graph_builder.h"
-#include "rhi/rhi_resources.h"
-#include "rhi/rhi_types.h"
+#include "rhi/resources.h"
+#include "rhi/types.h"
 
 #include <iostream>
 #include <queue>

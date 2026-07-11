@@ -2,8 +2,8 @@
 
 #include <vector>
 
-#include <rhi/rhi_command_list.h>
-#include <rhi/rhi_device.h>
+#include <rhi/command_list.h>
+#include <rhi/device.h>
 
 struct ImDrawData;
 
@@ -41,9 +41,9 @@ private:
   VRHI::SamplerHandle fontSampler_;
   VRHI::ImageHandle fontImage_;
   VRHI::ImageViewHandle fontImageView_;
-  VRHI::DescriptorSetLayoutHandle setLayout_;
-  VRHI::DescriptorPoolHandle pool_;
-  VRHI::DescriptorSetHandle fontSet_;
+  VRHI::BindingLayoutHandle setLayout_;
+  VRHI::BindingPoolHandle pool_;
+  VRHI::BindingSetHandle fontSet_;
 
   FrameResources frames_[2]; // MAX_FRAMES_IN_FLIGHT = 2
   uint32_t currentFrame_ = 0;

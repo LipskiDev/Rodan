@@ -1,11 +1,11 @@
 #pragma once
 
 #include "glm/fwd.hpp"
-#include "rhi/rhi_command_list.h"
-#include "rhi/rhi_handles.h"
+#include "rhi/command_list.h"
+#include "rhi/handles.h"
 #include <glm/glm.hpp>
 
-#include <rhi/rhi_device.h>
+#include <rhi/device.h>
 
 namespace Rodan::Debug {
 

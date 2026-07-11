@@ -3,12 +3,12 @@
 #include "assets/imported_scene.h"
 #include "graphics/material_resource.h"
 #include "graphics/texture.h"
-#include "rhi/rhi_command_list.h"
-#include "rhi/rhi_upload_context.h"
+#include "rhi/command_list.h"
+#include "rhi/upload_context.h"
 #include "scene/static_mesh_instance.h"
 
 #include <memory>
-#include <rhi/rhi_device.h>
+#include <rhi/device.h>
 
 namespace Rodan {
 
@@ -42,7 +42,7 @@ public:
     return materials_;
   }
 
-  DescriptorSetLayoutHandle GetMaterialLayout() const {
+  BindingLayoutHandle GetMaterialLayout() const {
     return materialLayout_;
   }
 
@@ -57,8 +57,8 @@ private:
   std::vector<MaterialResource> materials_;
   std::vector<StaticMeshInstance> instances_;
 
-  DescriptorSetLayoutHandle materialLayout_{};
-  DescriptorPoolHandle descriptorPool_{};
+  BindingLayoutHandle materialLayout_{};
+  BindingPoolHandle bindingPool_{};
 
   Texture fallbackTexture_{};
   Texture neutralNormalFallbackTexture_{};
@@ -67,7 +67,7 @@ private:
 
 private:
   void CreateMaterialLayout(IDevice *device);
-  void CreateDescriptorPool(IDevice *device, ImportedScene importedScene);
+  void CreateBindingPool(IDevice *device, ImportedScene importedScene);
   void UploadMeshes(IDevice *device, IUploadContext *upload,
                     ImportedScene importedScene);
   void UploadMaterials(IDevice *device, IUploadContext *upload,

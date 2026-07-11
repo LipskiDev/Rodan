@@ -53,8 +53,8 @@ void DuckScene::Shutdown(IDevice *device) {
   device->DestroyShader(duck_.fragmentShader);
   device->DestroyShader(duck_.vertexShader);
 
-  device->DestroyDescriptorPool(duck_.descriptorPool);
-  device->DestroyDescriptorSetLayout(duck_.setLayout);
+  device->DestroyBindingPool(duck_.descriptorPool);
+  device->DestroyBindingLayout(duck_.setLayout);
 
   device->DestroySampler(duck_.sampler);
   device->DestroyImageView(duck_.imageView);
@@ -352,48 +352,48 @@ void DuckScene::CreateResources(IDevice *device) {
 }
 
 void DuckScene::CreateDescriptors(IDevice *device) {
-  DescriptorBindingDesc bindings[] = {
+  BindingDesc bindings[] = {
       {
           .binding = 0,
-          .type = DescriptorType::CombinedImageSampler,
+          .type = BindingType::CombinedImageSampler,
           .count = 1,
           .visibility = ShaderStage::Fragment,
       },
   };
 
-  duck_.setLayout = device->CreateDescriptorSetLayout({
+  duck_.setLayout = device->CreateBindingLayout({
       .bindings = bindings,
       .bindingCount = 1,
       .debugName = "Duck Descriptor Set Layout",
   });
 
-  DescriptorPoolSize poolSizes[] = {
+  BindingPoolSize poolSizes[] = {
       {
-          .type = DescriptorType::CombinedImageSampler,
+          .type = BindingType::CombinedImageSampler,
           .count = 1,
       },
   };
 
-  duck_.descriptorPool = device->CreateDescriptorPool({
+  duck_.descriptorPool = device->CreateBindingPool({
       .poolSizes = poolSizes,
       .poolSizeCount = 1,
       .maxSets = 1,
       .debugName = "Duck Descriptor Pool",
   });
 
-  duck_.descriptorSet = device->AllocateDescriptorSet(
+  duck_.descriptorSet = device->AllocateBindingSet(
       duck_.descriptorPool, duck_.setLayout, "Duck Descriptor Set");
 
-  DescriptorImageInfo imageInfo{};
+  BindingImageInfo imageInfo{};
   imageInfo.sampler = duck_.sampler;
   imageInfo.imageView = duck_.imageView;
   imageInfo.imageLayout = ImageLayout::ShaderReadOnly;
 
-  device->UpdateDescriptorSet({
+  device->UpdateBindingSet({
       .dstSet = duck_.descriptorSet,
       .binding = 0,
       .arrayElement = 0,
-      .type = DescriptorType::CombinedImageSampler,
+      .type = BindingType::CombinedImageSampler,
       .bufferInfo = nullptr,
       .imageInfo = &imageInfo,
       .descriptorCount = 1,
@@ -448,7 +448,7 @@ void DuckScene::CreatePipeline(IDevice *device) {
                      }},
   };
 
-  DescriptorSetLayoutHandle setLayouts[] = {duck_.setLayout};
+  BindingLayoutHandle setLayouts[] = {duck_.setLayout};
 
   GraphicsPipelineDesc pipelineDesc{};
   pipelineDesc.vertexShader = duck_.vertexShader;
@@ -511,7 +511,7 @@ void DuckScene::RenderDuckInstance(ICommandList &cmd, const glm::mat4 &model,
   push.model = model;
 
   cmd.BindPipeline(duck_.pipeline);
-  cmd.BindDescriptorSet(duck_.pipeline, 0, duck_.descriptorSet);
+  cmd.SetBindings(duck_.pipeline, 0, duck_.descriptorSet);
   cmd.BindVertexBuffer(0, duck_.vertexBuffer, 0);
   cmd.BindIndexBuffer(indexBuffer, IndexType::U32, 0);
   cmd.PushConstants(ShaderStage::Vertex, 0, sizeof(StaticMeshPushConstants),

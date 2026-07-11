@@ -1,4 +1,4 @@
-#include "rhi/rhi_types.h"
+#include "rhi/types.h"
 #include <graphics/texture.h>
 #include <stdexcept>
 

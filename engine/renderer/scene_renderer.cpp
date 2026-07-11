@@ -7,13 +7,11 @@
 #include "graphics/shaders_types.h"
 #include "graphics/texture.h"
 #include "renderer/render_graph/render_graph_builder.h"
-#include "rhi/rhi_command_list.h"
-#include "rhi/rhi_handles.h"
-#include "rhi/rhi_pipeline.h"
-#include "rhi/rhi_resources.h"
-#include "rhi/rhi_types.h"
-#include "rhi/vulkan/vk_device.h"
-#include "rhi/vulkan/vk_upload_context.h"
+#include "rhi/command_list.h"
+#include "rhi/handles.h"
+#include "rhi/pipeline.h"
+#include "rhi/resources.h"
+#include "rhi/types.h"
 #include "scene/handles.h"
 #include "scene/render_world.h"
 #include "tracy/Tracy.hpp"
@@ -26,7 +24,7 @@
 namespace Rodan {
 void SceneRenderer::Initialize(IDevice *device, SwapchainHandle swapchain,
                                Format colorFormat, Format depthFormat,
-                               DescriptorSetLayoutHandle materialLayout) {
+                               BindingLayoutHandle materialLayout) {
 
   device_ = device;
   swapchain_ = swapchain;
@@ -174,91 +172,91 @@ void SceneRenderer::Initialize(IDevice *device, SwapchainHandle swapchain,
 
   directionalShadow_.enabled = true;
 
-  DescriptorBindingDesc frameBindings[] = {
+  BindingDesc frameBindings[] = {
       {
           .binding = 0,
-          .type = DescriptorType::CombinedImageSampler,
+          .type = BindingType::CombinedImageSampler,
           .count = 1,
           .visibility = ShaderStage::Fragment,
       },
       {.binding = 1,
-       .type = DescriptorType::UniformBuffer,
+       .type = BindingType::UniformBuffer,
        .count = 1,
        .visibility = ShaderStage::Vertex | ShaderStage::Fragment},
       {.binding = 2,
-       .type = DescriptorType::StorageBuffer,
+       .type = BindingType::StorageBuffer,
        .count = 1,
        .visibility = ShaderStage::Fragment},
   };
 
-  DescriptorBindingDesc environmentBindings[] = {
+  BindingDesc environmentBindings[] = {
       {
           .binding = 0,
-          .type = DescriptorType::CombinedImageSampler,
+          .type = BindingType::CombinedImageSampler,
           .count = 1,
           .visibility = ShaderStage::Fragment,
       },
   };
 
-  DescriptorPoolSize poolSizes[] = {
+  BindingPoolSize poolSizes[] = {
       {
-          .type = DescriptorType::CombinedImageSampler,
+          .type = BindingType::CombinedImageSampler,
           .count = 1,
       },
       {
-          .type = DescriptorType::UniformBuffer,
+          .type = BindingType::UniformBuffer,
           .count = 1,
       },
       {
-          .type = DescriptorType::StorageBuffer,
+          .type = BindingType::StorageBuffer,
           .count = 1,
       }};
 
-  frameDescriptorPool_ = device_->CreateDescriptorPool({
+  frameBindingPool_ = device_->CreateBindingPool({
       .poolSizes = poolSizes,
       .poolSizeCount = 3,
       .maxSets = 1,
   });
 
-  frameLayout_ = device_->CreateDescriptorSetLayout({
+  frameLayout_ = device_->CreateBindingLayout({
       .bindings = frameBindings,
       .bindingCount = 3,
       .debugName = "SceneRenderer Frame Descriptor Set Layout",
   });
 
-  DescriptorBindingDesc postProcessingBindings[] = {
+  BindingDesc postProcessingBindings[] = {
       {
           .binding = 0,
-          .type = DescriptorType::CombinedImageSampler,
+          .type = BindingType::CombinedImageSampler,
           .count = 1,
           .visibility = ShaderStage::Fragment,
       },
   };
 
-  postProcessingLayout_ = device_->CreateDescriptorSetLayout({
+  postProcessingLayout_ = device_->CreateBindingLayout({
       .bindings = postProcessingBindings,
       .bindingCount = 1,
       .debugName = "SceneRenderer Post Processing Descriptor Set Layout",
   });
 
-  DescriptorPoolSize poolSizesPostProcessing[] = {
+  BindingPoolSize poolSizesPostProcessing[] = {
       {
-          .type = DescriptorType::CombinedImageSampler,
+          .type = BindingType::CombinedImageSampler,
           .count = 1,
       },
   };
 
-  postProcessingDescriptorPool_ = device_->CreateDescriptorPool({
+  postProcessingBindingPool_ = device_->CreateBindingPool({
       .poolSizes = poolSizesPostProcessing,
       .poolSizeCount = 1,
       .maxSets = 1,
   });
 
-  postProcessingSet_ = device_->AllocateDescriptorSet(
-      postProcessingDescriptorPool_, postProcessingLayout_);
+  postProcessingSet_ = device_->AllocateBindingSet(
+      postProcessingBindingPool_, postProcessingLayout_);
 
   frameSet_ =
-      device_->AllocateDescriptorSet(frameDescriptorPool_, frameLayout_);
+      device_->AllocateBindingSet(frameBindingPool_, frameLayout_);
 
   frameUBO_ = device_->CreateBuffer({.size = sizeof(FrameDataGPU),
                                      .usage = BufferUsage::Uniform,
@@ -272,39 +270,39 @@ void SceneRenderer::Initialize(IDevice *device, SwapchainHandle swapchain,
       .debugName = "Scene Material Buffer",
   });
 
-  DescriptorBindingDesc opaqueSceneBindings[] = {
+  BindingDesc opaqueSceneBindings[] = {
       {
           .binding = 0,
-          .type = DescriptorType::CombinedImageSampler,
+          .type = BindingType::CombinedImageSampler,
           .count = 1,
           .visibility = ShaderStage::Fragment,
       },
   };
 
-  opaqueSceneLayout_ = device_->CreateDescriptorSetLayout({
+  opaqueSceneLayout_ = device_->CreateBindingLayout({
       .bindings = opaqueSceneBindings,
       .bindingCount = 1,
       .debugName = "Opaque Scene Descriptor Set Layout",
   });
 
-  DescriptorPoolSize opaqueScenePoolSizes[] = {
+  BindingPoolSize opaqueScenePoolSizes[] = {
       {
-          .type = DescriptorType::CombinedImageSampler,
+          .type = BindingType::CombinedImageSampler,
           .count = 2,
       },
   };
 
-  opaqueScenePool_ = device_->CreateDescriptorPool({
+  opaqueScenePool_ = device_->CreateBindingPool({
       .poolSizes = opaqueScenePoolSizes,
       .poolSizeCount = 1,
       .maxSets = 2,
   });
 
   opaqueSceneSet_ =
-      device_->AllocateDescriptorSet(opaqueScenePool_, opaqueSceneLayout_);
+      device_->AllocateBindingSet(opaqueScenePool_, opaqueSceneLayout_);
 
   dummmyOpaqueSceneSet_ =
-      device_->AllocateDescriptorSet(opaqueScenePool_, opaqueSceneLayout_);
+      device_->AllocateBindingSet(opaqueScenePool_, opaqueSceneLayout_);
 
   auto uploadCtx = device_->CreateUploadContext(4 * 1024 * 1024);
   uploadCtx->Begin();
@@ -329,48 +327,48 @@ void SceneRenderer::Initialize(IDevice *device, SwapchainHandle swapchain,
 
   uploadCtx->Flush();
 
-  DescriptorImageInfo dummyImageInfo{};
+  BindingImageInfo dummyImageInfo{};
   dummyImageInfo.imageView = opaqueSceneFallback_.dummy.view;
   dummyImageInfo.sampler = opaqueSceneFallback_.dummy.sampler;
   dummyImageInfo.imageLayout = ImageLayout::ShaderReadOnly;
 
-  DescriptorImageInfo shadowImage{};
+  BindingImageInfo shadowImage{};
   shadowImage.imageView = directionalShadow_.texture.view;
   shadowImage.sampler = directionalShadow_.texture.sampler;
   shadowImage.imageLayout = ImageLayout::ShaderReadOnly;
 
-  device->UpdateDescriptorSet({
+  device->UpdateBindingSet({
       .dstSet = frameSet_,
       .binding = 0,
       .arrayElement = 0,
-      .type = DescriptorType::CombinedImageSampler,
+      .type = BindingType::CombinedImageSampler,
       .bufferInfo = nullptr,
       .imageInfo = &shadowImage,
       .descriptorCount = 1,
   });
 
-  DescriptorBufferInfo frameBuffer{};
+  BindingBufferInfo frameBuffer{};
   frameBuffer.buffer = frameUBO_;
   frameBuffer.offset = 0;
   frameBuffer.range = sizeof(FrameDataGPU);
 
-  device->UpdateDescriptorSet({
+  device->UpdateBindingSet({
       .dstSet = frameSet_,
       .binding = 1,
-      .type = DescriptorType::UniformBuffer,
+      .type = BindingType::UniformBuffer,
       .bufferInfo = &frameBuffer,
       .descriptorCount = 1,
   });
 
-  DescriptorBufferInfo materialBuffer{};
+  BindingBufferInfo materialBuffer{};
   materialBuffer.buffer = materialBuffer_;
   materialBuffer.offset = 0;
   materialBuffer.range = sizeof(MaterialDataGPU) * k_MaxMaterials;
 
-  device_->UpdateDescriptorSet({
+  device_->UpdateBindingSet({
       .dstSet = frameSet_,
       .binding = 2,
-      .type = DescriptorType::StorageBuffer,
+      .type = BindingType::StorageBuffer,
       .bufferInfo = &materialBuffer,
       .descriptorCount = 1,
   });
@@ -379,10 +377,10 @@ void SceneRenderer::Initialize(IDevice *device, SwapchainHandle swapchain,
       device, Velos::Path::Resolve("assets/hdr/piazza_bologni_4k.hdr"));
 
   skyboxPass_.Initialize(device, colorFormat,
-                         environment_->GetDescriptorSetLayout());
+                         environment_->GetBindingLayout());
 
   iblBaker_ = std::make_unique<IBLBaker>();
-  iblBaker_->Initialize(device, environment_->GetDescriptorSetLayout());
+  iblBaker_->Initialize(device, environment_->GetBindingLayout());
 }
 
 void SceneRenderer::Shutdown(IDevice *device) {
@@ -409,14 +407,14 @@ void SceneRenderer::Shutdown(IDevice *device) {
     tonemappingFS_ = {};
   }
 
-  if (postProcessingDescriptorPool_.IsValid()) {
-    device->DestroyDescriptorPool(postProcessingDescriptorPool_);
-    postProcessingDescriptorPool_ = {};
+  if (postProcessingBindingPool_.IsValid()) {
+    device->DestroyBindingPool(postProcessingBindingPool_);
+    postProcessingBindingPool_ = {};
     postProcessingSet_ = {};
   }
 
   if (postProcessingLayout_.IsValid()) {
-    device->DestroyDescriptorSetLayout(postProcessingLayout_);
+    device->DestroyBindingLayout(postProcessingLayout_);
     postProcessingLayout_ = {};
   }
 
@@ -429,8 +427,8 @@ void SceneRenderer::Shutdown(IDevice *device) {
   }
 
   DestroyTexture(device, iblResources_.irradianceTexture);
-  device_->DestroyDescriptorSetLayout(iblResources_.descriptorSetLayout);
-  device_->DestroyDescriptorPool(iblResources_.descriptorPool);
+  device_->DestroyBindingLayout(iblResources_.descriptorSetLayout);
+  device_->DestroyBindingPool(iblResources_.descriptorPool);
   for (ImageViewHandle handle : iblResources_.irradianceFaceViews) {
     device->DestroyImageView(handle);
   }
@@ -479,13 +477,13 @@ void SceneRenderer::Shutdown(IDevice *device) {
   }
 
   if (opaqueScenePool_.IsValid()) {
-    device->DestroyDescriptorPool(opaqueScenePool_);
+    device->DestroyBindingPool(opaqueScenePool_);
     opaqueScenePool_ = {};
     opaqueSceneSet_ = {};
   }
 
   if (opaqueSceneLayout_.IsValid()) {
-    device->DestroyDescriptorSetLayout(opaqueSceneLayout_);
+    device->DestroyBindingLayout(opaqueSceneLayout_);
     opaqueSceneLayout_ = {};
   }
 
@@ -495,8 +493,8 @@ void SceneRenderer::Shutdown(IDevice *device) {
 
   device->DestroyBuffer(frameUBO_);
   device->DestroyBuffer(materialBuffer_);
-  device->DestroyDescriptorSetLayout(frameLayout_);
-  device->DestroyDescriptorPool(frameDescriptorPool_);
+  device->DestroyBindingLayout(frameLayout_);
+  device->DestroyBindingPool(frameBindingPool_);
 
   graphRenderer_.reset();
   lineRenderer3D_.reset();
@@ -808,11 +806,11 @@ void SceneRenderer::LoadEnvironment(IDevice *device, const std::string &path) {
   device_->DestroyImageView(iblResources_.brdfLutView);
 
   if (iblResources_.descriptorSetLayout.IsValid()) {
-    device->DestroyDescriptorSetLayout(iblResources_.descriptorSetLayout);
+    device->DestroyBindingLayout(iblResources_.descriptorSetLayout);
   }
 
   if (iblResources_.descriptorPool.IsValid()) {
-    device->DestroyDescriptorPool(iblResources_.descriptorPool);
+    device->DestroyBindingPool(iblResources_.descriptorPool);
   }
 
   iblResources_ = {};
@@ -853,7 +851,7 @@ PipelineHandle SceneRenderer::GetOrCreatePipeline(const MeshPipelineKey &key) {
   desc.vertexLayouts = GetMeshVertexLayout();
 
   // Descriptor set layouts
-  DescriptorSetLayoutHandle setLayouts[] = {
+  BindingLayoutHandle setLayouts[] = {
       materialLayout_,
       frameLayout_,
       iblResources_.descriptorSetLayout,
@@ -939,7 +937,7 @@ PipelineHandle SceneRenderer::GetOrCreateTransmissionPipeline() {
 
   desc.vertexLayouts = GetMeshVertexLayout();
 
-  DescriptorSetLayoutHandle setLayouts[] = {
+  BindingLayoutHandle setLayouts[] = {
       materialLayout_,
       frameLayout_,
       iblResources_.descriptorSetLayout,
@@ -977,7 +975,7 @@ PipelineHandle SceneRenderer::GetOrCreateTonemappingPipeline() {
 
   desc.vertexLayouts = {};
 
-  DescriptorSetLayoutHandle setLayouts[] = {postProcessingLayout_};
+  BindingLayoutHandle setLayouts[] = {postProcessingLayout_};
 
   desc.layout.descriptorSetLayouts = setLayouts;
   desc.layout.descriptorSetLayoutCount = 1;
@@ -999,28 +997,28 @@ PipelineHandle SceneRenderer::GetOrCreateTonemappingPipeline() {
 void SceneRenderer::UpdateOpaqueSceneDescriptor() {
   const auto &opaqueScene = graph_.GetImage("OpaqueScene");
 
-  DescriptorImageInfo opaqueSceneImage{};
+  BindingImageInfo opaqueSceneImage{};
   opaqueSceneImage.imageView = opaqueScene.view;
   opaqueSceneImage.sampler = opaqueScene.sampler;
   opaqueSceneImage.imageLayout = ImageLayout::ShaderReadOnly;
 
-  DescriptorImageInfo dummyImageInfo{};
+  BindingImageInfo dummyImageInfo{};
   dummyImageInfo.imageView = opaqueSceneFallback_.dummy.view;
   dummyImageInfo.sampler = opaqueSceneFallback_.dummy.sampler;
   dummyImageInfo.imageLayout = ImageLayout::ShaderReadOnly;
 
-  device_->UpdateDescriptorSet({
+  device_->UpdateBindingSet({
       .dstSet = opaqueSceneSet_,
       .binding = 0,
-      .type = DescriptorType::CombinedImageSampler,
+      .type = BindingType::CombinedImageSampler,
       .imageInfo = &opaqueSceneImage,
       .descriptorCount = 1,
   });
 
-  device_->UpdateDescriptorSet({
+  device_->UpdateBindingSet({
       .dstSet = dummmyOpaqueSceneSet_,
       .binding = 0,
-      .type = DescriptorType::CombinedImageSampler,
+      .type = BindingType::CombinedImageSampler,
       .imageInfo = &dummyImageInfo,
       .descriptorCount = 1,
   });
@@ -1029,15 +1027,15 @@ void SceneRenderer::UpdateOpaqueSceneDescriptor() {
 void SceneRenderer::UpdateFinalSceneDescriptor() {
   const auto &finalScene = graph_.GetImage("FinalSceneColor");
 
-  DescriptorImageInfo finalSceneImage{};
+  BindingImageInfo finalSceneImage{};
   finalSceneImage.imageView = finalScene.view;
   finalSceneImage.sampler = finalScene.sampler;
   finalSceneImage.imageLayout = ImageLayout::ShaderReadOnly;
 
-  device_->UpdateDescriptorSet({
+  device_->UpdateBindingSet({
       .dstSet = postProcessingSet_,
       .binding = 0,
-      .type = DescriptorType::CombinedImageSampler,
+      .type = BindingType::CombinedImageSampler,
       .imageInfo = &finalSceneImage,
       .descriptorCount = 1,
   });
@@ -1185,7 +1183,7 @@ void SceneRenderer::BuildStaticMeshRenderList(const RenderWorld &world) {
 
 void SceneRenderer::RenderOpaqueMeshes(ICommandList &cmd, const Camera &camera,
                                        DebugContext dbgCtx,
-                                       DescriptorSetHandle set) {
+                                       BindingSetHandle set) {
   RenderStaticMeshes(cmd, camera, dbgCtx, opaques_, set);
 }
 
@@ -1199,15 +1197,15 @@ void SceneRenderer::RenderTransmissionMeshes(ICommandList &cmd,
   PipelineHandle pipeline = GetOrCreateTransmissionPipeline();
 
   cmd.BindPipeline(pipeline);
-  cmd.BindDescriptorSet(pipeline, 1, frameSet_);
+  cmd.SetBindings(pipeline, 1, frameSet_);
 
   if (iblReady_) {
-    cmd.BindDescriptorSet(pipeline, 2, iblResources_.descriptorSet);
+    cmd.SetBindings(pipeline, 2, iblResources_.descriptorSet);
   }
 
-  cmd.BindDescriptorSet(pipeline, 3, opaqueSceneSet_);
+  cmd.SetBindings(pipeline, 3, opaqueSceneSet_);
 
-  DescriptorSetHandle lastMaterialSet{};
+  BindingSetHandle lastMaterialSet{};
   BufferHandle lastVB{};
   BufferHandle lastIB{};
 
@@ -1219,13 +1217,13 @@ void SceneRenderer::RenderTransmissionMeshes(ICommandList &cmd,
     const Submesh &submesh = *item.submesh;
     const MaterialResource *material = item.material;
 
-    DescriptorSetHandle materialSet{};
+    BindingSetHandle materialSet{};
     if (material && material->descriptorSet.IsValid()) {
       materialSet = material->descriptorSet;
     }
 
     if (materialSet.id != lastMaterialSet.id) {
-      cmd.BindDescriptorSet(pipeline, 0, materialSet);
+      cmd.SetBindings(pipeline, 0, materialSet);
       lastMaterialSet = materialSet;
     }
 
@@ -1267,11 +1265,11 @@ void SceneRenderer::RenderAlphaBlendMeshes(ICommandList &cmd,
 void SceneRenderer::RenderStaticMeshes(
     ICommandList &cmd, const Camera &camera, DebugContext dbgCtx,
     const std::vector<StaticMeshRenderItem> &items,
-    DescriptorSetHandle sceneSet) {
+    BindingSetHandle sceneSet) {
 
   PipelineHandle lastPipeline{};
-  DescriptorSetHandle lastMaterialSet{};
-  DescriptorSetHandle lastSceneSet{};
+  BindingSetHandle lastMaterialSet{};
+  BindingSetHandle lastSceneSet{};
   BufferHandle lastVertexBuffer{};
   BufferHandle lastIndexBuffer{};
 
@@ -1294,10 +1292,10 @@ void SceneRenderer::RenderStaticMeshes(
 
     if (pipeline.id != lastPipeline.id) {
       cmd.BindPipeline(pipeline);
-      cmd.BindDescriptorSet(pipeline, 1, frameSet_);
+      cmd.SetBindings(pipeline, 1, frameSet_);
 
       if (iblReady_) {
-        cmd.BindDescriptorSet(pipeline, 2, iblResources_.descriptorSet);
+        cmd.SetBindings(pipeline, 2, iblResources_.descriptorSet);
       }
 
       lastPipeline = pipeline;
@@ -1307,18 +1305,18 @@ void SceneRenderer::RenderStaticMeshes(
       lastIndexBuffer = {};
     }
 
-    DescriptorSetHandle materialSet{};
+    BindingSetHandle materialSet{};
     if (material && material->descriptorSet.IsValid()) {
       materialSet = material->descriptorSet;
     }
 
     if (materialSet.id != lastMaterialSet.id) {
-      cmd.BindDescriptorSet(pipeline, 0, materialSet);
+      cmd.SetBindings(pipeline, 0, materialSet);
       lastMaterialSet = materialSet;
     }
 
     if (sceneSet.id != lastSceneSet.id) {
-      cmd.BindDescriptorSet(pipeline, 3, sceneSet);
+      cmd.SetBindings(pipeline, 3, sceneSet);
       lastSceneSet = sceneSet;
     }
 
@@ -1358,7 +1356,7 @@ void SceneRenderer::RenderPostProcessingEffect(ICommandList &cmd,
 
   cmd.BindPipeline(postProcessingPipeline);
 
-  cmd.BindDescriptorSet(postProcessingPipeline, 0, postProcessingSet_);
+  cmd.SetBindings(postProcessingPipeline, 0, postProcessingSet_);
 
   cmd.Draw(3);
 }

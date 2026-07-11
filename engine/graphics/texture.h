@@ -1,9 +1,9 @@
 #pragma once
 
 #include "glm/ext/vector_float4.hpp"
-#include "rhi/rhi_device.h"
-#include "rhi/rhi_handles.h"
-#include "rhi/rhi_types.h"
+#include "rhi/device.h"
+#include "rhi/handles.h"
+#include "rhi/types.h"
 namespace Rodan {
 
 using namespace Velos::RHI;

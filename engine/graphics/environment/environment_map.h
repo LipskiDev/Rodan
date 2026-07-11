@@ -1,8 +1,8 @@
 #pragma once
 
-#include "rhi/rhi_command_list.h"
-#include "rhi/rhi_device.h"
-#include "rhi/rhi_types.h"
+#include "rhi/command_list.h"
+#include "rhi/device.h"
+#include "rhi/types.h"
 
 #include <filesystem>
 #include <memory>
@@ -22,12 +22,12 @@ public:
 
   bool NeedsUpload() const { return !uploaded_; }
 
-  Velos::RHI::DescriptorSetLayoutHandle GetDescriptorSetLayout() const {
+  Velos::RHI::BindingLayoutHandle GetBindingLayout() const {
     return setLayout_;
   }
 
-  Velos::RHI::DescriptorSetHandle GetDescriptorSet() const {
-    return descriptorSet_;
+  Velos::RHI::BindingSetHandle GetBindingSet() const {
+    return bindingSet_;
   }
 
 private:
@@ -41,9 +41,9 @@ private:
   Velos::RHI::ImageViewHandle view_{};
   Velos::RHI::SamplerHandle sampler_{};
 
-  Velos::RHI::DescriptorSetLayoutHandle setLayout_{};
-  Velos::RHI::DescriptorPoolHandle descriptorPool_{};
-  Velos::RHI::DescriptorSetHandle descriptorSet_{};
+  Velos::RHI::BindingLayoutHandle setLayout_{};
+  Velos::RHI::BindingPoolHandle bindingPool_{};
+  Velos::RHI::BindingSetHandle bindingSet_{};
 
   Velos::u32 faceSize_ = 0;
   Velos::u64 cubemapByteSize_ = 0;

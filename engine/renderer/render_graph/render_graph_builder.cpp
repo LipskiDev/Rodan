@@ -1,5 +1,5 @@
 #include "render_graph_builder.h"
-#include "rhi/rhi_types.h"
+#include "rhi/types.h"
 
 namespace Rodan {
 

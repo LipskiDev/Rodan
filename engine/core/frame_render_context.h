@@ -1,9 +1,9 @@
 #pragma once
 
-#include "rhi/rhi_handles.h"
-#include "rhi/rhi_types.h"
+#include "rhi/handles.h"
+#include "rhi/types.h"
 #include <functional>
-#include <rhi/rhi_command_list.h>
+#include <rhi/command_list.h>
 
 namespace Rodan {
 

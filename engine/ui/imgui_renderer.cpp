@@ -31,7 +31,7 @@ static Velos::u32 GrowCapacity(Velos::u32 current, Velos::u32 required) {
 static VRHI::PipelineHandle
 CreateImGuiPipeline(VRHI::IDevice *device, VRHI::Format colorFormat,
                     VRHI::Format depthFormat,
-                    VRHI::DescriptorSetLayoutHandle setLayout) {
+                    VRHI::BindingLayoutHandle setLayout) {
 
   const auto vsOutput = Velos::ShaderCompiler::CompileFile({
       .path = Velos::Path::Resolve("engine/ui/shaders/imgui.vert").string(),
@@ -73,7 +73,7 @@ CreateImGuiPipeline(VRHI::IDevice *device, VRHI::Format colorFormat,
        static_cast<Velos::u32>(offsetof(ImDrawVert, col))},
   };
 
-  const VRHI::DescriptorSetLayoutHandle layouts[] = {setLayout};
+  const VRHI::BindingLayoutHandle layouts[] = {setLayout};
 
   VRHI::GraphicsPipelineDesc desc{};
   desc.vertexShader = vs;
@@ -232,48 +232,48 @@ void ImGuiRenderer::Initialize(VRHI::IDevice *device,
   device_->WaitIdle();
   device_->DestroyBuffer(staging);
 
-  VRHI::DescriptorBindingDesc binding{};
+  VRHI::BindingDesc binding{};
   binding.binding = 0;
-  binding.type = VRHI::DescriptorType::CombinedImageSampler;
+  binding.type = VRHI::BindingType::CombinedImageSampler;
   binding.count = 1;
   binding.visibility = VRHI::ShaderStage::Fragment;
 
-  VRHI::DescriptorSetLayoutDesc setLayoutDesc{};
+  VRHI::BindingLayoutDesc setLayoutDesc{};
   setLayoutDesc.bindings = &binding;
   setLayoutDesc.bindingCount = 1;
   setLayoutDesc.debugName = "ImGui Descriptor Set Layout";
 
-  setLayout_ = device_->CreateDescriptorSetLayout(setLayoutDesc);
+  setLayout_ = device_->CreateBindingLayout(setLayoutDesc);
 
-  VRHI::DescriptorPoolSize poolSize{};
-  poolSize.type = VRHI::DescriptorType::CombinedImageSampler;
+  VRHI::BindingPoolSize poolSize{};
+  poolSize.type = VRHI::BindingType::CombinedImageSampler;
   poolSize.count = 1;
 
-  VRHI::DescriptorPoolDesc poolDesc{};
+  VRHI::BindingPoolDesc poolDesc{};
   poolDesc.poolSizes = &poolSize;
   poolDesc.poolSizeCount = 1;
   poolDesc.maxSets = 1;
   poolDesc.debugName = "ImGui Descriptor Pool";
 
-  pool_ = device_->CreateDescriptorPool(poolDesc);
-  fontSet_ = device_->AllocateDescriptorSet(pool_, setLayout_,
+  pool_ = device_->CreateBindingPool(poolDesc);
+  fontSet_ = device_->AllocateBindingSet(pool_, setLayout_,
                                             "ImGui Font Descriptor Set");
 
-  VRHI::DescriptorImageInfo info{};
+  VRHI::BindingImageInfo info{};
   info.sampler = fontSampler_;
   info.imageView = fontImageView_;
   info.imageLayout = VRHI::ImageLayout::ShaderReadOnly;
 
-  VRHI::WriteDescriptorDesc write{};
+  VRHI::BindingWriteDesc write{};
   write.dstSet = fontSet_;
   write.binding = 0;
   write.arrayElement = 0;
-  write.type = VRHI::DescriptorType::CombinedImageSampler;
+  write.type = VRHI::BindingType::CombinedImageSampler;
   write.bufferInfo = nullptr;
   write.imageInfo = &info;
   write.descriptorCount = 1;
 
-  device_->UpdateDescriptorSet(write);
+  device_->UpdateBindingSet(write);
 
   io.Fonts->SetTexID(static_cast<ImTextureID>(static_cast<uintptr_t>(1)));
 
@@ -311,12 +311,12 @@ void ImGuiRenderer::Shutdown() {
   }
 
   if (pool_.IsValid()) {
-    device_->DestroyDescriptorPool(pool_);
+    device_->DestroyBindingPool(pool_);
     pool_ = {};
   }
 
   if (setLayout_.IsValid()) {
-    device_->DestroyDescriptorSetLayout(setLayout_);
+    device_->DestroyBindingLayout(setLayout_);
     setLayout_ = {};
   }
 
@@ -437,7 +437,7 @@ void ImGuiRenderer::Render(VRHI::ICommandList &cmd, ImDrawData *drawData) {
   cmd.UpdateBuffer(ibUpdate);
 
   cmd.BindPipeline(pipeline_);
-  cmd.BindDescriptorSet(pipeline_, 0, fontSet_);
+  cmd.SetBindings(pipeline_, 0, fontSet_);
   cmd.SetViewport(VRHI::Viewport{
       .x = 0.0f,
       .y = 0.0f,
@@ -476,7 +476,7 @@ void ImGuiRenderer::Render(VRHI::ICommandList &cmd, ImDrawData *drawData) {
       if (pcmd->UserCallback != nullptr) {
         if (pcmd->UserCallback == ImDrawCallback_ResetRenderState) {
           cmd.BindPipeline(pipeline_);
-          cmd.BindDescriptorSet(pipeline_, 0, fontSet_);
+          cmd.SetBindings(pipeline_, 0, fontSet_);
           cmd.BindVertexBuffer(0, frame.vertexBuffer, 0);
           cmd.BindIndexBuffer(frame.indexBuffer,
                               sizeof(ImDrawIdx) == 2 ? VRHI::IndexType::U16

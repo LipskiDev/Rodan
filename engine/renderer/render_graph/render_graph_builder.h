@@ -1,6 +1,6 @@
 #pragma once
 
-#include "rhi/rhi_types.h"
+#include "rhi/types.h"
 #include <cstdint>
 #include <string>
 #include <vector>

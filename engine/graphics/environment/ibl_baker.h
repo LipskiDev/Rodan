@@ -3,11 +3,11 @@
 #include "graphics/environment/environment_map.h"
 #include "graphics/environment/ibl_resources.h"
 
-#include "rhi/rhi_command_list.h"
-#include "rhi/rhi_device.h"
-#include "rhi/rhi_handles.h"
-#include "rhi/rhi_pipeline.h"
-#include "rhi/rhi_types.h"
+#include "rhi/command_list.h"
+#include "rhi/device.h"
+#include "rhi/handles.h"
+#include "rhi/pipeline.h"
+#include "rhi/types.h"
 
 #include <cstdint>
 
@@ -16,7 +16,7 @@ namespace Rodan {
 class IBLBaker {
 public:
   void Initialize(Velos::RHI::IDevice *device,
-                  Velos::RHI::DescriptorSetLayoutHandle environmentLayout);
+                  Velos::RHI::BindingLayoutHandle environmentLayout);
 
   IBLResources BakeIrradiance(Velos::RHI::ICommandList &cmd,
                               const EnvironmentMap &environment);
@@ -32,7 +32,7 @@ private:
                        const EnvironmentMap &environment, IBLResources &result);
   void RenderBRDFLut(Velos::RHI::ICommandList &cmd,
                      const EnvironmentMap &environment, IBLResources &result);
-  void CreateIBLDescriptorSet(IBLResources &resources);
+  void CreateIBLBindingSet(IBLResources &resources);
 
 private:
   Velos::RHI::IDevice *device_ = nullptr;
@@ -48,9 +48,9 @@ private:
   Velos::RHI::ShaderHandle prefilterFS_{};
 
   Velos::RHI::ShaderHandle brdfLutCS_{};
-  Velos::RHI::DescriptorSetLayoutHandle brdfLutSetLayout_;
-  DescriptorPoolHandle brdfBakeDescriptorPool_;
-  DescriptorSetHandle brdfBakeDescriptorSet_;
+  Velos::RHI::BindingLayoutHandle brdfLutSetLayout_;
+  BindingPoolHandle brdfBakeBindingPool_;
+  BindingSetHandle brdfBakeBindingSet_;
 
   Velos::RHI::BufferHandle cubeVertexBuffer_{};
 

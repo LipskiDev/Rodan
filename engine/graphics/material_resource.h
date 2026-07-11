@@ -2,7 +2,7 @@
 
 #include "graphics/material_types.h"
 #include "graphics/texture.h"
-#include "rhi/rhi_handles.h"
+#include "rhi/handles.h"
 #include <glm/glm.hpp>
 
 namespace Rodan {
@@ -50,7 +50,7 @@ struct MaterialResource {
   glm::vec4 baseColorFactor{1.0f};
   float metallicFactor = 1.0f;
   float roughnessFactor = 1.0f;
-  DescriptorSetHandle descriptorSet{};
+  BindingSetHandle descriptorSet{};
 
   bool ownsBaseColorResources = false;
   bool ownsNormalResources = false;

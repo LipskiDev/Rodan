@@ -40,43 +40,43 @@ void ComputeTestScene::Initialize(VRHI::IDevice *device,
       .debugName = "Compute Test Shader",
   });
 
-  VRHI::DescriptorBindingDesc computeBindings[2]{};
+  VRHI::BindingDesc computeBindings[2]{};
 
   computeBindings[0].binding = 0;
-  computeBindings[0].type = VRHI::DescriptorType::StorageImage;
+  computeBindings[0].type = VRHI::BindingType::StorageImage;
   computeBindings[0].count = 1;
   computeBindings[0].visibility = VRHI::ShaderStage::Compute;
 
   computeBindings[1].binding = 1;
-  computeBindings[1].type = VRHI::DescriptorType::StorageBuffer;
+  computeBindings[1].type = VRHI::BindingType::StorageBuffer;
   computeBindings[1].count = 1;
   computeBindings[1].visibility = VRHI::ShaderStage::Compute;
 
-  VRHI::DescriptorSetLayoutDesc layoutDesc{};
+  VRHI::BindingLayoutDesc layoutDesc{};
   layoutDesc.bindings = computeBindings;
   layoutDesc.bindingCount = 2;
   layoutDesc.debugName = "Compute Test Descriptor Set Layout";
 
-  descriptorSetLayout_ = device_->CreateDescriptorSetLayout(layoutDesc);
+  descriptorSetLayout_ = device_->CreateBindingLayout(layoutDesc);
 
-  VRHI::DescriptorPoolSize poolSizes[2]{};
+  VRHI::BindingPoolSize poolSizes[2]{};
 
-  poolSizes[0].type = VRHI::DescriptorType::StorageImage;
+  poolSizes[0].type = VRHI::BindingType::StorageImage;
   poolSizes[0].count = 1;
 
-  poolSizes[1].type = VRHI::DescriptorType::StorageBuffer;
+  poolSizes[1].type = VRHI::BindingType::StorageBuffer;
   poolSizes[1].count = 1;
 
-  VRHI::DescriptorPoolDesc poolDesc{};
+  VRHI::BindingPoolDesc poolDesc{};
   poolDesc.poolSizes = poolSizes;
   poolDesc.poolSizeCount = 2;
   poolDesc.maxSets = 1;
   poolDesc.debugName = "Compute Test Descriptor Pool";
 
-  descriptorPool_ = device_->CreateDescriptorPool(poolDesc);
+  bindingPool_ = device_->CreateBindingPool(poolDesc);
 
-  descriptorSet_ = device_->AllocateDescriptorSet(
-      descriptorPool_, descriptorSetLayout_, "Compute Test Descriptor Set");
+  bindingSet_ = device_->AllocateBindingSet(
+      bindingPool_, descriptorSetLayout_, "Compute Test Descriptor Set");
 
   std::array<glm::vec4, kPatternColorCount> patternColors{};
 
@@ -95,22 +95,22 @@ void ComputeTestScene::Initialize(VRHI::IDevice *device,
       .debugName = "Compute Test Pattern Storage Buffer",
   });
 
-  VRHI::DescriptorBufferInfo bufferInfo{};
+  VRHI::BindingBufferInfo bufferInfo{};
   bufferInfo.buffer = patternBuffer_;
   bufferInfo.offset = 0;
   bufferInfo.range = sizeof(glm::vec4) * kPatternColorCount;
 
-  VRHI::WriteDescriptorDesc bufferWrite{};
-  bufferWrite.dstSet = descriptorSet_;
+  VRHI::BindingWriteDesc bufferWrite{};
+  bufferWrite.dstSet = bindingSet_;
   bufferWrite.binding = 1;
   bufferWrite.arrayElement = 0;
-  bufferWrite.type = VRHI::DescriptorType::StorageBuffer;
+  bufferWrite.type = VRHI::BindingType::StorageBuffer;
   bufferWrite.bufferInfo = &bufferInfo;
   bufferWrite.descriptorCount = 1;
 
-  device_->UpdateDescriptorSet(bufferWrite);
+  device_->UpdateBindingSet(bufferWrite);
 
-  VRHI::DescriptorSetLayoutHandle layouts[] = {descriptorSetLayout_};
+  VRHI::BindingLayoutHandle layouts[] = {descriptorSetLayout_};
 
   VRHI::ComputePipelineDesc pipelineDesc{};
   pipelineDesc.computeShader = computeShader_;
@@ -131,48 +131,48 @@ void ComputeTestScene::Initialize(VRHI::IDevice *device,
       .debugName = "Compute Test Output Sampler",
   });
 
-  VRHI::DescriptorBindingDesc displayBinding{};
+  VRHI::BindingDesc displayBinding{};
   displayBinding.binding = 0;
-  displayBinding.type = VRHI::DescriptorType::CombinedImageSampler;
+  displayBinding.type = VRHI::BindingType::CombinedImageSampler;
   displayBinding.count = 1;
   displayBinding.visibility = VRHI::ShaderStage::Fragment;
 
-  VRHI::DescriptorSetLayoutDesc displayLayoutDesc{};
+  VRHI::BindingLayoutDesc displayLayoutDesc{};
   displayLayoutDesc.bindings = &displayBinding;
   displayLayoutDesc.bindingCount = 1;
   displayLayoutDesc.debugName = "Compute Test Display Layout";
 
-  displaySetLayout_ = device_->CreateDescriptorSetLayout(displayLayoutDesc);
+  displaySetLayout_ = device_->CreateBindingLayout(displayLayoutDesc);
 
-  VRHI::DescriptorPoolSize displayPoolSize{};
-  displayPoolSize.type = VRHI::DescriptorType::CombinedImageSampler;
+  VRHI::BindingPoolSize displayPoolSize{};
+  displayPoolSize.type = VRHI::BindingType::CombinedImageSampler;
   displayPoolSize.count = 1;
 
-  VRHI::DescriptorPoolDesc displayPoolDesc{};
+  VRHI::BindingPoolDesc displayPoolDesc{};
   displayPoolDesc.poolSizes = &displayPoolSize;
   displayPoolDesc.poolSizeCount = 1;
   displayPoolDesc.maxSets = 1;
   displayPoolDesc.debugName = "Compute Test Display Pool";
 
-  displayDescriptorPool_ = device_->CreateDescriptorPool(displayPoolDesc);
+  displayBindingPool_ = device_->CreateBindingPool(displayPoolDesc);
 
-  displayDescriptorSet_ = device_->AllocateDescriptorSet(
-      displayDescriptorPool_, displaySetLayout_, "Compute Test Display Set");
+  displayBindingSet_ = device_->AllocateBindingSet(
+      displayBindingPool_, displaySetLayout_, "Compute Test Display Set");
 
-  VRHI::DescriptorImageInfo sampledInfo{};
+  VRHI::BindingImageInfo sampledInfo{};
   sampledInfo.sampler = outputSampler_;
   sampledInfo.imageView = outputImageView_;
   sampledInfo.imageLayout = VRHI::ImageLayout::ShaderReadOnly;
 
-  VRHI::WriteDescriptorDesc sampledWrite{};
-  sampledWrite.dstSet = displayDescriptorSet_;
+  VRHI::BindingWriteDesc sampledWrite{};
+  sampledWrite.dstSet = displayBindingSet_;
   sampledWrite.binding = 0;
   sampledWrite.arrayElement = 0;
-  sampledWrite.type = VRHI::DescriptorType::CombinedImageSampler;
+  sampledWrite.type = VRHI::BindingType::CombinedImageSampler;
   sampledWrite.imageInfo = &sampledInfo;
   sampledWrite.descriptorCount = 1;
 
-  device_->UpdateDescriptorSet(sampledWrite);
+  device_->UpdateBindingSet(sampledWrite);
 
   auto vsOutput = Velos::ShaderCompiler::CompileFile({
       .path = Velos::Path::Resolve("assets/shaders/fullscreen_texture.vert")
@@ -208,7 +208,7 @@ void ComputeTestScene::Initialize(VRHI::IDevice *device,
       .debugName = "Fullscreen Texture FS",
   });
 
-  VRHI::DescriptorSetLayoutHandle displayLayouts[] = {displaySetLayout_};
+  VRHI::BindingLayoutHandle displayLayouts[] = {displaySetLayout_};
 
   VRHI::GraphicsPipelineDesc fullscreenDesc{};
   fullscreenDesc.vertexShader = fullscreenVS_;
@@ -259,13 +259,13 @@ void ComputeTestScene::Shutdown(VRHI::IDevice *device) {
     fullscreenFS_ = {};
   }
 
-  if (displayDescriptorPool_.IsValid()) {
-    device->DestroyDescriptorPool(displayDescriptorPool_);
-    displayDescriptorPool_ = {};
+  if (displayBindingPool_.IsValid()) {
+    device->DestroyBindingPool(displayBindingPool_);
+    displayBindingPool_ = {};
   }
 
   if (displaySetLayout_.IsValid()) {
-    device->DestroyDescriptorSetLayout(displaySetLayout_);
+    device->DestroyBindingLayout(displaySetLayout_);
     displaySetLayout_ = {};
   }
 
@@ -279,13 +279,13 @@ void ComputeTestScene::Shutdown(VRHI::IDevice *device) {
     computePipeline_ = {};
   }
 
-  if (descriptorPool_.IsValid()) {
-    device->DestroyDescriptorPool(descriptorPool_);
-    descriptorPool_ = {};
+  if (bindingPool_.IsValid()) {
+    device->DestroyBindingPool(bindingPool_);
+    bindingPool_ = {};
   }
 
   if (descriptorSetLayout_.IsValid()) {
-    device->DestroyDescriptorSetLayout(descriptorSetLayout_);
+    device->DestroyBindingLayout(descriptorSetLayout_);
     descriptorSetLayout_ = {};
   }
 
@@ -331,7 +331,7 @@ void ComputeTestScene::Prepare(VRHI::ICommandList &cmd) {
   });
 
   cmd.BindComputePipeline(computePipeline_);
-  cmd.BindComputeDescriptorSet(computePipeline_, 0, descriptorSet_);
+  cmd.SetComputeBindings(computePipeline_, 0, bindingSet_);
 
   constexpr Velos::u32 localSizeX = 8;
   constexpr Velos::u32 localSizeY = 8;
@@ -400,7 +400,7 @@ void ComputeTestScene::Render(VRHI::ICommandList &cmd,
   });
 
   cmd.BindPipeline(fullscreenPipeline_);
-  cmd.BindDescriptorSet(fullscreenPipeline_, 0, displayDescriptorSet_);
+  cmd.SetBindings(fullscreenPipeline_, 0, displayBindingSet_);
   cmd.Draw(3);
 
   if (frame.renderUi) {
@@ -462,20 +462,20 @@ void ComputeTestScene::CreateOutputImage(Velos::u32 width, Velos::u32 height) {
       .debugName = "Compute Test Output Image View",
   });
 
-  VRHI::DescriptorImageInfo imageInfo{};
+  VRHI::BindingImageInfo imageInfo{};
   imageInfo.imageView = outputImageView_;
   imageInfo.imageLayout = VRHI::ImageLayout::General;
 
-  VRHI::WriteDescriptorDesc write{};
-  write.dstSet = descriptorSet_;
+  VRHI::BindingWriteDesc write{};
+  write.dstSet = bindingSet_;
   write.binding = 0;
   write.arrayElement = 0;
-  write.type = VRHI::DescriptorType::StorageImage;
+  write.type = VRHI::BindingType::StorageImage;
   write.bufferInfo = nullptr;
   write.imageInfo = &imageInfo;
   write.descriptorCount = 1;
 
-  device_->UpdateDescriptorSet(write);
+  device_->UpdateBindingSet(write);
 
   dispatched_ = false;
 }
