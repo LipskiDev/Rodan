@@ -256,8 +256,8 @@ void ImGuiRenderer::Initialize(VRHI::IDevice *device,
   poolDesc.debugName = "ImGui Descriptor Pool";
 
   pool_ = device_->CreateBindingPool(poolDesc);
-  fontSet_ = device_->AllocateBindingSet(pool_, setLayout_,
-                                            "ImGui Font Descriptor Set");
+  fontSet_ = device_->AllocateBindingSet({ .pool = pool_, .layout = setLayout_,
+                                            .debugName = "ImGui Font Descriptor Set" });
 
   VRHI::BindingImageInfo info{};
   info.sampler = fontSampler_;

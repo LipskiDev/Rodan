@@ -6,6 +6,7 @@
 #include "ui/imgui_renderer.h"
 
 #include <memory>
+#include <graphics/texture_registry.h>
 
 namespace Rodan {
 
@@ -39,6 +40,7 @@ private:
   void BeginImGuiFrame(float deltaTime);
   void BuildApplicationImGui();
   void RenderImGui(Velos::RHI::ICommandList &cmd);
+  void InitializeEngineResources();
 
   void CreateScene(SceneType type);
   void SwitchScene(SceneType type);

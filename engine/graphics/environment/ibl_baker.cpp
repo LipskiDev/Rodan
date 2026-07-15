@@ -625,8 +625,8 @@ void IBLBaker::RenderBRDFLut(Velos::RHI::ICommandList &cmd,
   });
 
   brdfBakeBindingSet_ =
-      device_->AllocateBindingSet(brdfBakeBindingPool_, brdfLutSetLayout_,
-                                     "BRDF LUT Bake Descriptor Set");
+      device_->AllocateBindingSet({ .pool = brdfBakeBindingPool_, .layout = brdfLutSetLayout_,
+                                     .debugName = "BRDF LUT Bake Descriptor Set" });
 
   BindingImageInfo imageInfo{};
   imageInfo.imageView = result.brdfLutTexture.view;
@@ -713,7 +713,7 @@ void IBLBaker::CreateIBLBindingSet(IBLResources &result) {
   });
 
   result.descriptorSet = device_->AllocateBindingSet(
-      result.descriptorPool, result.descriptorSetLayout, "IBL Descriptor Set");
+      { .pool = result.descriptorPool, .layout = result.descriptorSetLayout, .debugName = "IBL Descriptor Set" });
 
   BindingImageInfo irradianceInfo{};
   irradianceInfo.sampler = result.irradianceTexture.sampler;

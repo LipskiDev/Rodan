@@ -40,28 +40,48 @@ struct alignas(16) FrameDataGPU {
 };
 
 struct alignas(16) MaterialDataGPU {
-  glm::vec4 baseColorFactor;
+    alignas(16) glm::vec4 baseColorFactor; // 0
 
-  float metallicFactor;
-  float roughnessFactor;
-  float alphaCutoff;
-  int alphaMode;
+    int32_t baseColorTextureIndex;         // 16
+    float metallicFactor;                  // 20
+    float roughnessFactor;                 // 24
+    int32_t metallicRoughnessTextureIndex; // 28
 
-  int hasMaterial;
-  float transmissionFactor;
-  float thicknessFactor;
-  float ior;
-  float clearcoatFactor;
-  float clearcoatRoughnessFactor;
-  float pad0_;
-  float pad1_;
-  glm::vec3 emissiveFactor;
-  float emissiveStrength;
-  bool useUnlit;
+    float alphaCutoff;                     // 32
+    int32_t alphaMode;                     // 36
+    int32_t hasMaterial;                   // 40
+    float transmissionFactor;              // 44
 
-  glm::vec4 attenuationColorDistance;
+    float thicknessFactor;                 // 48
+    int32_t thicknessTextureIndex;         // 52
+    float ior;                             // 56
+    float clearcoatFactor;                 // 60
+
+    int32_t clearcoatTextureIndex;          // 64
+    float clearcoatRoughnessFactor;         // 68
+    int32_t clearcoatRoughnessTextureIndex; // 72
+    int32_t clearcoatNormalTextureIndex;    // 76
+
+    int32_t normalTextureIndex;             // 80
+    int32_t occlusionTextureIndex;          // 84
+    int32_t transmissionTextureIndex;       // 88
+    int32_t pad0_;                          // 92
+
+    alignas(16) glm::vec3 emissiveFactor;   // 96
+    float emissiveStrength;                 // 108
+
+    int32_t emissiveTextureIndex;           // 112
+    uint32_t useUnlit;                      // 116
+    uint32_t pad1_;                         // 120
+    uint32_t pad2_;                         // 124
+
+    alignas(16) glm::vec4 attenuationColorDistance; // 128
 };
 
+static_assert(sizeof(MaterialDataGPU) == 144);
+static_assert(offsetof(MaterialDataGPU, normalTextureIndex) == 80);
+static_assert(offsetof(MaterialDataGPU, emissiveFactor) == 96);
+static_assert(offsetof(MaterialDataGPU, attenuationColorDistance) == 128);
 struct StaticMeshRenderItem {
   const MeshResource *mesh = nullptr;
   const MaterialResource *material = nullptr;

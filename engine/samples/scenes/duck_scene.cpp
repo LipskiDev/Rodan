@@ -382,7 +382,7 @@ void DuckScene::CreateDescriptors(IDevice *device) {
   });
 
   duck_.descriptorSet = device->AllocateBindingSet(
-      duck_.descriptorPool, duck_.setLayout, "Duck Descriptor Set");
+      { .pool = duck_.descriptorPool, .layout = duck_.setLayout, .debugName = "Duck Descriptor Set" });
 
   BindingImageInfo imageInfo{};
   imageInfo.sampler = duck_.sampler;

@@ -76,7 +76,7 @@ void ComputeTestScene::Initialize(VRHI::IDevice *device,
   bindingPool_ = device_->CreateBindingPool(poolDesc);
 
   bindingSet_ = device_->AllocateBindingSet(
-      bindingPool_, descriptorSetLayout_, "Compute Test Descriptor Set");
+      { .pool = bindingPool_, .layout = descriptorSetLayout_, .debugName = "Compute Test Descriptor Set" });
 
   std::array<glm::vec4, kPatternColorCount> patternColors{};
 
@@ -157,7 +157,7 @@ void ComputeTestScene::Initialize(VRHI::IDevice *device,
   displayBindingPool_ = device_->CreateBindingPool(displayPoolDesc);
 
   displayBindingSet_ = device_->AllocateBindingSet(
-      displayBindingPool_, displaySetLayout_, "Compute Test Display Set");
+      { .pool = displayBindingPool_, .layout = displaySetLayout_, .debugName = "Compute Test Display Set" });
 
   VRHI::BindingImageInfo sampledInfo{};
   sampledInfo.sampler = outputSampler_;

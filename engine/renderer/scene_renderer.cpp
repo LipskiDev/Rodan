@@ -20,6 +20,7 @@
 #include <renderer/scene_renderer.h>
 #include <stdexcept>
 #include <string>
+#include <graphics/texture_registry.h>
 
 namespace Rodan {
 void SceneRenderer::Initialize(IDevice *device, SwapchainHandle swapchain,
@@ -252,11 +253,11 @@ void SceneRenderer::Initialize(IDevice *device, SwapchainHandle swapchain,
       .maxSets = 1,
   });
 
-  postProcessingSet_ = device_->AllocateBindingSet(
-      postProcessingBindingPool_, postProcessingLayout_);
+  postProcessingSet_ = device_->AllocateBindingSet({
+      .pool = postProcessingBindingPool_, .layout = postProcessingLayout_ });
 
   frameSet_ =
-      device_->AllocateBindingSet(frameBindingPool_, frameLayout_);
+      device_->AllocateBindingSet({ .pool = frameBindingPool_, .layout = frameLayout_ });
 
   frameUBO_ = device_->CreateBuffer({.size = sizeof(FrameDataGPU),
                                      .usage = BufferUsage::Uniform,
@@ -299,10 +300,10 @@ void SceneRenderer::Initialize(IDevice *device, SwapchainHandle swapchain,
   });
 
   opaqueSceneSet_ =
-      device_->AllocateBindingSet(opaqueScenePool_, opaqueSceneLayout_);
+      device_->AllocateBindingSet({ .pool = opaqueScenePool_, .layout = opaqueSceneLayout_ });
 
   dummmyOpaqueSceneSet_ =
-      device_->AllocateBindingSet(opaqueScenePool_, opaqueSceneLayout_);
+      device_->AllocateBindingSet({ .pool = opaqueScenePool_, .layout = opaqueSceneLayout_ });
 
   auto uploadCtx = device_->CreateUploadContext(4 * 1024 * 1024);
   uploadCtx->Begin();
@@ -852,7 +853,7 @@ PipelineHandle SceneRenderer::GetOrCreatePipeline(const MeshPipelineKey &key) {
 
   // Descriptor set layouts
   BindingLayoutHandle setLayouts[] = {
-      materialLayout_,
+      GetTextureRegistry().GetBindingLayout(),
       frameLayout_,
       iblResources_.descriptorSetLayout,
       opaqueSceneLayout_,
@@ -938,7 +939,7 @@ PipelineHandle SceneRenderer::GetOrCreateTransmissionPipeline() {
   desc.vertexLayouts = GetMeshVertexLayout();
 
   BindingLayoutHandle setLayouts[] = {
-      materialLayout_,
+      GetTextureRegistry().GetBindingLayout(),
       frameLayout_,
       iblResources_.descriptorSetLayout,
       opaqueSceneLayout_,
@@ -1197,6 +1198,7 @@ void SceneRenderer::RenderTransmissionMeshes(ICommandList &cmd,
   PipelineHandle pipeline = GetOrCreateTransmissionPipeline();
 
   cmd.BindPipeline(pipeline);
+  cmd.SetBindings(pipeline, 0, GetTextureRegistry().GetBindingSet());
   cmd.SetBindings(pipeline, 1, frameSet_);
 
   if (iblReady_) {
@@ -1205,7 +1207,6 @@ void SceneRenderer::RenderTransmissionMeshes(ICommandList &cmd,
 
   cmd.SetBindings(pipeline, 3, opaqueSceneSet_);
 
-  BindingSetHandle lastMaterialSet{};
   BufferHandle lastVB{};
   BufferHandle lastIB{};
 
@@ -1216,16 +1217,6 @@ void SceneRenderer::RenderTransmissionMeshes(ICommandList &cmd,
 
     const Submesh &submesh = *item.submesh;
     const MaterialResource *material = item.material;
-
-    BindingSetHandle materialSet{};
-    if (material && material->descriptorSet.IsValid()) {
-      materialSet = material->descriptorSet;
-    }
-
-    if (materialSet.id != lastMaterialSet.id) {
-      cmd.SetBindings(pipeline, 0, materialSet);
-      lastMaterialSet = materialSet;
-    }
 
     if (item.mesh->vertexBuffer.id != lastVB.id) {
       cmd.BindVertexBuffer(0, item.mesh->vertexBuffer, 0);
@@ -1292,6 +1283,7 @@ void SceneRenderer::RenderStaticMeshes(
 
     if (pipeline.id != lastPipeline.id) {
       cmd.BindPipeline(pipeline);
+      cmd.SetBindings(pipeline, 0, GetTextureRegistry().GetBindingSet());
       cmd.SetBindings(pipeline, 1, frameSet_);
 
       if (iblReady_) {
@@ -1303,16 +1295,6 @@ void SceneRenderer::RenderStaticMeshes(
       lastSceneSet = {};
       lastVertexBuffer = {};
       lastIndexBuffer = {};
-    }
-
-    BindingSetHandle materialSet{};
-    if (material && material->descriptorSet.IsValid()) {
-      materialSet = material->descriptorSet;
-    }
-
-    if (materialSet.id != lastMaterialSet.id) {
-      cmd.SetBindings(pipeline, 0, materialSet);
-      lastMaterialSet = materialSet;
     }
 
     if (sceneSet.id != lastSceneSet.id) {
@@ -1697,6 +1679,8 @@ void SceneRenderer::UploadMaterialBuffer(ICommandList &command,
                                          const RenderWorld &world) {
   materialGpuIndex_.clear();
 
+  TextureRegistry& textureRegistry = GetTextureRegistry();
+
   std::vector<MaterialDataGPU> gpuMaterials;
   gpuMaterials.reserve(world.GetMaterials().size());
 
@@ -1723,6 +1707,41 @@ void SceneRenderer::UploadMaterialBuffer(ICommandList &command,
     gpu.emissiveFactor = material.emissive.factor;
     gpu.emissiveStrength = material.emissive.strength;
     gpu.useUnlit = material.useUnlit;
+
+    gpu.baseColorTextureIndex =
+        textureRegistry.GetTextureIndex(material.baseColorTextureHandle);
+
+    gpu.normalTextureIndex = 
+        textureRegistry.GetTextureIndex(material.normalTextureHandle);
+
+    gpu.metallicRoughnessTextureIndex =
+        textureRegistry.GetTextureIndex(material.metallicRoughnessTextureHandle);
+
+    gpu.occlusionTextureIndex =
+        textureRegistry.GetTextureIndex(material.occlusionTextureHandle);
+
+    gpu.transmissionTextureIndex =
+        textureRegistry.GetTextureIndex(material.transmission.transmissionTextureHandle);
+
+    gpu.thicknessTextureIndex =
+        textureRegistry.GetTextureIndex(
+            material.volume.thicknessTextureHandle);
+
+    gpu.clearcoatTextureIndex =
+        textureRegistry.GetTextureIndex(
+            material.clearcoat.textureHandle);
+
+    gpu.clearcoatRoughnessTextureIndex =
+        textureRegistry.GetTextureIndex(
+            material.clearcoat.roughnessTextureHandle);
+
+    gpu.clearcoatNormalTextureIndex =
+        textureRegistry.GetTextureIndex(
+            material.clearcoat.normalTextureHandle);
+
+    gpu.emissiveTextureIndex =
+        textureRegistry.GetTextureIndex(
+            material.emissive.textureHandle);
 
     gpuMaterials.push_back(gpu);
   }

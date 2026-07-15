@@ -36,7 +36,7 @@ void MeshRenderer::DrawSubmesh(ICommandList *cmd, const MeshResource &mesh,
   cmd->BindPipeline(pipeline);
 
   if (material) {
-    cmd->SetBindings(pipeline, 0, material->descriptorSet);
+    cmd->SetBindings(pipeline, 0, GetTextureRegistry().GetBindingSet());
   }
 
   cmd->BindVertexBuffer(0, mesh.vertexBuffer, 0);

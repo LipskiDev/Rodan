@@ -210,7 +210,7 @@ void MillionCubesScene::CreateDescriptors(Velos::RHI::IDevice *device) {
   });
 
   cubes_.descriptorSet = device->AllocateBindingSet(
-      cubes_.descriptorPool, cubes_.setLayout, "Cubes Descriptor Set");
+      { .pool = cubes_.descriptorPool, .layout = cubes_.setLayout, .debugName = "Cubes Descriptor Set" });
 
   BindingImageInfo imageInfo{};
   imageInfo.sampler = cubes_.xorPatternSampler;

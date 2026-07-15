@@ -1,4 +1,5 @@
 #version 450
+#extension GL_EXT_nonuniform_qualifier : require
 
 layout(location = 0) in vec3 vWorldNormal;
 layout(location = 1) in vec3 vWorldPos;
@@ -7,16 +8,7 @@ layout(location = 3) in vec3 vTangent;
 layout(location = 4) in vec3 vBitangent;
 layout(location = 5) in vec3 vNormal;
 
-layout(set = 0, binding = 0) uniform sampler2D u_BaseColor;
-layout(set = 0, binding = 1) uniform sampler2D u_Normal;
-layout(set = 0, binding = 2) uniform sampler2D u_MetallicRoughness;
-layout(set = 0, binding = 3) uniform sampler2D u_OcclusionTexture;
-layout(set = 0, binding = 4) uniform sampler2D u_TransmissionTexture;
-layout(set = 0, binding = 5) uniform sampler2D u_ThicknessTexture;
-layout(set = 0, binding = 6) uniform sampler2D u_ClearcoatTexture;
-layout(set = 0, binding = 7) uniform sampler2D u_ClearcoatRoughness;
-layout(set = 0, binding = 8) uniform sampler2D u_ClearcoatNormal;
-layout(set = 0, binding = 9) uniform sampler2D u_EmissiveTexture;
+layout(set = 0, binding = 0) uniform sampler2D textures[];
 
 layout(set = 1, binding = 0) uniform sampler2D u_ShadowMap;
 layout(set = 1, binding = 1) uniform FrameData {
@@ -34,26 +26,43 @@ layout(set = 1, binding = 1) uniform FrameData {
     int showMode;
     float _pad0;
 } u_Frame;
-
 struct MaterialData {
-  vec4 baseColorFactor;
+    vec4 baseColorFactor;
 
-  float metallicFactor;
-  float roughnessFactor;
-  float alphaCutoff;
-  int alphaMode;
+    int baseColorTextureIndex;
+    float metallicFactor;
+    float roughnessFactor;
+    int metallicRoughnessTextureIndex;
 
-  int hasMaterial;
-  float transmissionFactor;
-  float thicknessFactor;
-  float ior;
-  float clearcoatFactor;
-  float clearcoatRoughnessFactor;
-  vec3 emissiveFactor;
-  float emissiveStrength;
-  bool useUnlit;
+    float alphaCutoff;
+    int alphaMode;
+    int hasMaterial;
+    float transmissionFactor;
 
-  vec4 attenuationColorDistance;
+    float thicknessFactor;
+    int thicknessTextureIndex;
+    float ior;
+    float clearcoatFactor;
+
+    int clearcoatTextureIndex;
+    float clearcoatRoughnessFactor;
+    int clearcoatRoughnessTextureIndex;
+    int clearcoatNormalTextureIndex;
+
+    int normalTextureIndex;
+    int occlusionTextureIndex;
+    int transmissionTextureIndex;
+    int pad0_;
+
+    vec3 emissiveFactor;
+    float emissiveStrength;
+
+    int emissiveTextureIndex;
+    uint useUnlit;
+    uint pad1_;
+    uint pad2_;
+
+    vec4 attenuationColorDistance;
 };
 
 layout(std430, set = 1, binding = 2) readonly buffer MaterialBuffer {
@@ -210,7 +219,7 @@ vec3 getNormal()
         length(vBitangent) > 0.001 &&
         length(vNormal) > 0.001)
     {
-        vec3 normalSample = texture(u_Normal, vUV).xyz * 2.0 - 1.0;
+        vec3 normalSample = texture(textures[nonuniformEXT(material.normalTextureIndex)], vUV).xyz * 2.0 - 1.0;
 
         mat3 TBN = mat3(
             normalize(vTangent),
@@ -232,7 +241,7 @@ vec3 getClearcoatNormal()
         length(vBitangent) > 0.001 &&
         length(vNormal) > 0.001)
     {
-        vec3 normalSample = texture(u_ClearcoatNormal, vUV).xyz * 2.0 - 1.0;
+        vec3 normalSample = texture(textures[nonuniformEXT(material.clearcoatNormalTextureIndex)], vUV).xyz * 2.0 - 1.0;
 
         mat3 TBN = mat3(
             normalize(vTangent),
@@ -247,10 +256,10 @@ vec3 getClearcoatNormal()
 }
 
 void main() {
-    vec4 baseTex = texture(u_BaseColor, vUV);
-    vec4 mrTex   = texture(u_MetallicRoughness, vUV);
-    vec3 nTex    = texture(u_Normal, vUV).xyz * 2.0 - 1.0;
-    float ao     = texture(u_OcclusionTexture, vUV).r;
+    vec4 baseTex = texture(textures[nonuniformEXT(material.baseColorTextureIndex)], vUV);
+    vec4 mrTex   = texture(textures[nonuniformEXT(material.metallicRoughnessTextureIndex)], vUV);
+    vec3 nTex    = texture(textures[nonuniformEXT(material.normalTextureIndex)], vUV).xyz * 2.0 - 1.0;
+    float ao     = texture(textures[nonuniformEXT(material.occlusionTextureIndex)], vUV).r;
 
     vec3 N = getNormal();
 
@@ -276,7 +285,7 @@ void main() {
     vec3 camPos = vec3(inverse(u_Frame.view)[3]);
     vec3 V = normalize(camPos - vWorldPos);
 
-    vec4 mrSample = texture(u_MetallicRoughness, vUV);
+    vec4 mrSample = texture(textures[nonuniformEXT(material.metallicRoughnessTextureIndex)], vUV);
     float mrRoughness = mrSample.g * material.roughnessFactor;
 
     vec3 L = normalize(-u_Frame.lightDirection.xyz);
@@ -298,8 +307,8 @@ void main() {
         float(textureQueryLevels(u_PrefilterMap) - 1);
 
     vec3 ccNormal = getClearcoatNormal();
-    float ccFactor = material.clearcoatFactor * texture(u_ClearcoatTexture, vUV).r;
-    float ccRoughness = material.clearcoatRoughnessFactor * texture(u_ClearcoatRoughness, vUV).g;
+    float ccFactor = material.clearcoatFactor * texture(textures[nonuniformEXT(material.clearcoatTextureIndex)], vUV).r;
+    float ccRoughness = material.clearcoatRoughnessFactor * texture(textures[nonuniformEXT(material.clearcoatRoughnessTextureIndex)], vUV).g;
     ccFactor = clamp(ccFactor, 0.0, 1.0);
     ccRoughness = clamp(ccRoughness, 0.001, 1.0);
     vec3 ccF0 = vec3(0.04f);
@@ -384,7 +393,7 @@ void main() {
     float transmission =
         saturate(
             material.transmissionFactor *
-            texture(u_TransmissionTexture, vUV).r
+            texture(textures[nonuniformEXT(material.transmissionTextureIndex)], vUV).r
         );
 
     vec3 attenuation = 1.0 - ccFactor * ccF;
@@ -412,7 +421,7 @@ void main() {
 
       float thickness =
           material.thicknessFactor *
-          texture(u_ThicknessTexture, vUV).g *
+          texture(textures[nonuniformEXT(material.thicknessTextureIndex)], vUV).g *
           scaleCompensation;
 
       float transmissionDistance = 0.0;
@@ -452,13 +461,13 @@ void main() {
 
 vec3 emissive =
     material.emissiveFactor *
-    texture(u_EmissiveTexture, vUV).rgb *
+    texture(textures[nonuniformEXT(material.emissiveTextureIndex)], vUV).rgb *
     material.emissiveStrength;
 
 color += emissive;
 
-    if(material.useUnlit) {
-      color = baseColor;
+    if (material.useUnlit != 0u) {
+        color = baseColor;
     }
 
     outColor = vec4(color, alpha);

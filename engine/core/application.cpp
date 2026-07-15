@@ -34,6 +34,7 @@ void Application::Initialize() {
   InitializeWindowAndDevice();
   CreateSwapchain();
   CreateDepthResources();
+  InitializeEngineResources();
   InitializeImGui();
   CreateScene(currentSceneType_);
 
@@ -46,6 +47,8 @@ void Application::Shutdown() {
   }
 
   device_->WaitIdle();
+
+  GetTextureRegistry().Shutdown();
 
   if (currentScene_) {
     currentScene_->Shutdown(device_);
@@ -416,6 +419,15 @@ void Application::BuildApplicationImGui() {
 
 void Application::RenderImGui(Velos::RHI::ICommandList &cmd) {
   imguiRenderer_->Render(cmd, ImGui::GetDrawData());
+}
+
+void Application::InitializeEngineResources()
+{
+    TextureRegistry& texReg = GetTextureRegistry();
+    texReg.Initialize(device_, {
+        .capacity = 4096,
+        .debugName = "Texture Registry",
+        });
 }
 
 void Application::CreateScene(SceneType type) {

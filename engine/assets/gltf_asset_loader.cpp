@@ -9,6 +9,7 @@
 #include <graphics/mesh_uploader.h>
 #include <iostream>
 #include <stdexcept>
+#include <graphics/texture_registry.h>
 
 namespace Rodan {
 
@@ -228,6 +229,8 @@ void StaticGltfAsset::UploadMaterials(IDevice *device, IUploadContext *upload,
         "StaticGltfAsset::UploadMaterials: upload is null");
   }
 
+  TextureRegistry& textureRegistry = GetTextureRegistry();
+
   materials_.clear();
   materials_.reserve(importedScene.materials.size());
 
@@ -266,10 +269,12 @@ void StaticGltfAsset::UploadMaterials(IDevice *device, IUploadContext *upload,
           img.pixelsRGBA8.data(),
           static_cast<uint64_t>(img.pixelsRGBA8.size()));
       gpuMat.ownsBaseColorResources = true;
+      gpuMat.baseColorTextureHandle = textureRegistry.RegisterTexture(gpuMat.baseColorTexture);
 
     } else {
       gpuMat.baseColorTexture = fallbackTexture_;
       gpuMat.ownsBaseColorResources = false;
+      gpuMat.baseColorTextureHandle = TextureHandle{ 0, 1 };
     }
 
     if (mat.normalTexture.imageIndex >= 0 &&
@@ -292,9 +297,11 @@ void StaticGltfAsset::UploadMaterials(IDevice *device, IUploadContext *upload,
           img.pixelsRGBA8.data(),
           static_cast<uint64_t>(img.pixelsRGBA8.size()));
       gpuMat.ownsNormalResources = true;
+      gpuMat.normalTextureHandle = textureRegistry.RegisterTexture(gpuMat.normalTexture);
     } else {
       gpuMat.normalTexture = neutralNormalFallbackTexture_;
       gpuMat.ownsNormalResources = false;
+      gpuMat.normalTextureHandle = TextureHandle{ 1, 1 };
     }
 
     if (mat.metallicRoughnessTexture.imageIndex >= 0 &&
@@ -318,10 +325,12 @@ void StaticGltfAsset::UploadMaterials(IDevice *device, IUploadContext *upload,
           static_cast<uint64_t>(img.pixelsRGBA8.size()));
 
       gpuMat.ownsMetallicRoughnessResources = true;
+      gpuMat.metallicRoughnessTextureHandle = textureRegistry.RegisterTexture(gpuMat.metallicRoughnessTexture);
 
     } else {
       gpuMat.metallicRoughnessTexture = fallbackTexture_;
       gpuMat.ownsMetallicRoughnessResources = false;
+      gpuMat.metallicRoughnessTextureHandle = TextureHandle{ 0, 1 };
     }
 
     if (mat.occlusionTexture.imageIndex >= 0 &&
@@ -345,9 +354,11 @@ void StaticGltfAsset::UploadMaterials(IDevice *device, IUploadContext *upload,
           static_cast<uint64_t>(img.pixelsRGBA8.size()));
 
       gpuMat.ownsOcclusionTextureResources = true;
+      gpuMat.occlusionTextureHandle = textureRegistry.RegisterTexture(gpuMat.occlusionTexture);
     } else {
       gpuMat.occlusionTexture = fallbackTexture_;
       gpuMat.ownsOcclusionTextureResources = false;
+      gpuMat.occlusionTextureHandle = TextureHandle{ 0, 1 };
     }
 
     gpuMat.transmission.transmissionFactor =
@@ -375,11 +386,13 @@ void StaticGltfAsset::UploadMaterials(IDevice *device, IUploadContext *upload,
           img.pixelsRGBA8.data(),
           static_cast<uint64_t>(img.pixelsRGBA8.size()));
       gpuMat.transmission.ownsTransmissionTexture = true;
+      gpuMat.transmission.transmissionTextureHandle = textureRegistry.RegisterTexture(gpuMat.transmission.transmissionTexture);
 
     } else {
       gpuMat.transmission.transmissionTexture =
           fallbackTexture_; // white = multiplier 1
       gpuMat.transmission.ownsTransmissionTexture = false;
+      gpuMat.transmission.transmissionTextureHandle = TextureHandle{ 0, 1 };
     }
 
     if (mat.volume.thicknessTexture.imageIndex >= 0) {
@@ -400,9 +413,11 @@ void StaticGltfAsset::UploadMaterials(IDevice *device, IUploadContext *upload,
           img.pixelsRGBA8.data(),
           static_cast<uint64_t>(img.pixelsRGBA8.size()));
       gpuMat.volume.ownsVolumeTexture = true;
+      gpuMat.volume.thicknessTextureHandle = textureRegistry.RegisterTexture(gpuMat.volume.thicknessTexture);
 
     } else {
       gpuMat.volume.thicknessTexture = fallbackTexture_; // white = multiplier 1
+      gpuMat.volume.thicknessTextureHandle = TextureHandle{ 0, 1 };
     }
 
     if (mat.clearCoat.texture.imageIndex >= 0) {
@@ -423,8 +438,10 @@ void StaticGltfAsset::UploadMaterials(IDevice *device, IUploadContext *upload,
           img.pixelsRGBA8.data(),
           static_cast<uint64_t>(img.pixelsRGBA8.size()));
       gpuMat.clearcoat.ownsClearcoatTexture = true;
+      gpuMat.clearcoat.textureHandle = textureRegistry.RegisterTexture(gpuMat.clearcoat.texture);
     } else {
       gpuMat.clearcoat.texture = fallbackTexture_; // white = multiplier 1
+      gpuMat.clearcoat.textureHandle = TextureHandle{ 0, 1 };
     }
 
     if (mat.clearCoat.roughnessTexture.imageIndex >= 0) {
@@ -445,9 +462,11 @@ void StaticGltfAsset::UploadMaterials(IDevice *device, IUploadContext *upload,
           img.pixelsRGBA8.data(),
           static_cast<uint64_t>(img.pixelsRGBA8.size()));
       gpuMat.clearcoat.ownsClearcoatRoughnessTexture = true;
+      gpuMat.clearcoat.roughnessTextureHandle = textureRegistry.RegisterTexture(gpuMat.clearcoat.roughnessTexture);
     } else {
       gpuMat.clearcoat.roughnessTexture =
           fallbackTexture_; // white = multiplier 1
+      gpuMat.clearcoat.roughnessTextureHandle = TextureHandle{ 0, 1 };
     }
 
     if (mat.clearCoat.normalTexture.imageIndex >= 0) {
@@ -468,9 +487,11 @@ void StaticGltfAsset::UploadMaterials(IDevice *device, IUploadContext *upload,
           img.pixelsRGBA8.data(),
           static_cast<uint64_t>(img.pixelsRGBA8.size()));
       gpuMat.clearcoat.ownsClearcoatNormalTexture = true;
+      gpuMat.clearcoat.normalTextureHandle = textureRegistry.RegisterTexture(gpuMat.clearcoat.normalTexture);
     } else {
       gpuMat.clearcoat.normalTexture =
           neutralNormalFallbackTexture_; // white = multiplier 1
+      gpuMat.clearcoat.normalTextureHandle = TextureHandle{ 1, 1 };
     }
 
     if (mat.emissive.texture.imageIndex >= 0) {
@@ -491,12 +512,12 @@ void StaticGltfAsset::UploadMaterials(IDevice *device, IUploadContext *upload,
           img.pixelsRGBA8.data(),
           static_cast<uint64_t>(img.pixelsRGBA8.size()));
       gpuMat.emissive.ownsEmissiveTexture = true;
+      gpuMat.emissive.textureHandle = textureRegistry.RegisterTexture(gpuMat.emissive.texture);
     } else {
       gpuMat.emissive.texture = fallbackTexture_; // white = multiplier 1
+      gpuMat.emissive.textureHandle = TextureHandle{ 0, 1 };
     }
 
-    gpuMat.descriptorSet =
-        device->AllocateBindingSet(bindingPool_, materialLayout_);
 
     BindingImageInfo baseColorImageInfo{};
     baseColorImageInfo.sampler = gpuMat.baseColorTexture.sampler;
@@ -552,94 +573,6 @@ void StaticGltfAsset::UploadMaterials(IDevice *device, IUploadContext *upload,
     emissiveTextureInfo.sampler = gpuMat.emissive.texture.sampler;
     emissiveTextureInfo.imageView = gpuMat.emissive.texture.view;
     emissiveTextureInfo.imageLayout = ImageLayout::ShaderReadOnly;
-
-    device->UpdateBindingSet({
-        .dstSet = gpuMat.descriptorSet,
-        .binding = 0,
-        .arrayElement = 0,
-        .type = BindingType::CombinedImageSampler,
-        .bufferInfo = nullptr,
-        .imageInfo = &baseColorImageInfo,
-        .descriptorCount = 1,
-    });
-
-    device->UpdateBindingSet({
-        .dstSet = gpuMat.descriptorSet,
-        .binding = 1,
-        .arrayElement = 0,
-        .type = BindingType::CombinedImageSampler,
-        .bufferInfo = nullptr,
-        .imageInfo = &normalImageInfo,
-        .descriptorCount = 1,
-    });
-
-    device->UpdateBindingSet({
-        .dstSet = gpuMat.descriptorSet,
-        .binding = 2,
-        .arrayElement = 0,
-        .type = BindingType::CombinedImageSampler,
-        .bufferInfo = nullptr,
-        .imageInfo = &metallicRoughnessImageInfo,
-        .descriptorCount = 1,
-    });
-
-    device->UpdateBindingSet({
-        .dstSet = gpuMat.descriptorSet,
-        .binding = 3,
-        .arrayElement = 0,
-        .type = BindingType::CombinedImageSampler,
-        .bufferInfo = nullptr,
-        .imageInfo = &occlusionImageInfo,
-        .descriptorCount = 1,
-    });
-
-    device->UpdateBindingSet({
-        .dstSet = gpuMat.descriptorSet,
-        .binding = 4,
-        .type = BindingType::CombinedImageSampler,
-        .imageInfo = &transmissionImageInfo,
-        .descriptorCount = 1,
-    });
-
-    device->UpdateBindingSet({
-        .dstSet = gpuMat.descriptorSet,
-        .binding = 5,
-        .type = BindingType::CombinedImageSampler,
-        .imageInfo = &thicknessImageInfo,
-        .descriptorCount = 1,
-    });
-
-    device->UpdateBindingSet({
-        .dstSet = gpuMat.descriptorSet,
-        .binding = 6,
-        .type = BindingType::CombinedImageSampler,
-        .imageInfo = &clearcoatTextureInfo,
-        .descriptorCount = 1,
-    });
-
-    device->UpdateBindingSet({
-        .dstSet = gpuMat.descriptorSet,
-        .binding = 7,
-        .type = BindingType::CombinedImageSampler,
-        .imageInfo = &clearcoatRoughnessTextureInfo,
-        .descriptorCount = 1,
-    });
-
-    device->UpdateBindingSet({
-        .dstSet = gpuMat.descriptorSet,
-        .binding = 8,
-        .type = BindingType::CombinedImageSampler,
-        .imageInfo = &clearcoatNormalTextureInfo,
-        .descriptorCount = 1,
-    });
-
-    device->UpdateBindingSet({
-        .dstSet = gpuMat.descriptorSet,
-        .binding = 9,
-        .type = BindingType::CombinedImageSampler,
-        .imageInfo = &emissiveTextureInfo,
-        .descriptorCount = 1,
-    });
 
     materials_.push_back(gpuMat);
   }

@@ -152,8 +152,10 @@ void EnvironmentMap::CreateDescriptorResources() {
       .debugName = "Environment Descriptor Pool",
   });
 
-  bindingSet_ = device_->AllocateBindingSet(bindingPool_, setLayout_,
-                                                  "Environment Descriptor Set");
+  bindingSet_ = device_->AllocateBindingSet(
+      { .pool = bindingPool_, 
+        .layout = setLayout_, 
+        .debugName = "Environment Descriptor Set" });
 
   BindingImageInfo imageInfo{};
   imageInfo.sampler = sampler_;
