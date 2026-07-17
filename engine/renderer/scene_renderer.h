@@ -39,49 +39,108 @@ struct alignas(16) FrameDataGPU {
   float _pad0;
 };
 
+struct alignas(16) TextureTransformDataGPU {
+    alignas(16) glm::vec2 offset = glm::vec2{ 0, 0 }; // 0
+    glm::vec2 scale{ 1,1 }; // 8
+    float rotation{ 0 }; // 16
+    int texCoord{ 0 }; // 20
+
+    TextureTransformDataGPU() {}
+
+    TextureTransformDataGPU(TextureTransformation textureTransformation) {
+        offset = textureTransformation.offset;
+        scale = textureTransformation.scale;
+        rotation = textureTransformation.rotation;
+        texCoord = textureTransformation.texCoord;
+    }
+}; // size 32
+
+static_assert(offsetof(TextureTransformDataGPU, offset) == 0);
+static_assert(offsetof(TextureTransformDataGPU, scale) == 8);
+static_assert(offsetof(TextureTransformDataGPU, rotation) == 16);
+static_assert(offsetof(TextureTransformDataGPU, texCoord) == 20);
+
+
+static_assert(sizeof(TextureTransformDataGPU) == 32);
+
 struct alignas(16) MaterialDataGPU {
-    alignas(16) glm::vec4 baseColorFactor; // 0
+    alignas(16) glm::vec4 baseColorFactor;
 
-    int32_t baseColorTextureIndex;         // 16
-    float metallicFactor;                  // 20
-    float roughnessFactor;                 // 24
-    int32_t metallicRoughnessTextureIndex; // 28
+    int32_t baseColorTextureIndex;
+    float metallicFactor;
+    float roughnessFactor;
+    int32_t metallicRoughnessTextureIndex;
 
-    float alphaCutoff;                     // 32
-    int32_t alphaMode;                     // 36
-    int32_t hasMaterial;                   // 40
-    float transmissionFactor;              // 44
+    float alphaCutoff;
+    int32_t alphaMode;
+    int32_t hasMaterial;
+    float transmissionFactor;
 
-    float thicknessFactor;                 // 48
-    int32_t thicknessTextureIndex;         // 52
-    float ior;                             // 56
-    float clearcoatFactor;                 // 60
+    float thicknessFactor;
+    int32_t thicknessTextureIndex;
+    float ior;
+    float clearcoatFactor;
 
-    int32_t clearcoatTextureIndex;          // 64
-    float clearcoatRoughnessFactor;         // 68
-    int32_t clearcoatRoughnessTextureIndex; // 72
-    int32_t clearcoatNormalTextureIndex;    // 76
+    int32_t clearcoatTextureIndex;
+    float clearcoatRoughnessFactor;
+    int32_t clearcoatRoughnessTextureIndex;
+    int32_t clearcoatNormalTextureIndex;
 
-    int32_t normalTextureIndex;             // 80
-    int32_t occlusionTextureIndex;          // 84
-    int32_t transmissionTextureIndex;       // 88
-    int32_t pad0_;                          // 92
+    int32_t normalTextureIndex;
+    int32_t occlusionTextureIndex;
+    int32_t transmissionTextureIndex;
+    int32_t pad0_;
 
-    alignas(16) glm::vec3 emissiveFactor;   // 96
-    float emissiveStrength;                 // 108
+    alignas(16) glm::vec3 emissiveFactor;
+    float emissiveStrength;
 
-    int32_t emissiveTextureIndex;           // 112
-    uint32_t useUnlit;                      // 116
-    uint32_t pad1_;                         // 120
-    uint32_t pad2_;                         // 124
+    int32_t emissiveTextureIndex;
+    uint32_t useUnlit;
+    uint32_t pad1_;
+    uint32_t pad2_;
 
-    alignas(16) glm::vec4 attenuationColorDistance; // 128
+    alignas(16) glm::vec4 attenuationColorDistance;
+
+    TextureTransformDataGPU baseColorTextureTransformation{};              // 144
+    TextureTransformDataGPU normalTextureTransformation{};                 // 176
+    TextureTransformDataGPU metallicRoughnessTextureTransformation{};      // 208
+    TextureTransformDataGPU thicknessTextureTransformation{};              // 240
+    TextureTransformDataGPU clearcoatTextureTransformation{};              // 272
+    TextureTransformDataGPU clearcoatRoughnessTextureTransformation{};     // 304
+    TextureTransformDataGPU clearcoatNormalTextureTransformation{};        // 336
+    TextureTransformDataGPU occlusionTextureTransformation{};              // 368
+    TextureTransformDataGPU transmissionTextureTransformation{};           // 400
+    TextureTransformDataGPU emissiveTextureTransformation{};               // 432
 };
 
-static_assert(sizeof(MaterialDataGPU) == 144);
+static_assert(alignof(MaterialDataGPU) == 16);
+static_assert(sizeof(MaterialDataGPU) == 464);
+
 static_assert(offsetof(MaterialDataGPU, normalTextureIndex) == 80);
 static_assert(offsetof(MaterialDataGPU, emissiveFactor) == 96);
 static_assert(offsetof(MaterialDataGPU, attenuationColorDistance) == 128);
+
+static_assert(
+    offsetof(MaterialDataGPU, baseColorTextureTransformation) == 144);
+static_assert(
+    offsetof(MaterialDataGPU, normalTextureTransformation) == 176);
+static_assert(
+    offsetof(MaterialDataGPU, metallicRoughnessTextureTransformation) == 208);
+static_assert(
+    offsetof(MaterialDataGPU, thicknessTextureTransformation) == 240);
+static_assert(
+    offsetof(MaterialDataGPU, clearcoatTextureTransformation) == 272);
+static_assert(
+    offsetof(MaterialDataGPU, clearcoatRoughnessTextureTransformation) == 304);
+static_assert(
+    offsetof(MaterialDataGPU, clearcoatNormalTextureTransformation) == 336);
+static_assert(
+    offsetof(MaterialDataGPU, occlusionTextureTransformation) == 368);
+static_assert(
+    offsetof(MaterialDataGPU, transmissionTextureTransformation) == 400);
+static_assert(
+    offsetof(MaterialDataGPU, emissiveTextureTransformation) == 432);
+
 struct StaticMeshRenderItem {
   const MeshResource *mesh = nullptr;
   const MaterialResource *material = nullptr;
@@ -213,8 +272,6 @@ private:
   void EndOpaquePass(ICommandList &cmd);
   void EndTonemappingPass(ICommandList &cmd);
 
-  void EnsureOpaqueSceneTarget(const FrameRenderContext &frame);
-  void EnsureFinalSceneTarget(const FrameRenderContext &frame);
   void UpdateOpaqueSceneDescriptor();
   void UpdateFinalSceneDescriptor();
 

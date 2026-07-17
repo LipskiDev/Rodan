@@ -1,4 +1,5 @@
 #include <chrono>
+#include <cmath>
 #include <iostream>
 #include <samples/scenes/gltf_viewer_scene.h>
 
@@ -34,19 +35,7 @@ void GltfViewerScene::Initialize(IDevice *device, SwapchainHandle swapchain,
 
   SetCameraMode(CameraMode::Orbit);
 
-  LoadScene(device_, currentScenePath_);
-  currentBounds_ = ComputeCurrentBounds();
-  ComputeStats();
-  FrameCamera();
-  sceneRenderer_.Initialize(device_, swapchain_, colorFormat, depthFormat,
-                            asset_->GetMaterialLayout());
-
-  sunLight_ = renderWorld_.AddDirectionalLight({
-      .direction = glm::normalize(glm::vec3(0.4f, -1.0f, 0.3f)),
-      .color = glm::vec3(1.0f),
-      .intensity = 4.0f,
-      .castsShadow = true,
-  });
+  ReloadScene(currentScenePath_);
 }
 
 void GltfViewerScene::Shutdown(IDevice *device) {
@@ -447,6 +436,7 @@ void GltfViewerScene::ReloadScene(const std::string &path) {
 
   changed = false;
 
+  currentBounds_ = ComputeCurrentBounds();
   FrameCamera();
 
   sunLight_ = renderWorld_.AddDirectionalLight({
@@ -472,19 +462,29 @@ float GltfViewerScene::RescaleScene(float targetSize) {
 }
 
 void GltfViewerScene::FrameCamera() {
-  AABB bounds = ComputeCurrentBounds();
+  if (!camera_ || renderWorld_.GetObjects().empty()) {
+    return;
+  }
 
-  glm::vec3 center = bounds.Center();
-  glm::vec3 size = bounds.upper - bounds.lower;
+  const AABB bounds = ComputeCurrentBounds();
 
-  float radius = glm::length(size) * 0.5f;
-  float fovY = glm::radians(60.0f);
+  const glm::vec3 center = bounds.Center();
+  const glm::vec3 size = bounds.upper - bounds.lower;
+
+  const float radius = glm::length(size) * 0.5f;
+  if (!std::isfinite(radius) || radius <= 0.000001f) {
+    return;
+  }
+
+  const float fovY = glm::radians(60.0f);
 
   float distance = radius / std::tan(fovY * 0.5f);
   distance *= 1.5f;
 
-  camera_->SetPosition(center + glm::vec3(0.0f, 0.0f, distance));
+  // OrbitCamera::SetPosition derives its yaw and distance from the current
+  // target, so establish the new model center first.
   camera_->LookAt(center);
+  camera_->SetPosition(center + glm::vec3(0.0f, 0.0f, distance));
 }
 
 AABB GltfViewerScene::ComputeCurrentBounds() {

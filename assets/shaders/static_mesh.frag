@@ -26,6 +26,16 @@ layout(set = 1, binding = 1) uniform FrameData {
     int showMode;
     float _pad0;
 } u_Frame;
+
+struct TextureTransform {
+    vec2 offset;
+    vec2 scale;
+    float rotation;
+    int texCoord;
+    uint pad0;
+    uint pad1;
+};
+
 struct MaterialData {
     vec4 baseColorFactor;
 
@@ -63,6 +73,17 @@ struct MaterialData {
     uint pad2_;
 
     vec4 attenuationColorDistance;
+
+    TextureTransform baseColorTextureTransformation;
+    TextureTransform normalTextureTransformation;
+    TextureTransform metallicRoughnessTextureTransformation;
+    TextureTransform thicknessTextureTransformation;
+    TextureTransform clearcoatTextureTransformation;
+    TextureTransform clearcoatRoughnessTextureTransformation;
+    TextureTransform clearcoatNormalTextureTransformation;
+    TextureTransform occlusionTextureTransformation;
+    TextureTransform transmissionTextureTransformation;
+    TextureTransform emissiveTextureTransformation;
 };
 
 layout(std430, set = 1, binding = 2) readonly buffer MaterialBuffer {
@@ -211,6 +232,21 @@ vec2 projectWorldToScreenUV(vec3 worldPos)
     return uv;
 }
 
+vec2 applyTextureTransform(vec2 uv, TextureTransform transform)
+{
+    float c = cos(transform.rotation);
+    float s = sin(transform.rotation);
+
+    // GLSL matrix constructors are column-major. These columns produce the
+    // counter-clockwise rotation required by KHR_texture_transform.
+    mat2 rotation = mat2(
+         c, s,
+        -s, c
+    );
+
+    return transform.offset + rotation * (uv * transform.scale);
+}
+
 vec3 getNormal()
 {
     vec3 N = normalize(vWorldNormal);
@@ -219,7 +255,11 @@ vec3 getNormal()
         length(vBitangent) > 0.001 &&
         length(vNormal) > 0.001)
     {
-        vec3 normalSample = texture(textures[nonuniformEXT(material.normalTextureIndex)], vUV).xyz * 2.0 - 1.0;
+        vec2 uv = applyTextureTransform(
+            vUV, material.normalTextureTransformation);
+        vec3 normalSample =
+            texture(textures[nonuniformEXT(material.normalTextureIndex)], uv).xyz
+            * 2.0 - 1.0;
 
         mat3 TBN = mat3(
             normalize(vTangent),
@@ -241,7 +281,11 @@ vec3 getClearcoatNormal()
         length(vBitangent) > 0.001 &&
         length(vNormal) > 0.001)
     {
-        vec3 normalSample = texture(textures[nonuniformEXT(material.clearcoatNormalTextureIndex)], vUV).xyz * 2.0 - 1.0;
+        vec2 uv = applyTextureTransform(
+            vUV, material.clearcoatNormalTextureTransformation);
+        vec3 normalSample = texture(
+            textures[nonuniformEXT(material.clearcoatNormalTextureIndex)], uv
+        ).xyz * 2.0 - 1.0;
 
         mat3 TBN = mat3(
             normalize(vTangent),
@@ -256,10 +300,17 @@ vec3 getClearcoatNormal()
 }
 
 void main() {
-    vec4 baseTex = texture(textures[nonuniformEXT(material.baseColorTextureIndex)], vUV);
-    vec4 mrTex   = texture(textures[nonuniformEXT(material.metallicRoughnessTextureIndex)], vUV);
-    vec3 nTex    = texture(textures[nonuniformEXT(material.normalTextureIndex)], vUV).xyz * 2.0 - 1.0;
-    float ao     = texture(textures[nonuniformEXT(material.occlusionTextureIndex)], vUV).r;
+    vec4 baseTex = texture(
+        textures[nonuniformEXT(material.baseColorTextureIndex)],
+        applyTextureTransform(vUV, material.baseColorTextureTransformation));
+    vec4 mrTex = texture(
+        textures[nonuniformEXT(material.metallicRoughnessTextureIndex)],
+        applyTextureTransform(
+            vUV, material.metallicRoughnessTextureTransformation));
+    float ao = texture(
+        textures[nonuniformEXT(material.occlusionTextureIndex)],
+        applyTextureTransform(
+            vUV, material.occlusionTextureTransformation)).r;
 
     vec3 N = getNormal();
 
@@ -285,7 +336,7 @@ void main() {
     vec3 camPos = vec3(inverse(u_Frame.view)[3]);
     vec3 V = normalize(camPos - vWorldPos);
 
-    vec4 mrSample = texture(textures[nonuniformEXT(material.metallicRoughnessTextureIndex)], vUV);
+    vec4 mrSample = mrTex;
     float mrRoughness = mrSample.g * material.roughnessFactor;
 
     vec3 L = normalize(-u_Frame.lightDirection.xyz);
@@ -307,8 +358,14 @@ void main() {
         float(textureQueryLevels(u_PrefilterMap) - 1);
 
     vec3 ccNormal = getClearcoatNormal();
-    float ccFactor = material.clearcoatFactor * texture(textures[nonuniformEXT(material.clearcoatTextureIndex)], vUV).r;
-    float ccRoughness = material.clearcoatRoughnessFactor * texture(textures[nonuniformEXT(material.clearcoatRoughnessTextureIndex)], vUV).g;
+    float ccFactor = material.clearcoatFactor * texture(
+        textures[nonuniformEXT(material.clearcoatTextureIndex)],
+        applyTextureTransform(
+            vUV, material.clearcoatTextureTransformation)).r;
+    float ccRoughness = material.clearcoatRoughnessFactor * texture(
+        textures[nonuniformEXT(material.clearcoatRoughnessTextureIndex)],
+        applyTextureTransform(
+            vUV, material.clearcoatRoughnessTextureTransformation)).g;
     ccFactor = clamp(ccFactor, 0.0, 1.0);
     ccRoughness = clamp(ccRoughness, 0.001, 1.0);
     vec3 ccF0 = vec3(0.04f);
@@ -393,7 +450,10 @@ void main() {
     float transmission =
         saturate(
             material.transmissionFactor *
-            texture(textures[nonuniformEXT(material.transmissionTextureIndex)], vUV).r
+            texture(
+                textures[nonuniformEXT(material.transmissionTextureIndex)],
+                applyTextureTransform(
+                    vUV, material.transmissionTextureTransformation)).r
         );
 
     vec3 attenuation = 1.0 - ccFactor * ccF;
@@ -421,7 +481,10 @@ void main() {
 
       float thickness =
           material.thicknessFactor *
-          texture(textures[nonuniformEXT(material.thicknessTextureIndex)], vUV).g *
+          texture(
+              textures[nonuniformEXT(material.thicknessTextureIndex)],
+              applyTextureTransform(
+                  vUV, material.thicknessTextureTransformation)).g *
           scaleCompensation;
 
       float transmissionDistance = 0.0;
@@ -461,7 +524,10 @@ void main() {
 
 vec3 emissive =
     material.emissiveFactor *
-    texture(textures[nonuniformEXT(material.emissiveTextureIndex)], vUV).rgb *
+    texture(
+        textures[nonuniformEXT(material.emissiveTextureIndex)],
+        applyTextureTransform(
+            vUV, material.emissiveTextureTransformation)).rgb *
     material.emissiveStrength;
 
 color += emissive;

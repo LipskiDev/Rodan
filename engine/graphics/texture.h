@@ -1,5 +1,6 @@
 #pragma once
 
+#include "glm/ext/vector_float2.hpp"
 #include "glm/ext/vector_float4.hpp"
 #include "rhi/device.h"
 #include "rhi/handles.h"
@@ -7,6 +8,13 @@
 namespace Rodan {
 
 using namespace Velos::RHI;
+
+struct TextureTransformation {
+    glm::vec2 offset = glm::vec2{ 0, 0 };
+    float rotation = 0;
+    glm::vec2 scale = glm::vec2{ 1, 1 };
+    int texCoord = 0;
+};
 
 struct TextureDesc {
   uint32_t width = 0;

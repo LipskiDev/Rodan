@@ -316,6 +316,74 @@ ImportedMesh LoadMesh(const tinygltf::Model &model,
   return out;
 }
 
+TextureTransformation ParseTextureTransform(
+    const tinygltf::Value *extension, int fallbackTexCoord) {
+  TextureTransformation out{};
+  out.texCoord = fallbackTexCoord;
+
+  if (extension == nullptr || !extension->IsObject()) {
+    return out;
+  }
+
+  if (extension->Has("offset")) {
+    const tinygltf::Value &offset = extension->Get("offset");
+    if (offset.IsArray() && offset.ArrayLen() >= 2) {
+      out.offset.x =
+          static_cast<float>(offset.Get(0).GetNumberAsDouble());
+      out.offset.y =
+          static_cast<float>(offset.Get(1).GetNumberAsDouble());
+    }
+  }
+
+  if (extension->Has("scale")) {
+    const tinygltf::Value &scale = extension->Get("scale");
+    if (scale.IsArray() && scale.ArrayLen() >= 2) {
+      out.scale.x = static_cast<float>(scale.Get(0).GetNumberAsDouble());
+      out.scale.y = static_cast<float>(scale.Get(1).GetNumberAsDouble());
+    }
+  }
+
+  if (extension->Has("rotation")) {
+    out.rotation = static_cast<float>(
+        extension->Get("rotation").GetNumberAsDouble());
+  }
+
+  // KHR_texture_transform.texCoord overrides textureInfo.texCoord.
+  if (extension->Has("texCoord")) {
+    out.texCoord = extension->Get("texCoord").GetNumberAsInt();
+  }
+
+  return out;
+}
+
+template <typename TextureInfo>
+TextureTransformation LoadTextureTransform(const TextureInfo &textureInfo) {
+  const auto extension =
+      textureInfo.extensions.find("KHR_texture_transform");
+  return ParseTextureTransform(
+      extension != textureInfo.extensions.end() ? &extension->second : nullptr,
+      textureInfo.texCoord);
+}
+
+TextureTransformation LoadTextureTransform(
+    const tinygltf::Value &textureInfo) {
+  const int fallbackTexCoord = textureInfo.Has("texCoord")
+                                   ? textureInfo.Get("texCoord").GetNumberAsInt()
+                                   : 0;
+
+  if (!textureInfo.Has("extensions")) {
+    return ParseTextureTransform(nullptr, fallbackTexCoord);
+  }
+
+  const tinygltf::Value &extensions = textureInfo.Get("extensions");
+  if (!extensions.IsObject() || !extensions.Has("KHR_texture_transform")) {
+    return ParseTextureTransform(nullptr, fallbackTexCoord);
+  }
+
+  return ParseTextureTransform(
+      &extensions.Get("KHR_texture_transform"), fallbackTexCoord);
+}
+
 static ImportedMaterial LoadMaterial(const tinygltf::Model &model,
                                      const tinygltf::Material &material) {
   ImportedMaterial out{};
@@ -346,7 +414,7 @@ static ImportedMaterial LoadMaterial(const tinygltf::Model &model,
     const tinygltf::Texture &tex = model.textures[textureIndex];
     out.baseColorTexture.imageIndex = tex.source;
     out.baseColorTexture.samplerIndex = tex.sampler;
-    out.baseColorTexture.texCoord = pbr.baseColorTexture.texCoord;
+    out.baseColorTransformation = LoadTextureTransform(pbr.baseColorTexture);
 
     if (tex.source < 0 || tex.source >= static_cast<int>(model.images.size())) {
       throw std::runtime_error(
@@ -365,7 +433,7 @@ static ImportedMaterial LoadMaterial(const tinygltf::Model &model,
     const tinygltf::Texture &tex = model.textures[textureIndex];
     out.normalTexture.imageIndex = tex.source;
     out.normalTexture.samplerIndex = tex.sampler;
-    out.normalTexture.texCoord = material.normalTexture.texCoord;
+    out.normalTransformation = LoadTextureTransform(material.normalTexture);
 
     if (tex.source < 0 || tex.source >= static_cast<int>(model.images.size())) {
       throw std::runtime_error("glTF material references invalid normal image");
@@ -383,8 +451,8 @@ static ImportedMaterial LoadMaterial(const tinygltf::Model &model,
     const tinygltf::Texture &tex = model.textures[textureIndex];
     out.metallicRoughnessTexture.imageIndex = tex.source;
     out.metallicRoughnessTexture.samplerIndex = tex.sampler;
-    out.metallicRoughnessTexture.texCoord =
-        pbr.metallicRoughnessTexture.texCoord;
+    out.metallicRoughnessTransformation =
+        LoadTextureTransform(pbr.metallicRoughnessTexture);
 
     if (tex.source < 0 || tex.source >= static_cast<int>(model.images.size())) {
       throw std::runtime_error(
@@ -403,7 +471,8 @@ static ImportedMaterial LoadMaterial(const tinygltf::Model &model,
     const tinygltf::Texture &tex = model.textures[textureIndex];
     out.occlusionTexture.imageIndex = tex.source;
     out.occlusionTexture.samplerIndex = tex.sampler;
-    out.occlusionTexture.texCoord = material.occlusionTexture.texCoord;
+    out.occlusionTextureTransformation =
+        LoadTextureTransform(material.occlusionTexture);
 
     if (tex.source < 0 || tex.source >= static_cast<int>(model.images.size())) {
       throw std::runtime_error(
@@ -428,8 +497,7 @@ static ImportedMaterial LoadMaterial(const tinygltf::Model &model,
 
       out.transmission.transmissionTexture.imageIndex = texture.source;
       out.transmission.transmissionTexture.samplerIndex = texture.sampler;
-      out.transmission.transmissionTexture.texCoord =
-          tex.Has("texCoord") ? tex.Get("texCoord").Get<int>() : 0;
+      out.transmission.transmissionTransformation = LoadTextureTransform(tex);
     }
   }
 
@@ -462,8 +530,7 @@ static ImportedMaterial LoadMaterial(const tinygltf::Model &model,
 
       out.volume.thicknessTexture.imageIndex = tex.source;
       out.volume.thicknessTexture.samplerIndex = tex.sampler;
-      out.volume.thicknessTexture.texCoord =
-          texInfo.Has("texCoord") ? texInfo.Get("texCoord").Get<int>() : 0;
+      out.volume.thicknessTransformation = LoadTextureTransform(texInfo);
     }
   }
 
@@ -489,8 +556,7 @@ static ImportedMaterial LoadMaterial(const tinygltf::Model &model,
 
       out.clearCoat.texture.imageIndex = tex.source;
       out.clearCoat.texture.samplerIndex = tex.sampler;
-      out.clearCoat.texture.texCoord =
-          texInfo.Has("texCoord") ? texInfo.Get("texCoord").Get<int>() : 0;
+      out.clearCoat.textureTransformation = LoadTextureTransform(texInfo);
     }
 
     if (ext.Has("clearcoatRoughnessFactor")) {
@@ -506,8 +572,7 @@ static ImportedMaterial LoadMaterial(const tinygltf::Model &model,
 
       out.clearCoat.roughnessTexture.imageIndex = tex.source;
       out.clearCoat.roughnessTexture.samplerIndex = tex.sampler;
-      out.clearCoat.roughnessTexture.texCoord =
-          texInfo.Has("texCoord") ? texInfo.Get("texCoord").Get<int>() : 0;
+      out.clearCoat.roughnessTransformation = LoadTextureTransform(texInfo);
     }
 
     if (ext.Has("clearcoatNormalTexture")) {
@@ -518,8 +583,7 @@ static ImportedMaterial LoadMaterial(const tinygltf::Model &model,
 
       out.clearCoat.normalTexture.imageIndex = tex.source;
       out.clearCoat.normalTexture.samplerIndex = tex.sampler;
-      out.clearCoat.normalTexture.texCoord =
-          texInfo.Has("texCoord") ? texInfo.Get("texCoord").Get<int>() : 0;
+      out.clearCoat.normalTransformation = LoadTextureTransform(texInfo);
     }
   }
 
@@ -537,7 +601,8 @@ static ImportedMaterial LoadMaterial(const tinygltf::Model &model,
     const tinygltf::Texture &tex = model.textures[textureIndex];
     out.emissive.texture.imageIndex = tex.source;
     out.emissive.texture.samplerIndex = tex.sampler;
-    out.emissive.texture.texCoord = material.emissiveTexture.texCoord;
+    out.emissive.textureTransformation =
+        LoadTextureTransform(material.emissiveTexture);
 
     if (tex.source < 0 || tex.source >= static_cast<int>(model.images.size())) {
       throw std::runtime_error(

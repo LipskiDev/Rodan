@@ -249,6 +249,25 @@ void StaticGltfAsset::UploadMaterials(IDevice *device, IUploadContext *upload,
     gpuMat.emissive.strength = mat.emissive.emissiveStrength;
     gpuMat.useUnlit = mat.useUnlit;
 
+    gpuMat.baseColorTextureTransformation = mat.baseColorTransformation;
+    gpuMat.normalTextureTransformation = mat.normalTransformation;
+    gpuMat.metallicRoughnessTextureTransformation =
+        mat.metallicRoughnessTransformation;
+    gpuMat.occlusionTextureTransformation =
+        mat.occlusionTextureTransformation;
+    gpuMat.transmission.transmissionTextureTransformation =
+        mat.transmission.transmissionTransformation;
+    gpuMat.volume.thicknessTextureTransformation =
+        mat.volume.thicknessTransformation;
+    gpuMat.clearcoat.textureTransformation =
+        mat.clearCoat.textureTransformation;
+    gpuMat.clearcoat.roughnessTextureTransformation =
+        mat.clearCoat.roughnessTransformation;
+    gpuMat.clearcoat.normalTextureTransformation =
+        mat.clearCoat.normalTransformation;
+    gpuMat.emissive.textureTransformation =
+        mat.emissive.textureTransformation;
+
     if (mat.baseColorTexture.imageIndex >= 0 &&
         mat.baseColorTexture.imageIndex <
             static_cast<int>(importedScene.images.size())) {
@@ -518,61 +537,6 @@ void StaticGltfAsset::UploadMaterials(IDevice *device, IUploadContext *upload,
       gpuMat.emissive.textureHandle = TextureHandle{ 0, 1 };
     }
 
-
-    BindingImageInfo baseColorImageInfo{};
-    baseColorImageInfo.sampler = gpuMat.baseColorTexture.sampler;
-    baseColorImageInfo.imageView = gpuMat.baseColorTexture.view;
-    baseColorImageInfo.imageLayout = ImageLayout::ShaderReadOnly;
-
-    BindingImageInfo normalImageInfo{};
-    normalImageInfo.sampler = gpuMat.normalTexture.sampler;
-    normalImageInfo.imageView = gpuMat.normalTexture.view;
-    normalImageInfo.imageLayout = ImageLayout::ShaderReadOnly;
-
-    BindingImageInfo metallicRoughnessImageInfo{};
-    metallicRoughnessImageInfo.sampler =
-        gpuMat.metallicRoughnessTexture.sampler;
-    metallicRoughnessImageInfo.imageView = gpuMat.metallicRoughnessTexture.view;
-    metallicRoughnessImageInfo.imageLayout = ImageLayout::ShaderReadOnly;
-
-    BindingImageInfo occlusionImageInfo{};
-    occlusionImageInfo.sampler = gpuMat.occlusionTexture.sampler;
-    occlusionImageInfo.imageView = gpuMat.occlusionTexture.view;
-    occlusionImageInfo.imageLayout = ImageLayout::ShaderReadOnly;
-
-    BindingImageInfo transmissionImageInfo{};
-    transmissionImageInfo.sampler =
-        gpuMat.transmission.transmissionTexture.sampler;
-    transmissionImageInfo.imageView =
-        gpuMat.transmission.transmissionTexture.view;
-    transmissionImageInfo.imageLayout = ImageLayout::ShaderReadOnly;
-
-    BindingImageInfo thicknessImageInfo{};
-    thicknessImageInfo.sampler = gpuMat.volume.thicknessTexture.sampler;
-    thicknessImageInfo.imageView = gpuMat.volume.thicknessTexture.view;
-    thicknessImageInfo.imageLayout = ImageLayout::ShaderReadOnly;
-
-    BindingImageInfo clearcoatTextureInfo{};
-    clearcoatTextureInfo.sampler = gpuMat.clearcoat.texture.sampler;
-    clearcoatTextureInfo.imageView = gpuMat.clearcoat.texture.view;
-    clearcoatTextureInfo.imageLayout = ImageLayout::ShaderReadOnly;
-
-    BindingImageInfo clearcoatRoughnessTextureInfo{};
-    clearcoatRoughnessTextureInfo.sampler =
-        gpuMat.clearcoat.roughnessTexture.sampler;
-    clearcoatRoughnessTextureInfo.imageView =
-        gpuMat.clearcoat.roughnessTexture.view;
-    clearcoatRoughnessTextureInfo.imageLayout = ImageLayout::ShaderReadOnly;
-
-    BindingImageInfo clearcoatNormalTextureInfo{};
-    clearcoatNormalTextureInfo.sampler = gpuMat.clearcoat.normalTexture.sampler;
-    clearcoatNormalTextureInfo.imageView = gpuMat.clearcoat.normalTexture.view;
-    clearcoatNormalTextureInfo.imageLayout = ImageLayout::ShaderReadOnly;
-
-    BindingImageInfo emissiveTextureInfo{};
-    emissiveTextureInfo.sampler = gpuMat.emissive.texture.sampler;
-    emissiveTextureInfo.imageView = gpuMat.emissive.texture.view;
-    emissiveTextureInfo.imageLayout = ImageLayout::ShaderReadOnly;
 
     materials_.push_back(gpuMat);
   }

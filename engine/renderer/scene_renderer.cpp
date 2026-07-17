@@ -375,7 +375,7 @@ void SceneRenderer::Initialize(IDevice *device, SwapchainHandle swapchain,
   });
 
   environment_ = EnvironmentMap::LoadHDR(
-      device, Velos::Path::Resolve("assets/hdr/piazza_bologni_4k.hdr"));
+      device, Velos::Path::Resolve("assets/hdr/kloppenheim_02_puresky_4k.hdr"));
 
   skyboxPass_.Initialize(device, colorFormat,
                          environment_->GetBindingLayout());
@@ -385,6 +385,16 @@ void SceneRenderer::Initialize(IDevice *device, SwapchainHandle swapchain,
 }
 
 void SceneRenderer::Shutdown(IDevice *device) {
+  // ReloadScene also drives the initial scene load. In that case there is no
+  // renderer state to destroy yet.
+  if (device_ == nullptr) {
+    return;
+  }
+
+  if (device == nullptr) {
+    device = device_;
+  }
+
   graph_.Shutdown(*device);
   DestroyTexture(device, opaqueSceneFallback_.dummy);
 
@@ -1711,37 +1721,57 @@ void SceneRenderer::UploadMaterialBuffer(ICommandList &command,
     gpu.baseColorTextureIndex =
         textureRegistry.GetTextureIndex(material.baseColorTextureHandle);
 
+    gpu.baseColorTextureTransformation = material.baseColorTextureTransformation;
+
     gpu.normalTextureIndex = 
         textureRegistry.GetTextureIndex(material.normalTextureHandle);
+
+    gpu.normalTextureTransformation = material.normalTextureTransformation;
 
     gpu.metallicRoughnessTextureIndex =
         textureRegistry.GetTextureIndex(material.metallicRoughnessTextureHandle);
 
+    gpu.metallicRoughnessTextureTransformation = material.metallicRoughnessTextureTransformation;
+
     gpu.occlusionTextureIndex =
         textureRegistry.GetTextureIndex(material.occlusionTextureHandle);
 
+    gpu.occlusionTextureTransformation = material.occlusionTextureTransformation;
+
     gpu.transmissionTextureIndex =
         textureRegistry.GetTextureIndex(material.transmission.transmissionTextureHandle);
+
+    gpu.transmissionTextureTransformation = material.transmission.transmissionTextureTransformation;
 
     gpu.thicknessTextureIndex =
         textureRegistry.GetTextureIndex(
             material.volume.thicknessTextureHandle);
 
+    gpu.thicknessTextureTransformation = material.volume.thicknessTextureTransformation;
+
     gpu.clearcoatTextureIndex =
         textureRegistry.GetTextureIndex(
             material.clearcoat.textureHandle);
+
+    gpu.clearcoatTextureTransformation = material.clearcoat.textureTransformation;
 
     gpu.clearcoatRoughnessTextureIndex =
         textureRegistry.GetTextureIndex(
             material.clearcoat.roughnessTextureHandle);
 
+    gpu.clearcoatRoughnessTextureTransformation = material.clearcoat.roughnessTextureTransformation;
+
     gpu.clearcoatNormalTextureIndex =
         textureRegistry.GetTextureIndex(
             material.clearcoat.normalTextureHandle);
 
+    gpu.clearcoatNormalTextureTransformation = material.clearcoat.normalTextureTransformation;
+
     gpu.emissiveTextureIndex =
         textureRegistry.GetTextureIndex(
             material.emissive.textureHandle);
+
+    gpu.emissiveTextureTransformation = material.emissive.textureTransformation;
 
     gpuMaterials.push_back(gpu);
   }

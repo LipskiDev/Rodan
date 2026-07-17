@@ -13,6 +13,7 @@ struct TransmissionMaterial {
   float transmissionFactor = 0.0f;
   Texture transmissionTexture{};
   TextureHandle transmissionTextureHandle{};
+  TextureTransformation transmissionTextureTransformation;
   bool ownsTransmissionTexture = false;
 };
 
@@ -20,6 +21,7 @@ struct VolumeMaterial {
   float thicknessFactor = 0.0f;
   Texture thicknessTexture{};
   TextureHandle thicknessTextureHandle{};
+  TextureTransformation thicknessTextureTransformation;
   bool ownsVolumeTexture = false;
 
   glm::vec3 attenuationColor = glm::vec3(1.0f);
@@ -30,13 +32,16 @@ struct ClearcoatMaterial {
   float factor = 0.0f;
   Texture texture;
   TextureHandle textureHandle{};
+  TextureTransformation textureTransformation;
   bool ownsClearcoatTexture = false;
   float roughnessFactor = 0.0f;
   Texture roughnessTexture;
   TextureHandle roughnessTextureHandle{};
+  TextureTransformation roughnessTextureTransformation;
   bool ownsClearcoatRoughnessTexture = false;
   Texture normalTexture;
   TextureHandle normalTextureHandle{};
+  TextureTransformation normalTextureTransformation;
   bool ownsClearcoatNormalTexture = false;
 };
 
@@ -44,6 +49,7 @@ struct EmissiveMaterial {
   glm::vec3 factor{0.0, 0.0, 0.0};
   Texture texture;
   TextureHandle textureHandle{};
+  TextureTransformation textureTransformation;
   bool ownsEmissiveTexture = false;
   float strength = 0.0;
 };
@@ -51,12 +57,16 @@ struct EmissiveMaterial {
 struct MaterialResource {
   Texture baseColorTexture{};
   TextureHandle baseColorTextureHandle{};
+  TextureTransformation baseColorTextureTransformation;
   Texture normalTexture{};
   TextureHandle normalTextureHandle{};
+  TextureTransformation normalTextureTransformation;
   Texture metallicRoughnessTexture{};
   TextureHandle metallicRoughnessTextureHandle{};
+  TextureTransformation metallicRoughnessTextureTransformation;
   Texture occlusionTexture{};
   TextureHandle occlusionTextureHandle{};
+  TextureTransformation occlusionTextureTransformation;
 
   glm::vec4 baseColorFactor{1.0f};
   float metallicFactor = 1.0f;

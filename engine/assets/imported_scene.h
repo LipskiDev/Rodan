@@ -5,6 +5,7 @@
 #include <glm/glm.hpp>
 #include <graphics/material_types.h>
 #include <string>
+#include <graphics/texture.h>
 
 namespace Rodan {
 struct ImportedVertex {
@@ -26,17 +27,18 @@ struct ImportedPrimitive {
 struct ImportedTextureRef {
   int imageIndex = -1;
   int samplerIndex = -1;
-  int texCoord = 0;
 };
 
 struct ImportedTransmission {
   float transmissionFactor = 0.0f;
   ImportedTextureRef transmissionTexture;
+  TextureTransformation transmissionTransformation;
 };
 
 struct ImportedVolume {
   float thicknessFactor = 0.0f;
   ImportedTextureRef thicknessTexture;
+  TextureTransformation thicknessTransformation;
 
   glm::vec3 attenuationColor = glm::vec3(1.0f);
   float attenuationDistance = 0.0f;
@@ -45,14 +47,18 @@ struct ImportedVolume {
 struct ImportedClearCoat {
   float factor = 0.0f;
   ImportedTextureRef texture;
+  TextureTransformation textureTransformation;
   float roughnessFactor = 0.0f;
   ImportedTextureRef roughnessTexture;
+  TextureTransformation roughnessTransformation;
   ImportedTextureRef normalTexture;
+  TextureTransformation normalTransformation;
 };
 
 struct ImportedEmissive {
   glm::vec3 factor{0.0f};
   ImportedTextureRef texture;
+  TextureTransformation textureTransformation;
   float emissiveStrength = 1.0f;
 };
 
@@ -62,9 +68,13 @@ struct ImportedMaterial {
   float roughnessFactor = 1.0f;
 
   ImportedTextureRef baseColorTexture;
+  TextureTransformation baseColorTransformation;
   ImportedTextureRef normalTexture;
+  TextureTransformation normalTransformation;
   ImportedTextureRef metallicRoughnessTexture;
+  TextureTransformation metallicRoughnessTransformation;
   ImportedTextureRef occlusionTexture;
+  TextureTransformation occlusionTextureTransformation;
 
   AlphaMode alphaMode = AlphaMode::Opaque;
   float alphaCutoff = 0.5f;
