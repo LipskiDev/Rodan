@@ -6,6 +6,7 @@
 #include <nfd.h>
 
 #include "glm/geometric.hpp"
+#include "core/startup_timing.h"
 #include "imgui.h"
 #include "imgui_internal.h"
 #include "rhi/types.h"
@@ -316,11 +317,14 @@ void GltfViewerScene::RenderImGui() {
 void GltfViewerScene::LoadScene(IDevice *device, std::string path) {
   auto upload = device->CreateUploadContext(4 * 256 * 1024 * 1024);
   upload->Begin();
+  StartupTiming::MarkCheckpoint("Create model upload context");
 
   asset_ = StaticGltfAsset::Load(device, upload.get(),
                                  Velos::Path::Resolve(path).string());
+  StartupTiming::MarkCheckpoint("Parse model + record uploads");
 
   upload->Flush();
+  StartupTiming::MarkCheckpoint("Flush first model upload to GPU");
 
   instances_ = asset_->GetInstances();
 
@@ -394,6 +398,7 @@ void GltfViewerScene::LoadScene(IDevice *device, std::string path) {
 
     currentRenderTargets_.push_back(renderWorld_.CreateObject(desc));
   }
+  StartupTiming::MarkCheckpoint("Build model render world");
 }
 
 void GltfViewerScene::ReloadScene(const std::string &path) {
@@ -418,8 +423,10 @@ void GltfViewerScene::ReloadScene(const std::string &path) {
 
   sceneRenderer_.Initialize(device_, swapchain_, colorFormat_, depthFormat_,
                             asset_->GetMaterialLayout());
+  StartupTiming::MarkCheckpoint("Initialize scene renderer");
 
   sceneRenderer_.LoadEnvironment(device_, currentSkyboxPath_);
+  StartupTiming::MarkCheckpoint("Load environment map");
 
   currentBounds_ = ComputeCurrentBounds();
 

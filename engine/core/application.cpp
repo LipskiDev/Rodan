@@ -2,6 +2,7 @@
 
 #include "GLFW/glfw3.h"
 #include "core/input_system.h"
+#include "core/startup_timing.h"
 #include "core/window.h"
 #include "imgui.h"
 #include "implot.h"
@@ -33,10 +34,15 @@ void Application::Run() {
 void Application::Initialize() {
   InitializeWindowAndDevice();
   CreateSwapchain();
+  StartupTiming::MarkCheckpoint("Create swapchain");
   CreateDepthResources();
+  StartupTiming::MarkCheckpoint("Create depth resources");
   InitializeEngineResources();
+  StartupTiming::MarkCheckpoint("Initialize engine resources");
   InitializeImGui();
+  StartupTiming::MarkCheckpoint("Initialize ImGui");
   CreateScene(currentSceneType_);
+  StartupTiming::MarkCheckpoint("Finalize initial scene");
 
   timeStamp_ = glfwGetTime();
 }
@@ -82,12 +88,14 @@ void Application::InitializeWindowAndDevice() {
 
   window_ = make_unique<GlfwWindow>(windowWidth_, windowHeight_,
                                     "Rodan Renderer", true, input_.get());
+  StartupTiming::MarkCheckpoint("Create window + input");
 
   device_ = Velos::RHI::CreateDevice({
       .graphicsAPI = GraphicsAPI::Vulkan,
       .enableValidation = true,
       .applicationName = "Rodan Renderer",
   });
+  StartupTiming::MarkCheckpoint("Create Vulkan device");
 }
 
 void Application::CreateSwapchain() {
@@ -190,6 +198,7 @@ void Application::MainLoop() {
     window_->PollEvents();
     timings_.pollEventsMs =
         static_cast<float>((glfwGetTime() - stageStart) * 1000.0);
+    StartupTiming::MarkCheckpoint("First frame: poll events");
 
     if (HandleResize()) {
       continue;
@@ -199,6 +208,7 @@ void Application::MainLoop() {
     Update(deltaSeconds_);
     timings_.updateMs =
         static_cast<float>((glfwGetTime() - stageStart) * 1000.0);
+    StartupTiming::MarkCheckpoint("First frame: update");
 
     stageStart = glfwGetTime();
     BeginImGuiFrame(deltaSeconds_);
@@ -210,6 +220,7 @@ void Application::MainLoop() {
     ImGui::Render();
     timings_.imguiMs =
         static_cast<float>((glfwGetTime() - stageStart) * 1000.0);
+    StartupTiming::MarkCheckpoint("First frame: build ImGui");
 
     RenderFrame();
 
@@ -292,6 +303,7 @@ void Application::RenderFrame() {
   if (!frame.success) {
     return;
   }
+  StartupTiming::MarkCheckpoint("First frame: acquire backbuffer");
 
   imguiRenderer_->SetCurrentFrame(frame.frameIndex);
 
@@ -303,6 +315,7 @@ void Application::RenderFrame() {
     currentScene_->Prepare(cmd);
     timings_.prepareFrameMs =
         static_cast<float>((glfwGetTime() - stageStart) * 1000.0);
+    StartupTiming::MarkCheckpoint("First frame: prepare scene");
 
     FrameRenderContext frameCtx{};
     frameCtx.backbufferImage = frame.backbufferImage;
@@ -319,6 +332,7 @@ void Application::RenderFrame() {
 
     timings_.renderFrameMs =
         static_cast<float>((glfwGetTime() - stageStart) * 1000.0);
+    StartupTiming::MarkCheckpoint("First frame: record rendering");
   }
 
   cmd.Barrier({
@@ -332,11 +346,13 @@ void Application::RenderFrame() {
   cmd.End();
   timings_.endFrameMs =
       static_cast<float>((glfwGetTime() - stageStart) * 1000.0);
+  StartupTiming::MarkCheckpoint("First frame: end command list");
 
   stageStart = glfwGetTime();
   device_->SubmitAndPresent(swapchain_);
   timings_.presentMs =
       static_cast<float>((glfwGetTime() - stageStart) * 1000.0);
+  StartupTiming::ReportFirstFramePresented();
 }
 
 void Application::BeginImGuiFrame(float deltaTime) {
