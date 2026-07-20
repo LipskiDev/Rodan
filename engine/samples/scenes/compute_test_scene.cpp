@@ -2,7 +2,7 @@
 
 #include "imgui.h"
 #include "path.h"
-#include "shader/shader_compiler.h"
+#include "graphics/shader_cache.h"
 
 #include <stdexcept>
 
@@ -24,7 +24,7 @@ void ComputeTestScene::Initialize(VRHI::IDevice *device,
   device_ = device;
   swapchain_ = swapchain;
 
-  auto csOutput = Velos::ShaderCompiler::CompileFile({
+  auto csOutput = ShaderCache::LoadOrCompile({
       .path = Velos::Path::Resolve("assets/shaders/brdf_lut.comp").string(),
       .stage = VRHI::ShaderStage::Compute,
       .entryPoint = "main",
@@ -174,7 +174,7 @@ void ComputeTestScene::Initialize(VRHI::IDevice *device,
 
   device_->UpdateBindingSet(sampledWrite);
 
-  auto vsOutput = Velos::ShaderCompiler::CompileFile({
+  auto vsOutput = ShaderCache::LoadOrCompile({
       .path = Velos::Path::Resolve("assets/shaders/fullscreen_texture.vert")
                   .string(),
       .stage = VRHI::ShaderStage::Vertex,
@@ -182,7 +182,7 @@ void ComputeTestScene::Initialize(VRHI::IDevice *device,
       .language = Velos::ShaderSourceLanguage::GLSL,
   });
 
-  auto fsOutput = Velos::ShaderCompiler::CompileFile({
+  auto fsOutput = ShaderCache::LoadOrCompile({
       .path = Velos::Path::Resolve("assets/shaders/fullscreen_texture.frag")
                   .string(),
       .stage = VRHI::ShaderStage::Fragment,

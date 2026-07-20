@@ -3,7 +3,7 @@
 #include "rhi/pipeline.h"
 #include "rhi/types.h"
 #include "scene/transform.h"
-#include "shader/shader_compiler.h"
+#include "graphics/shader_cache.h"
 #include <renderer/line_renderer.h>
 
 namespace Rodan::Debug {
@@ -11,7 +11,7 @@ namespace Rodan::Debug {
 LineRenderer3D::LineRenderer3D(Velos::RHI::IDevice *device) {
   device_ = device;
   Velos::ShaderCompileOutput compiledVertexShader =
-      Velos::ShaderCompiler::CompileFile({
+      Rodan::ShaderCache::LoadOrCompile({
           .path = "assets/shaders/line_renderer_3d.vert",
           .stage = Velos::RHI::ShaderStage::Vertex,
           .entryPoint = "main",
@@ -19,7 +19,7 @@ LineRenderer3D::LineRenderer3D(Velos::RHI::IDevice *device) {
       });
 
   Velos::ShaderCompileOutput compiledFragmentShader =
-      Velos::ShaderCompiler::CompileFile({
+      Rodan::ShaderCache::LoadOrCompile({
           .path = "assets/shaders/line_renderer_3d.frag",
           .stage = Velos::RHI::ShaderStage::Fragment,
           .entryPoint = "main",

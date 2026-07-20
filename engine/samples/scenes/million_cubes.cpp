@@ -1,4 +1,5 @@
 #include "glm/ext/vector_float4.hpp"
+#include "graphics/shader_cache.h"
 #include "rhi/types.h"
 #include <glm/gtc/random.hpp>
 #include <path.h>
@@ -230,13 +231,13 @@ void MillionCubesScene::CreateDescriptors(Velos::RHI::IDevice *device) {
 
 void MillionCubesScene::CreatePipeline(Velos::RHI::IDevice *device) {
 
-  auto vertSpv = ShaderCompiler::CompileFile({
+  auto vertSpv = ShaderCache::LoadOrCompile({
       .path = Velos::Path::Resolve("assets/shaders/cubes.vert").string(),
       .stage = ShaderStage::Vertex,
       .entryPoint = "main",
   });
 
-  auto fragSpv = ShaderCompiler::CompileFile({
+  auto fragSpv = ShaderCache::LoadOrCompile({
       .path = Velos::Path::Resolve("assets/shaders/cubes.frag").string(),
       .stage = ShaderStage::Fragment,
       .entryPoint = "main",

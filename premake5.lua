@@ -54,6 +54,7 @@ project "Rodan"
 		"external/implot",
 		"external/meshoptimizer/src",
 		"external/tinygltf",
+		"external/xxHash",
     "external/velos/external/tracy/public",
     "external/nfd/src/include"
 	}
@@ -64,6 +65,7 @@ project "Rodan"
 		"imgui",
 		"implot",
 		"meshoptimizer",
+		"xxHash",
     "nfd"
 	}
 
@@ -347,6 +349,45 @@ project "meshoptimizer"
 	{
 		"external/meshoptimizer/src"
 	}
+
+	filter "system:linux"
+		pic "On"
+
+	filter "configurations:Debug"
+		runtime "Debug"
+		symbols "On"
+
+	filter "configurations:Release"
+		runtime "Release"
+		optimize "Speed"
+
+filter {}
+
+-- =========================
+-- XXHASH
+-- =========================
+project "xxHash"
+	location "build/xxHash"
+	kind "StaticLib"
+	language "C"
+	staticruntime "off"
+
+	targetdir ("bin/" .. outputdir .. "/%{prj.name}")
+	objdir ("bin-int/" .. outputdir .. "/%{prj.name}")
+
+	files
+	{
+		"external/xxHash/xxhash.h",
+		"external/xxHash/xxhash.c"
+	}
+
+	includedirs
+	{
+		"external/xxHash"
+	}
+
+	filter "system:windows"
+		systemversion "latest"
 
 	filter "system:linux"
 		pic "On"

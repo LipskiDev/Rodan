@@ -24,4 +24,6 @@
   </Project>
   <Project Path="external\build\VelosImGui\VelosImGui.vcxproj" Id="499C40A4-3554-82F1-9E5B-5B4D8A321DE2">
   </Project>
+  <Project Path="build\xxHash\xxHash.vcxproj" Id="D9B36E28-C555-99FE-AE10-AD529A51204F">
+  </Project>
 </Solution>

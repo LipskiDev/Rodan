@@ -4,6 +4,7 @@
 #include "graphics/environment/ibl_baker.h"
 #include "graphics/material_types.h"
 #include "graphics/mesh_resource.h"
+#include "graphics/shader_cache.h"
 #include "graphics/shaders_types.h"
 #include "graphics/texture.h"
 #include "renderer/render_graph/render_graph_builder.h"
@@ -37,13 +38,13 @@ void SceneRenderer::Initialize(IDevice *device, SwapchainHandle swapchain,
   lineRenderer3D_ = std::make_unique<Debug::LineRenderer3D>(device);
   lineRenderer2D_ = std::make_unique<Debug::LineRenderer2D>();
 
-  auto vertSpv = Velos::ShaderCompiler::CompileFile({
+  auto vertSpv = ShaderCache::LoadOrCompile({
       .path = Velos::Path::Resolve("assets/shaders/static_mesh.vert").string(),
       .stage = ShaderStage::Vertex,
       .entryPoint = "main",
   });
 
-  auto fragSpv = Velos::ShaderCompiler::CompileFile({
+  auto fragSpv = ShaderCache::LoadOrCompile({
       .path = Velos::Path::Resolve("assets/shaders/static_mesh.frag").string(),
       .stage = ShaderStage::Fragment,
       .entryPoint = "main",
@@ -74,13 +75,13 @@ void SceneRenderer::Initialize(IDevice *device, SwapchainHandle swapchain,
         "SceneRenderer::Initialize: failed to create static mesh shaders");
   }
 
-  auto depthVertSpv = Velos::ShaderCompiler::CompileFile({
+  auto depthVertSpv = ShaderCache::LoadOrCompile({
       .path = Velos::Path::Resolve("assets/shaders/shadow_depth.vert").string(),
       .stage = ShaderStage::Vertex,
       .entryPoint = "main",
   });
 
-  auto depthFragSpv = Velos::ShaderCompiler::CompileFile({
+  auto depthFragSpv = ShaderCache::LoadOrCompile({
       .path = Velos::Path::Resolve("assets/shaders/shadow_depth.frag").string(),
       .stage = ShaderStage::Fragment,
       .entryPoint = "main",
@@ -111,14 +112,14 @@ void SceneRenderer::Initialize(IDevice *device, SwapchainHandle swapchain,
         "SceneRenderer::Initialize: failed to create static mesh shaders");
   }
 
-  vertSpv = Velos::ShaderCompiler::CompileFile({
+  vertSpv = ShaderCache::LoadOrCompile({
       .path =
           Velos::Path::Resolve("assets/shaders/postprocessing.vert").string(),
       .stage = ShaderStage::Vertex,
       .entryPoint = "main",
   });
 
-  fragSpv = Velos::ShaderCompiler::CompileFile({
+  fragSpv = ShaderCache::LoadOrCompile({
       .path = Velos::Path::Resolve("assets/shaders/tonemapping.frag").string(),
       .stage = ShaderStage::Fragment,
       .entryPoint = "main",

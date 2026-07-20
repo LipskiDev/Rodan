@@ -1,4 +1,5 @@
 #include "graphics/environment/environment_map.h"
+#include "graphics/shader_cache.h"
 #include <core/path.h>
 #include <renderer/passes/skybox_pass.h>
 
@@ -40,13 +41,13 @@ void SkyboxPass::Initialize(IDevice *device, Format colorFormat,
       .debugName = "Skybox Vertex Buffer",
   });
 
-  auto vertSpv = ShaderCompiler::CompileFile({
+  auto vertSpv = ShaderCache::LoadOrCompile({
       .path = Velos::Path::Resolve("assets/shaders/skybox.vert").string(),
       .stage = ShaderStage::Vertex,
       .entryPoint = "main",
   });
 
-  auto fragSpv = ShaderCompiler::CompileFile({
+  auto fragSpv = ShaderCache::LoadOrCompile({
       .path = Velos::Path::Resolve("assets/shaders/skybox.frag").string(),
       .stage = ShaderStage::Fragment,
       .entryPoint = "main",

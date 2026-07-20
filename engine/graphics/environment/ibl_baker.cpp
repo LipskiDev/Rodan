@@ -2,6 +2,7 @@
 #include "glm/ext/matrix_float4x4.hpp"
 #include "glm/ext/matrix_transform.hpp"
 #include "graphics/texture.h"
+#include "graphics/shader_cache.h"
 #include "rhi/handles.h"
 #include "rhi/pipeline.h"
 #include "rhi/resources.h"
@@ -86,14 +87,14 @@ void IBLBaker::Initialize(IDevice *device,
       .debugName = "IBLBaker Cube Vertex Buffer",
   });
 
-  auto vertSpv = Velos::ShaderCompiler::CompileFile({
+  auto vertSpv = ShaderCache::LoadOrCompile({
       .path = Velos::Path::Resolve("assets/shaders/irradiance_convolution.vert")
                   .string(),
       .stage = ShaderStage::Vertex,
       .entryPoint = "main",
   });
 
-  auto fragSpv = Velos::ShaderCompiler::CompileFile({
+  auto fragSpv = ShaderCache::LoadOrCompile({
       .path = Velos::Path::Resolve("assets/shaders/irradiance_convolution.frag")
                   .string(),
       .stage = ShaderStage::Fragment,
@@ -120,14 +121,14 @@ void IBLBaker::Initialize(IDevice *device,
       .debugName = "IBL Irradiance FS",
   });
 
-  vertSpv = Velos::ShaderCompiler::CompileFile({
+  vertSpv = ShaderCache::LoadOrCompile({
       .path =
           Velos::Path::Resolve("assets/shaders/prefilter_envmap.vert").string(),
       .stage = ShaderStage::Vertex,
       .entryPoint = "main",
   });
 
-  fragSpv = Velos::ShaderCompiler::CompileFile({
+  fragSpv = ShaderCache::LoadOrCompile({
       .path =
           Velos::Path::Resolve("assets/shaders/prefilter_envmap.frag").string(),
       .stage = ShaderStage::Fragment,
@@ -154,7 +155,7 @@ void IBLBaker::Initialize(IDevice *device,
       .debugName = "IBL Prefilter FS",
   });
 
-  auto compSpv = Velos::ShaderCompiler::CompileFile({
+  auto compSpv = ShaderCache::LoadOrCompile({
       .path = Velos::Path::Resolve("assets/shaders/brdf_lut.comp").string(),
       .stage = ShaderStage::Compute,
       .entryPoint = "main",

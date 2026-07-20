@@ -1,6 +1,6 @@
 #include "imgui_renderer.h"
 
-#include "shader/shader_compiler.h"
+#include "graphics/shader_cache.h"
 #include <imgui.h>
 
 #include <cstddef>
@@ -33,13 +33,13 @@ CreateImGuiPipeline(VRHI::IDevice *device, VRHI::Format colorFormat,
                     VRHI::Format depthFormat,
                     VRHI::BindingLayoutHandle setLayout) {
 
-  const auto vsOutput = Velos::ShaderCompiler::CompileFile({
+  const auto vsOutput = Rodan::ShaderCache::LoadOrCompile({
       .path = Velos::Path::Resolve("engine/ui/shaders/imgui.vert").string(),
       .stage = VRHI::ShaderStage::Vertex,
       .entryPoint = "main",
   });
 
-  const auto fsOutput = Velos::ShaderCompiler::CompileFile({
+  const auto fsOutput = Rodan::ShaderCache::LoadOrCompile({
       .path = Velos::Path::Resolve("engine/ui/shaders/imgui.frag").string(),
       .stage = VRHI::ShaderStage::Fragment,
       .entryPoint = "main",

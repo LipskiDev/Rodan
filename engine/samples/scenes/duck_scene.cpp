@@ -1,6 +1,7 @@
 #include "duck_scene.h"
 
 #include "graphics/mesh_resource.h"
+#include "graphics/shader_cache.h"
 #include "graphics/shaders_types.h"
 #include "imgui.h"
 #include "renderer/scene_renderer.h"
@@ -401,13 +402,13 @@ void DuckScene::CreateDescriptors(IDevice *device) {
 }
 
 void DuckScene::CreatePipeline(IDevice *device) {
-  auto vertSpv = ShaderCompiler::CompileFile({
+  auto vertSpv = ShaderCache::LoadOrCompile({
       .path = Velos::Path::Resolve("assets/shaders/duck.vert").string(),
       .stage = ShaderStage::Vertex,
       .entryPoint = "main",
   });
 
-  auto fragSpv = ShaderCompiler::CompileFile({
+  auto fragSpv = ShaderCache::LoadOrCompile({
       .path = Velos::Path::Resolve("assets/shaders/duck.frag").string(),
       .stage = ShaderStage::Fragment,
       .entryPoint = "main",
