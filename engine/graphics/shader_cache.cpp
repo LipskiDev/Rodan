@@ -243,7 +243,7 @@ namespace Rodan {
 		});
 
 		if (auto cached = cache.TryLoad(key, normalizedPath)) {
-#if defined(_DEBUG)
+#if defined(RODAN_DEBUG)
 			std::cout << "[ShaderCache] HIT   "
 				<< normalizedPath.string() << " -> "
 				<< CachePath(key).filename().string() << " ("
@@ -252,7 +252,7 @@ namespace Rodan {
 			return std::move(*cached);
 		}
 
-#if defined(_DEBUG)
+#if defined(RODAN_DEBUG)
 		std::cout << "[ShaderCache] MISS  "
 			<< normalizedPath.string() << " -> compiling\n";
 #endif
@@ -264,7 +264,7 @@ namespace Rodan {
 			.outputFormat = input.outputFormat,
 		});
 		const bool stored = cache.Store(key, normalizedPath, output);
-#if defined(_DEBUG)
+#if defined(RODAN_DEBUG)
 		std::cout << "[ShaderCache] " << (stored ? "STORE " : "SKIP  ")
 			<< normalizedPath.string();
 		if (stored) {

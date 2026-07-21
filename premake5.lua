@@ -107,7 +107,7 @@ project "Rodan"
 		{
 			"call ../../scripts/build_assimp.bat Debug"
 		}
-		defines { "TRACY_ENABLE" }
+		defines { "TRACY_ENABLE", "RODAN_DEBUG" }
 		links { "assimp-vc143-mtd" }
 		runtime "Debug"
 		symbols "On"
@@ -117,7 +117,7 @@ project "Rodan"
 		{
 			"bash ../../scripts/build_assimp.sh Debug"
 		}
-		defines { "TRACY_ENABLE" }
+		defines { "TRACY_ENABLE", "RODAN_DEBUG" }
 		links { "assimpd" }
 		runtime "Debug"
 		symbols "On"
@@ -254,7 +254,7 @@ project "Runtime"
 		{
 			'{COPY} "%{wks.location}/external/assimp-install-windows/bin/assimp-vc143-mtd.dll" "%{cfg.targetdir}"'
 		}
-		defines { "TRACY_ENABLE" }
+		defines { "TRACY_ENABLE", "RODAN_DEBUG" }
 		links { "assimp-vc143-mtd" }
 		runtime "Debug"
 		symbols "On"
@@ -264,7 +264,7 @@ project "Runtime"
 		{
 			"bash ../../scripts/build_assimp.sh Debug"
 		}
-		defines { "TRACY_ENABLE" }
+		defines { "TRACY_ENABLE", "RODAN_DEBUG" }
 		links { "assimpd" }
 		runtime "Debug"
 		symbols "On"
