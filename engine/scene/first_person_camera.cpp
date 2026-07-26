@@ -83,11 +83,31 @@ void FirstPersonCamera::UpdateViewMatrix() {
 }
 
 void FirstPersonCamera::UpdateProjectionMatrix() {
-  projection_ = glm::perspective(glm::radians(fovDegrees_), aspect_, nearPlane_,
-                                 farPlane_);
+    projections_.clear();
+    cascadeProjections_.clear();
+    cascadeFarDistances_.clear();
+    glm::mat4 projection = glm::perspectiveRH_ZO(
+        glm::radians(fovDegrees_), aspect_, nearPlane_, farPlane_);
 
-  // Vulkan clip space
-  projection_[1][1] *= -1.0f;
+    projection[1][1] *= -1.0f;
+    projections_.push_back(projection);
+    for (uint32_t i = 0; i < cascadeCount_; ++i) {
+        const float nearFraction = i == 0 ? 0.0f : cascades_[i - 1];
+        const float farFraction =
+            i + 1 == cascadeCount_ ? 1.0f : cascades_[i];
+        const float shadowFar = glm::clamp(
+            cascadeMaxDistance_, nearPlane_ + 0.001f, farPlane_);
+        const float near =
+            nearPlane_ + (shadowFar - nearPlane_) * nearFraction;
+        const float far =
+            nearPlane_ + (shadowFar - nearPlane_) * farFraction;
+
+        glm::mat4 cascadeProjection = glm::perspectiveRH_ZO(
+            glm::radians(fovDegrees_), aspect_, near, far);
+        cascadeProjection[1][1] *= -1.0f;
+        cascadeProjections_.push_back(cascadeProjection);
+        cascadeFarDistances_.push_back(far);
+    }
 }
 
 void FirstPersonCamera::SetPerspective(float fovDegrees, float aspect,

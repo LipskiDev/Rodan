@@ -34,7 +34,7 @@ void GltfViewerScene::Initialize(IDevice *device, SwapchainHandle swapchain,
     std::cerr << "Failed to initialize NFD: " << NFD_GetError() << std::endl;
   }
 
-  SetCameraMode(CameraMode::Orbit);
+  SetCameraMode(CameraMode::FirstPerson);
 
   ReloadScene(currentScenePath_);
 }
@@ -109,7 +109,7 @@ void GltfViewerScene::Update(float deltaSeconds,
   camera_->SetPerspective(60.0f,
                           static_cast<float>(ctx.framebufferWidth) /
                               static_cast<float>(ctx.framebufferHeight),
-                          0.1f, 500.0f);
+                          0.1f, 1000.0f);
 
   if (ctx.input) {
     for (const InputEvent &event : ctx.input->GetEvents()) {
@@ -200,6 +200,46 @@ void GltfViewerScene::Render(ICommandList &cmd,
 }
 
 void GltfViewerScene::RenderImGui() {
+  ImGui::Begin("Directional Shadow Settings");
+  auto& settings = sceneRenderer_.GetShadowSettings();
+
+  settings.cascadeCount =
+      glm::clamp(settings.cascadeCount, 1u, k_MaxShadowCascades);
+  ImGui::SliderFloat(
+      "Max Distance",
+      &settings.maxDistance,
+      10.0f,
+      1000.0f
+  );
+
+  for (uint32_t i = 0; i + 1 < settings.cascadeCount; ++i) {
+      ImGui::PushID(static_cast<int>(i));
+
+      ImGui::SliderFloat(
+          "Split",
+          &settings.splits[i],
+          0.01f,
+          0.99f
+      );
+
+      ImGui::PopID();
+  }
+
+  for (uint32_t i = 0; i + 1 < settings.cascadeCount; ++i) {
+      const float minimum =
+          i == 0 ? 0.001f : settings.splits[i - 1] + 0.001f;
+
+      const float maximum =
+          i + 2 == settings.cascadeCount
+          ? 0.999f
+          : settings.splits[i + 1] - 0.001f;
+
+      settings.splits[i] =
+          glm::clamp(settings.splits[i], minimum, maximum);
+  }
+
+  ImGui::End();
+
   ImGui::Begin("GltfViewer Scene");
   ImGui::Text("Static glTF scene test");
   ImGui::Separator();
@@ -258,6 +298,10 @@ void GltfViewerScene::RenderImGui() {
     SetCameraMode(static_cast<CameraMode>(currentMode));
   }
 
+  if (ImGui::Button("Set Fake Camera")) {
+      camera_->SetFakeAsCurrent();
+  }
+
   if (ImGui::Button("Reset Camera")) {
     camera_->Reset();
   }
@@ -271,7 +315,7 @@ void GltfViewerScene::RenderImGui() {
   ImGui::Separator();
 
   const char *items[] = {"Final",   "BaseColor", "Normal", "MetallicRoughness",
-                         "Tangent", "Occlusion"};
+                          "Tangent", "Occlusion", "Shadow Cascades"};
   int mode = static_cast<int>(dbgCtx_.mode);
   if (ImGui::Combo("Show", &mode, items, IM_ARRAYSIZE(items))) {
     dbgCtx_.mode = static_cast<DrawMode>(mode);
@@ -490,8 +534,8 @@ void GltfViewerScene::FrameCamera() {
 
   // OrbitCamera::SetPosition derives its yaw and distance from the current
   // target, so establish the new model center first.
-  camera_->LookAt(center);
   camera_->SetPosition(center + glm::vec3(0.0f, 0.0f, distance));
+  camera_->LookAt(center);
 }
 
 AABB GltfViewerScene::ComputeCurrentBounds() {
@@ -525,7 +569,7 @@ void GltfViewerScene::SetCameraMode(CameraMode mode) {
     break;
   }
 
-  camera_->SetPerspective(60.0f, 16.0f / 9.0f, 0.1f, 500.0f);
+  camera_->SetPerspective(60.0f, 16.0f / 9.0f, 0.1f, 1000.0f);
 
   FrameCamera();
 

@@ -13,10 +13,23 @@ layout(set = 0, binding = 0) uniform sampler2D u_BaseColor;
 layout(set = 0, binding = 1) uniform sampler2D u_Normal;
 layout(set = 0, binding = 2) uniform sampler2D u_MetallicRoughness;
 
-layout(set = 1, binding = 1) uniform FrameData {
+const int MAX_SHADOW_CASCADES = 8;
+
+struct CascadeData {
+    mat4 lightViewProj;
+    vec4 splitData;
+};
+
+layout(std140, set = 1, binding = 1) uniform FrameData {
     mat4 view;
     mat4 proj;
-    mat4 lightViewProj;
+
+    CascadeData cascades[MAX_SHADOW_CASCADES];
+
+    uint cascadeCount;
+    uint _cascadePad0;
+    uint _cascadePad1;
+    uint _cascadePad2;
 
     vec4 lightDirection;
     vec4 lightColor;

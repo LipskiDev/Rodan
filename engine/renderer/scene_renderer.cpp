@@ -150,21 +150,42 @@ void SceneRenderer::Initialize(IDevice *device, SwapchainHandle swapchain,
                              "processing tonemapping shaders");
   }
 
-  directionalShadow_.texture.image = device->CreateImage({
+  directionalShadow_.cascadeCount = std::clamp(
+      directionalShadowSettings_.cascadeCount, 1u, k_MaxShadowCascades);
+  directionalShadowSettings_.cascadeCount = directionalShadow_.cascadeCount;
+
+  directionalShadow_.image = device->CreateImage({
       .width = directionalShadow_.resolution,
       .height = directionalShadow_.resolution,
+      .arrayLayers = directionalShadow_.cascadeCount,
       .format = Format::D32_FLOAT,
       .usage = ImageUsage::DepthStencil | ImageUsage::Sampled,
       .debugName = "Directional Shadow Map",
   });
 
-  directionalShadow_.texture.view = device->CreateImageView({
-      .image = directionalShadow_.texture.image,
+  directionalShadow_.views.resize(directionalShadow_.cascadeCount);
+  directionalShadow_.lightViewProjs.resize(directionalShadow_.cascadeCount);
+  for (uint32_t i = 0; i < directionalShadow_.cascadeCount; i++) {
+      directionalShadow_.views[i] = device->CreateImageView({
+      .image = directionalShadow_.image,
       .format = Format::D32_FLOAT,
+      .type = ImageViewType::View2D,
       .aspect = ImageAspect::Depth,
-  });
+      .baseArrayLayer = i,
+      .arrayLayerCount = 1,
+          });
+  }
 
-  directionalShadow_.texture.sampler = device->CreateSampler({
+  directionalShadow_.arrayView = device->CreateImageView({
+    .image = directionalShadow_.image,
+    .format = Format::D32_FLOAT,
+    .type = ImageViewType::View2DArray,
+    .aspect = ImageAspect::Depth,
+    .baseArrayLayer = 0,
+    .arrayLayerCount = directionalShadow_.cascadeCount,
+      });
+
+  directionalShadow_.sampler = device->CreateSampler({
       .minFilter = Filter::Linear,
       .magFilter = Filter::Linear,
       .addressU = SamplerAddressMode::ClampToEdge,
@@ -335,8 +356,8 @@ void SceneRenderer::Initialize(IDevice *device, SwapchainHandle swapchain,
   dummyImageInfo.imageLayout = ImageLayout::ShaderReadOnly;
 
   BindingImageInfo shadowImage{};
-  shadowImage.imageView = directionalShadow_.texture.view;
-  shadowImage.sampler = directionalShadow_.texture.sampler;
+  shadowImage.imageView = directionalShadow_.arrayView;;
+  shadowImage.sampler = directionalShadow_.sampler;
   shadowImage.imageLayout = ImageLayout::ShaderReadOnly;
 
   device->UpdateBindingSet({
@@ -499,9 +520,12 @@ void SceneRenderer::Shutdown(IDevice *device) {
     opaqueSceneLayout_ = {};
   }
 
-  device_->DestroySampler(directionalShadow_.texture.sampler);
-  device_->DestroyImageView(directionalShadow_.texture.view);
-  device_->DestroyImage(directionalShadow_.texture.image);
+  device_->DestroySampler(directionalShadow_.sampler);
+  for (ImageViewHandle view : directionalShadow_.views) {
+    device_->DestroyImageView(view);
+  }
+  device_->DestroyImageView(directionalShadow_.arrayView);
+  device_->DestroyImage(directionalShadow_.image);
 
   device->DestroyBuffer(frameUBO_);
   device->DestroyBuffer(materialBuffer_);
@@ -519,10 +543,22 @@ void SceneRenderer::Shutdown(IDevice *device) {
 }
 
 void SceneRenderer::Render(ICommandList &cmd, const RenderWorld &world,
-                           const Camera &camera,
+                           Camera &camera,
                            const FrameRenderContext &frame,
                            DebugContext dbgCtx) {
   graph_.Reset();
+  const uint32_t cascadeCount = std::clamp(
+      directionalShadowSettings_.cascadeCount, 1u,
+      std::min(k_MaxShadowCascades,
+               static_cast<uint32_t>(directionalShadow_.views.size())));
+  directionalShadowSettings_.cascadeCount = cascadeCount;
+  directionalShadow_.cascadeCount = cascadeCount;
+  directionalShadow_.cascades.assign(
+      directionalShadowSettings_.splits.begin(),
+      directionalShadowSettings_.splits.begin() +
+          (cascadeCount - 1));
+  camera.SetCascades(cascadeCount, directionalShadow_.cascades,
+                     directionalShadowSettings_.maxDistance);
 
   const uint32_t opaqueMipLevels =
       1u + static_cast<uint32_t>(std::floor(
@@ -626,11 +662,11 @@ void SceneRenderer::Render(ICommandList &cmd, const RenderWorld &world,
 
   graph_.AddPass(
       "Shadow Maps",
-      [](RenderGraphBuilder &builder) {
-        builder.WriteDepthAttachment("DirectionalShadowMap");
+      [&](RenderGraphBuilder &builder) {
+        builder.WriteDepthAttachment("DirectionalShadowMap", SubresourceRange{.baseLayer = 0, .layerCount = directionalShadow_.cascadeCount });
       },
       [&](ICommandList &cmd) {
-        RenderShadowMaps(cmd, world);
+        RenderShadowMaps(cmd, world, camera);
 
         tShadow = now();
       });
@@ -663,9 +699,9 @@ void SceneRenderer::Render(ICommandList &cmd, const RenderWorld &world,
 
   graph_.AddPass(
       "Opaque Prepass For Transmission",
-      [](RenderGraphBuilder &builder) {
+      [&](RenderGraphBuilder &builder) {
         builder.StorageRead("MaterialBuffer");
-        builder.ReadTexture("DirectionalShadowMap");
+        builder.ReadTexture("DirectionalShadowMap", SubresourceRange{.baseLayer = 0, .layerCount = directionalShadow_.cascadeCount });
         builder.ReadTexture("IBLResources");
 
         builder.WriteColorAttachment("OpaqueScene", {
@@ -704,7 +740,10 @@ void SceneRenderer::Render(ICommandList &cmd, const RenderWorld &world,
         const auto &opaque = graph_.GetImage("OpaqueScene");
 
         builder.StorageRead("MaterialBuffer");
-        builder.ReadTexture("DirectionalShadowMap");
+        builder.ReadTexture("DirectionalShadowMap", {
+            .baseLayer = 0,
+            .layerCount = directionalShadow_.cascadeCount
+            });
         builder.ReadTexture("IBLResources");
         builder.ReadTexture("OpaqueScene",
                             {.baseMip = 0, .mipCount = opaque.mipLevels});
@@ -742,7 +781,7 @@ void SceneRenderer::Render(ICommandList &cmd, const RenderWorld &world,
         tUI = now();
       });
 
-  graph_.ImportImage("DirectionalShadowMap", directionalShadow_.texture.image,
+  graph_.ImportImage("DirectionalShadowMap", directionalShadow_.image,
                      ImageAspect::Depth);
 
   const ResourceState backbufferState =
@@ -833,6 +872,11 @@ void SceneRenderer::LoadEnvironment(IDevice *device, const std::string &path) {
   }
 
   environment_ = EnvironmentMap::LoadHDR(device, Velos::Path::Resolve(path));
+}
+
+DirectionalShadowSettings& SceneRenderer::GetShadowSettings()
+{
+    return directionalShadowSettings_;
 }
 
 PipelineHandle SceneRenderer::GetOrCreatePipeline(const MeshPipelineKey &key) {
@@ -1054,7 +1098,7 @@ void SceneRenderer::UpdateFinalSceneDescriptor() {
 }
 
 void SceneRenderer::RenderShadowMaps(ICommandList &cmd,
-                                     const RenderWorld &world) {
+                                     const RenderWorld &world, const Camera& camera) {
   const auto &lights = world.GetDirectionalLights();
 
   directionalShadow_.enabled = false;
@@ -1083,63 +1127,135 @@ void SceneRenderer::RenderShadowMaps(ICommandList &cmd,
     up = glm::vec3(0.0f, 0.0f, 1.0f);
   }
 
-  glm::mat4 lightView = glm::lookAtRH(-lightDir * 50.0f, glm::vec3(0.0f), up);
+  for (uint32_t i = 0; i < directionalShadow_.cascadeCount; i++) {
+      glm::vec3 frustumCorners[8] = {
+          { -1.0f, 1.0f, 0.0f },
+          { 1.0f, 1.0f, 0.0f },
+          { 1.0f, -1.0f, 0.0f },
+          { -1.0f, -1.0f, 0.0f },
+          { -1.0f, 1.0f, 1.0f },
+          { 1.0f, 1.0f, 1.0f },
+          { 1.0f, -1.0f, 1.0f },
+          { -1.0f, -1.0f, 1.0f },
+      };
 
-  glm::mat4 lightProj =
-      glm::orthoRH_ZO(-15.0f, 15.0f, -15.0f, 15.0f, 1.0f, 80.0f);
+      glm::mat4 cameraView = camera.GetView();
+      glm::mat4 cameraViewProj =
+          camera.GetProjectionFromCascade(i) * cameraView;
 
-  glm::mat4 lightViewProj = lightProj * lightView;
+      glm::mat4 invViewProj = glm::inverse(cameraViewProj);
 
-  directionalShadow_.lightViewProj = lightViewProj;
+      for (int j = 0; j < 8; j++) {
+        glm::vec4 corner = invViewProj * glm::vec4(frustumCorners[j], 1.0f);
+        frustumCorners[j] = glm::vec3(corner) / corner.w;
+      }
 
-  DepthAttachmentDesc dDesc = {
-      .view = directionalShadow_.texture.view,
-      .loadOp = LoadOp::Clear,
-      .storeOp = StoreOp::Store,
-      .clearDepth = 1.0f,
-  };
+      glm::vec3 frustumCenter = glm::vec3{ 0.0, 0.0, 0.0 };
+      for (int j = 0; j < 8; j++) {
+          frustumCenter += frustumCorners[j];
+      }
+      frustumCenter /= 8.0f;
 
-  const uint32_t resolution = directionalShadow_.resolution;
+      float radius = 0.0f;
 
-  cmd.BeginRendering({
-      .renderArea = {.offset = {0, 0}, .extent = {resolution, resolution}},
-      .colorAttachments = nullptr,
-      .colorAttachmentCount = 0,
-      .depthAttachment = &dDesc,
-  });
+      for (const glm::vec3& corner : frustumCorners) {
+          radius = glm::max(
+              radius,
+              glm::length(corner - frustumCenter)
+          );
+      }
 
-  cmd.SetViewport({
-      .x = 0.0f,
-      .y = 0.0f,
-      .width = static_cast<float>(resolution),
-      .height = static_cast<float>(resolution),
-      .minDepth = 0.0f,
-      .maxDepth = 1.0f,
-  });
+      // Quantizing the bounding-sphere radius keeps the orthographic
+      // projection scale fixed while the camera rotates. This is the other
+      // half of stable CSMs; texel snapping alone only stabilizes translation.
+      constexpr float kCascadeRadiusQuantization = 16.0f;
+      radius = std::ceil(radius * kCascadeRadiusQuantization) /
+               kCascadeRadiusQuantization;
 
-  cmd.SetScissor({
-      .offset = {0, 0},
-      .extent = {resolution, resolution},
-  });
+      const glm::vec3 lightPosition =
+          frustumCenter - lightDir * radius;
 
-  PipelineHandle pipeline = GetOrCreateShadowPipeline();
-  cmd.BindPipeline(pipeline);
+      const glm::mat4 lightView =
+          glm::lookAtRH(lightPosition, frustumCenter, up);
 
-  for (const StaticMeshRenderItem &item : opaques_) {
-    if (!item.mesh) {
-      continue;
-    }
+      glm::mat4 lightProjection = glm::orthoRH_ZO(
+          -radius,
+          radius,
+          -radius,
+          radius,
+          -radius * 6.0f,
+          radius * 6.0f
+      );
 
-    ShadowPushConstants pc{};
-    pc.model = item.worldTransform.ToMatrix() * item.localTransform.ToMatrix();
-    pc.lightViewProj = lightViewProj;
+      // Keep the light projection aligned to shadow-map texels. Without this,
+      // tiny camera movements continuously move world geometry across texels
+      // and make otherwise static shadow edges shimmer.
+      glm::vec4 shadowOrigin =
+          lightProjection * lightView * glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
+      shadowOrigin *=
+          static_cast<float>(directionalShadow_.resolution) * 0.5f;
 
-    cmd.PushConstants(ShaderStage::Vertex, 0, sizeof(ShadowPushConstants), &pc);
+      const glm::vec4 roundedOrigin = glm::round(shadowOrigin);
+      glm::vec4 roundingOffset = roundedOrigin - shadowOrigin;
+      roundingOffset *=
+          2.0f / static_cast<float>(directionalShadow_.resolution);
 
-    meshRenderer_.DrawDepthOnly(&cmd, *item.mesh, *item.submesh);
+      lightProjection[3][0] += roundingOffset.x;
+      lightProjection[3][1] += roundingOffset.y;
+
+      glm::mat4 lightViewProj = lightProjection * lightView;
+
+      directionalShadow_.lightViewProjs[i] = lightViewProj;
+
+      DepthAttachmentDesc dDesc = {
+          .view = directionalShadow_.views[i],
+          .loadOp = LoadOp::Clear,
+          .storeOp = StoreOp::Store,
+          .clearDepth = 1.0f,
+      };
+
+      const uint32_t resolution = directionalShadow_.resolution;
+
+      cmd.BeginRendering({
+          .renderArea = {.offset = {0, 0}, .extent = {resolution, resolution}},
+          .colorAttachments = nullptr,
+          .colorAttachmentCount = 0,
+          .depthAttachment = &dDesc,
+          });
+
+      cmd.SetViewport({
+          .x = 0.0f,
+          .y = 0.0f,
+          .width = static_cast<float>(resolution),
+          .height = static_cast<float>(resolution),
+          .minDepth = 0.0f,
+          .maxDepth = 1.0f,
+          });
+
+      cmd.SetScissor({
+          .offset = {0, 0},
+          .extent = {resolution, resolution},
+          });
+
+      PipelineHandle pipeline = GetOrCreateShadowPipeline();
+      cmd.BindPipeline(pipeline);
+
+      for (const StaticMeshRenderItem& item : opaques_) {
+          if (!item.mesh) {
+              continue;
+          }
+
+          ShadowPushConstants pc{};
+          pc.model = item.worldTransform.ToMatrix() * item.localTransform.ToMatrix();
+          pc.lightViewProj = lightViewProj;
+
+          cmd.PushConstants(ShaderStage::Vertex, 0, sizeof(ShadowPushConstants), &pc);
+
+          meshRenderer_.DrawDepthOnly(&cmd, *item.mesh, *item.submesh);
+      }
+
+      cmd.EndRendering();
   }
-
-  cmd.EndRendering();
 }
 
 void SceneRenderer::BuildStaticMeshRenderList(const RenderWorld &world) {
@@ -1368,7 +1484,8 @@ void SceneRenderer::RenderDebug(ICommandList &cmd, const RenderWorld &world,
 
   AABB sceneBounds;
 
-  if (dbgCtx.drawSceneBounds || dbgCtx.drawMeshBounds) {
+  if (dbgCtx.drawSceneBounds || dbgCtx.drawMeshBounds ||
+      dbgCtx.drawLightDirection) {
 
     for (const auto &mesh : opaques_) {
       const glm::mat4 model =
@@ -1511,19 +1628,43 @@ void SceneRenderer::BeginMainPass(ICommandList &cmd,
                                   const FrameRenderContext &frame,
                                   const Camera &camera,
                                   const DebugContext &dbgCtx) {
-  FrameDataGPU frameData{};
-  frameData.lightViewProj = directionalShadow_.lightViewProj;
-  frameData.lightDirection = glm::vec4(directionalShadow_.direction, 0.0f);
-  frameData.lightColor = glm::vec4(directionalShadow_.color, 1.0f);
-  frameData.lightIntensity = directionalShadow_.intensity;
-  frameData.shadowsEnabled = directionalShadow_.enabled ? 1 : 0;
+    FrameDataGPU frameData{};
 
-  frameData.proj = camera.GetProjection();
-  frameData.view = camera.GetView();
+    frameData.view = camera.GetView();
+    frameData.proj = camera.GetProjection();
 
-  frameData.viewportSize = {frame.extent.width, frame.extent.height};
+    const uint32_t cascadeCount = std::min(
+        directionalShadow_.cascadeCount,
+        k_MaxShadowCascades
+    );
+    frameData.cascadeCount = cascadeCount;
 
-  frameData.showMode = static_cast<int>(dbgCtx.mode);
+    for (uint32_t i = 0; i < cascadeCount; ++i) {
+        frameData.cascades[i].lightViewProj =
+            directionalShadow_.lightViewProjs[i];
+
+        frameData.cascades[i].splitData = glm::vec4(
+            camera.GetCascadeFarDistance(i),
+            0.0f,
+            0.0f,
+            0.0f
+        );
+    }
+
+    frameData.lightDirection =
+        glm::vec4(directionalShadow_.direction, 0.0f);
+
+    frameData.lightColor =
+        glm::vec4(directionalShadow_.color, 1.0f);
+
+    frameData.viewportSize = glm::vec2(
+        static_cast<float>(frame.extent.width),
+        static_cast<float>(frame.extent.height)
+    );
+
+    frameData.lightIntensity = directionalShadow_.intensity;
+    frameData.shadowsEnabled = directionalShadow_.enabled ? 1 : 0;
+    frameData.showMode = static_cast<int32_t>(dbgCtx.mode);
 
   cmd.UpdateBuffer(
       {.buffer = frameUBO_, .data = &frameData, .size = sizeof(FrameDataGPU)});
@@ -1575,19 +1716,43 @@ void SceneRenderer::BeginOpaquePass(ICommandList &cmd,
                                     const FrameRenderContext &frame,
                                     const Camera &camera,
                                     const DebugContext dbgCtx) {
-  FrameDataGPU frameData{};
-  frameData.lightViewProj = directionalShadow_.lightViewProj;
-  frameData.lightDirection = glm::vec4(directionalShadow_.direction, 0.0f);
-  frameData.lightColor = glm::vec4(directionalShadow_.color, 1.0f);
-  frameData.lightIntensity = directionalShadow_.intensity;
-  frameData.shadowsEnabled = directionalShadow_.enabled ? 1 : 0;
+    FrameDataGPU frameData{};
 
-  frameData.viewportSize = {frame.extent.width, frame.extent.height};
+    frameData.view = camera.GetView();
+    frameData.proj = camera.GetProjection();
 
-  frameData.proj = camera.GetProjection();
-  frameData.view = camera.GetView();
+    const uint32_t cascadeCount = std::min(
+        directionalShadow_.cascadeCount,
+        k_MaxShadowCascades
+    );
+    frameData.cascadeCount = cascadeCount;
 
-  frameData.showMode = static_cast<int>(dbgCtx.mode);
+    for (uint32_t i = 0; i < cascadeCount; ++i) {
+        frameData.cascades[i].lightViewProj =
+            directionalShadow_.lightViewProjs[i];
+
+        frameData.cascades[i].splitData = glm::vec4(
+            camera.GetCascadeFarDistance(i),
+            0.0f,
+            0.0f,
+            0.0f
+        );
+    }
+
+    frameData.lightDirection =
+        glm::vec4(directionalShadow_.direction, 0.0f);
+
+    frameData.lightColor =
+        glm::vec4(directionalShadow_.color, 1.0f);
+
+    frameData.viewportSize = glm::vec2(
+        static_cast<float>(frame.extent.width),
+        static_cast<float>(frame.extent.height)
+    );
+
+    frameData.lightIntensity = directionalShadow_.intensity;
+    frameData.shadowsEnabled = directionalShadow_.enabled ? 1 : 0;
+    frameData.showMode = static_cast<int32_t>(dbgCtx.mode);
 
   cmd.UpdateBuffer(
       {.buffer = frameUBO_, .data = &frameData, .size = sizeof(FrameDataGPU)});

@@ -83,7 +83,7 @@ private:
   SceneRenderer sceneRenderer_;
   RenderWorld renderWorld_;
 
-  CameraMode cameraMode_ = CameraMode::Orbit;
+  CameraMode cameraMode_ = CameraMode::FirstPerson;
 
   std::unique_ptr<Camera> camera_;
 

@@ -23,10 +23,35 @@ namespace Rodan {
 
 constexpr uint32_t k_MaxMaterials = 1024;
 
+constexpr uint32_t k_MaxShadowCascades = 8;
+
+struct DirectionalShadowSettings {
+    uint32_t cascadeCount = 4;
+    float maxDistance = 250.0f;
+
+    std::array<float, k_MaxShadowCascades - 1> splits = {
+        0.06f,
+        0.18f,
+        0.44f,
+        0.58f,
+        0.70f,
+        0.82f,
+        0.92f,
+    };
+};
+
+struct alignas(16) CascadeGPU {
+    glm::mat4 lightViewProj;
+    glm::vec4 splitData; // x = far Distance
+};
+
 struct alignas(16) FrameDataGPU {
   glm::mat4 view;
   glm::mat4 proj;
-  glm::mat4 lightViewProj;
+
+  std::array<CascadeGPU, k_MaxShadowCascades> cascades;
+  uint32_t cascadeCount;
+  uint32_t _cascadePad[3];
 
   glm::vec4 lightDirection;
   glm::vec4 lightColor;
@@ -38,6 +63,11 @@ struct alignas(16) FrameDataGPU {
   int showMode;
   float _pad0;
 };
+
+static_assert(sizeof(CascadeGPU) == 80);
+static_assert(offsetof(FrameDataGPU, lightDirection) % 16 == 0);
+static_assert(offsetof(FrameDataGPU, lightColor) % 16 == 0);
+static_assert(sizeof(FrameDataGPU) % 16 == 0);
 
 struct alignas(16) TextureTransformDataGPU {
     alignas(16) glm::vec2 offset = glm::vec2{ 0, 0 }; // 0
@@ -177,9 +207,15 @@ struct MeshPipelineKeyHasher {
 };
 
 struct ShadowMapResources {
-  Texture texture;
+  ImageHandle image;
+  std::vector<ImageViewHandle> views;
+  ImageViewHandle arrayView;
+  SamplerHandle sampler;
   PipelineHandle pipeline;
-  glm::mat4 lightViewProj;
+  std::vector<glm::mat4> lightViewProjs;
+  uint32_t cascadeCount = 4;
+  std::vector<float> cascades = { 0.015f, 0.05f, 0.2f };
+
 
   glm::vec3 direction;
   glm::vec3 color;
@@ -187,7 +223,7 @@ struct ShadowMapResources {
 
   int enabled = 1;
 
-  uint32_t resolution = 8 * 1024;
+  uint32_t resolution = 2048;
 };
 
 enum class DrawMode {
@@ -196,7 +232,8 @@ enum class DrawMode {
   Normal,
   MetallicRoughness,
   Tangent,
-  Occlusion
+  Occlusion,
+  ShadowCascades
 };
 
 struct DebugContext {
@@ -212,12 +249,13 @@ public:
                   Format colorFormat, Format depthFormat,
                   BindingLayoutHandle materialLayout);
   void Shutdown(IDevice *device);
-  void Render(ICommandList &cmd, const RenderWorld &world, const Camera &camera,
+  void Render(ICommandList &cmd, const RenderWorld &world, Camera &camera,
               const FrameRenderContext &frame,
               DebugContext dbgCtx = {false, false, false});
 
   void SubmitStaticMesh(StaticMeshRenderItem item);
   void LoadEnvironment(IDevice *device, const std::string &path);
+  DirectionalShadowSettings& GetShadowSettings();
 
 private:
   PipelineHandle GetOrCreatePipeline(const MeshPipelineKey &key);
@@ -225,7 +263,7 @@ private:
   PipelineHandle GetOrCreateTransmissionPipeline();
   PipelineHandle GetOrCreateTonemappingPipeline();
 
-  void RenderShadowMaps(ICommandList &cmd, const RenderWorld &world);
+  void RenderShadowMaps(ICommandList &cmd, const RenderWorld &world, const Camera& camera);
   void BuildStaticMeshRenderList(const RenderWorld &world);
   void RenderOpaqueMeshes(ICommandList &cmd, const Camera &camera,
                           DebugContext dbgCtx, BindingSetHandle set);
@@ -330,6 +368,7 @@ private:
       pipelines_;
 
   // Only one shadow map as of right now
+  DirectionalShadowSettings directionalShadowSettings_;
   ShadowMapResources directionalShadow_;
 
   SkyboxPass skyboxPass_;

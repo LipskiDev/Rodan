@@ -10,11 +10,24 @@ layout(location = 5) in vec3 vNormal;
 
 layout(set = 0, binding = 0) uniform sampler2D textures[];
 
-layout(set = 1, binding = 0) uniform sampler2D u_ShadowMap;
-layout(set = 1, binding = 1) uniform FrameData {
+const int MAX_SHADOW_CASCADES = 8;
+
+struct CascadeData {
+    mat4 lightViewProj;
+    vec4 splitData;
+};
+
+layout(set = 1, binding = 0) uniform sampler2DArray u_ShadowMap;
+layout(std140, set = 1, binding = 1) uniform FrameData {
     mat4 view;
     mat4 proj;
-    mat4 lightViewProj;
+
+    CascadeData cascades[MAX_SHADOW_CASCADES];
+
+    uint cascadeCount;
+    uint _cascadePad0;
+    uint _cascadePad1;
+    uint _cascadePad2;
 
     vec4 lightDirection;
     vec4 lightColor;
@@ -120,8 +133,37 @@ vec3 extractScale(mat4 m)
     );
 }
 
+int SelectCascade(vec3 worldPos)
+{
+    uint cascadeCount =
+        min(u_Frame.cascadeCount, uint(MAX_SHADOW_CASCADES));
+
+    if (cascadeCount == 0u) {
+        return -1;
+    }
+
+    float viewDepth =
+        -(u_Frame.view * vec4(worldPos, 1.0)).z;
+
+    for (uint i = 0u; i < cascadeCount; ++i) {
+        if (viewDepth <= u_Frame.cascades[i].splitData.x) {
+            return int(i);
+        }
+    }
+
+    return -1;
+}
+
 float ComputeShadow(vec3 worldPos, vec3 normal, vec3 lightDir) {
-    vec4 lightSpace = u_Frame.lightViewProj * vec4(worldPos, 1.0);
+    int cascadeIndex = SelectCascade(worldPos);
+
+    if (cascadeIndex < 0) {
+        return 1.0;
+    }
+
+    vec4 lightSpace =
+        u_Frame.cascades[cascadeIndex].lightViewProj *
+        vec4(worldPos, 1.0);
 
     vec3 projCoords = lightSpace.xyz / lightSpace.w;
     projCoords.xy = projCoords.xy * 0.5 + 0.5;
@@ -132,7 +174,10 @@ float ComputeShadow(vec3 worldPos, vec3 normal, vec3 lightDir) {
         return 1.0;
     }
 
-    float closestDepth = texture(u_ShadowMap, projCoords.xy).r;
+    float closestDepth = texture(
+        u_ShadowMap,
+        vec3(projCoords.xy, float(cascadeIndex))
+    ).r;
     float currentDepth = projCoords.z;
 
     float NdotL = max(dot(normal, lightDir), 0.0);
@@ -297,6 +342,22 @@ vec3 getClearcoatNormal()
     }
 
     return N;
+}
+
+vec3 CascadeDebugColor(int cascadeIndex)
+{
+    const vec3 colors[MAX_SHADOW_CASCADES] = vec3[](
+        vec3(1.0, 0.1, 0.1), // red
+        vec3(0.1, 1.0, 0.1), // green
+        vec3(0.1, 0.3, 1.0), // blue
+        vec3(1.0, 1.0, 0.1), // yellow
+        vec3(1.0, 0.1, 1.0), // magenta
+        vec3(0.1, 1.0, 1.0), // cyan
+        vec3(1.0, 0.5, 0.1), // orange
+        vec3(0.7, 0.3, 1.0)  // purple
+    );
+
+    return colors[clamp(cascadeIndex, 0, MAX_SHADOW_CASCADES - 1)];
 }
 
 void main() {
@@ -534,6 +595,13 @@ color += emissive;
 
     if (material.useUnlit != 0u) {
         color = baseColor;
+    }
+
+    if (u_Frame.showMode == 6) {
+        int cascadeIndex = SelectCascade(vWorldPos);
+        color = cascadeIndex >= 0
+            ? CascadeDebugColor(cascadeIndex)
+            : vec3(0.02);
     }
 
     outColor = vec4(color, alpha);

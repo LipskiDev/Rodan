@@ -35,7 +35,7 @@ private:
   glm::vec3 GetForward() const;
   glm::vec3 GetRight() const;
   void UpdateViewMatrix();
-  void UpdateProjectionMatrix();
+  void UpdateProjectionMatrix() override;
 
   struct MovementState {
     bool forward = false;

@@ -188,12 +188,11 @@ void LineRenderer3D::frustum(const mat4 &camView, const mat4 &camProj,
     return vec3(p) / p.w;
   };
 
-  // NDC corners
-  // OpenGL-style NDC: z in [-1, 1]
-  const vec3 nbl = unproject(-1.0f, -1.0f, -1.0f);
-  const vec3 nbr = unproject(1.0f, -1.0f, -1.0f);
-  const vec3 ntr = unproject(1.0f, 1.0f, -1.0f);
-  const vec3 ntl = unproject(-1.0f, 1.0f, -1.0f);
+  // Vulkan NDC has a [0, 1] depth range.
+  const vec3 nbl = unproject(-1.0f, -1.0f, 0.0f);
+  const vec3 nbr = unproject(1.0f, -1.0f, 0.0f);
+  const vec3 ntr = unproject(1.0f, 1.0f, 0.0f);
+  const vec3 ntl = unproject(-1.0f, 1.0f, 0.0f);
 
   const vec3 fbl = unproject(-1.0f, -1.0f, 1.0f);
   const vec3 fbr = unproject(1.0f, -1.0f, 1.0f);
