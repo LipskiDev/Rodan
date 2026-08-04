@@ -1,4 +1,5 @@
 #version 450
+#extension GL_ARB_shader_draw_parameters : require
 
 layout(location = 0) in vec3 inPosition;
 layout(location = 1) in vec3 inNormal;
@@ -11,6 +12,7 @@ layout(location = 2) out vec2 vUV;
 layout(location = 3) out vec3 vTangent;
 layout(location = 4) out vec3 vBitangent;
 layout(location = 5) out vec3 vNormal;
+layout(location = 6) flat out uint vDrawIndex;
 
 const int MAX_SHADOW_CASCADES = 8;
 
@@ -41,19 +43,36 @@ layout(std140, set = 1, binding = 1) uniform FrameData {
   float _pad0;
 } u_Frame;
 
-layout(push_constant) uniform PushConstants {
-    mat4 model;              // offset 0,   size 64
+struct ObjectData {
+    mat4 model;
+    mat4 normalMatrix;
+    vec4 boundingSphere;
+    vec4 boundsMinimum;
+    vec4 boundsMaximum;
+    uvec4 drawData;
+};
 
-    int showMode;           
-    int hasTangents;    
-    int materialIndex;
-    int _pad0;
-} pc;
+layout(std430, set = 4, binding = 0) readonly buffer ObjectBuffer {
+    ObjectData objects[];
+};
+
+struct DrawData {
+    uint objectIndex;
+    uint materialIndex;
+    uint flags;
+    uint padding;
+};
+
+layout(std430, set = 4, binding = 1) readonly buffer DrawDataBuffer {
+    DrawData draws[];
+};
 
 void main() {
-    vec4 worldPos = pc.model * vec4(inPosition, 1.0);
+    vDrawIndex = gl_BaseInstanceARB;
+    ObjectData objectData = objects[draws[vDrawIndex].objectIndex];
+    vec4 worldPos = objectData.model * vec4(inPosition, 1.0);
 
-    mat3 normalMatrix = transpose(inverse(mat3(pc.model)));
+    mat3 normalMatrix = mat3(objectData.normalMatrix);
 
     vec3 N = normalize(mat3(normalMatrix) * inNormal);
     vec3 T = normalize(mat3(normalMatrix) * inTangent.xyz);

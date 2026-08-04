@@ -45,8 +45,9 @@ void MeshRenderer::DrawSubmesh(ICommandList *cmd, const MeshResource &mesh,
   cmd->DrawIndexed(submesh.indexCount, submesh.firstIndex, 0);
 }
 
-void MeshRenderer::DrawSubmeshBound(ICommandList *cmd, const Submesh &submesh) {
-  cmd->DrawIndexed(submesh.indexCount, submesh.firstIndex, 0);
+void MeshRenderer::DrawSubmeshBound(ICommandList *cmd, const Submesh &submesh,
+                                    uint32_t baseInstance) {
+  cmd->DrawIndexed(submesh.indexCount, submesh.firstIndex, 0, baseInstance);
 }
 
 void MeshRenderer::DrawDepthOnly(ICommandList *cmd, const MeshResource &mesh,

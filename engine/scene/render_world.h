@@ -31,16 +31,19 @@ public:
   const std::unordered_map<uint32_t, MaterialResource> &GetMaterials() const;
   DirectionalLight &GetDirectionalLight(DirectionalLightHandle handle);
 
+  uint64_t GetStructureRevision() const { return structureRevision_; }
+  uint64_t GetObjectRevision() const { return objectRevision_; }
+
   void Clear();
 
 private:
   void RenderDirectionalShadowMap(DirectionalLight light);
 
 private:
-  uint32_t nextMeshIndex_ = 1;
+  uint32_t nextMeshIndex_ = 0;
   std::unordered_map<uint32_t, MeshResource> meshes_;
 
-  uint32_t nextMaterialIndex_ = 1;
+  uint32_t nextMaterialIndex_ = 0;
   std::unordered_map<uint32_t, MaterialResource> materials_;
 
   std::vector<DirectionalLight> directionalLights_;
@@ -50,5 +53,8 @@ private:
   bool renderShadows_ = true;
 
   std::shared_ptr<EnvironmentMap> environment_;
+
+  uint64_t structureRevision_ = 0;
+  uint64_t objectRevision_ = 0;
 };
 } // namespace Rodan

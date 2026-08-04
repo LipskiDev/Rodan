@@ -15,7 +15,8 @@ public:
                    const Submesh &submesh, const MaterialResource *material,
                    PipelineHandle pipeline);
 
-  void DrawSubmeshBound(ICommandList *cmd, const Submesh &submesh);
+  void DrawSubmeshBound(ICommandList *cmd, const Submesh &submesh,
+                        uint32_t baseInstance = 0);
 
   void DrawDepthOnly(ICommandList *cmd, const MeshResource &mesh,
                      const Submesh &submesh);

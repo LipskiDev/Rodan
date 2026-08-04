@@ -18,12 +18,16 @@
 #include <renderer/mesh_renderer.h>
 
 #include <scene/render_world.h>
+#include <limits>
 
 namespace Rodan {
 
 constexpr uint32_t k_MaxMaterials = 1024;
 
 constexpr uint32_t k_MaxShadowCascades = 8;
+
+constexpr uint32_t k_MaxGpuObjects = 500'000;
+constexpr uint32_t k_MaxGpuDraws = 1'000'000;
 
 struct DirectionalShadowSettings {
     uint32_t cascadeCount = 4;
@@ -182,6 +186,7 @@ struct StaticMeshRenderItem {
   Transform localTransform;
   Transform worldTransform;
   uint32_t objectId = 0;
+  uint32_t drawDataIndex;
 };
 
 struct MeshPipelineKey {
@@ -204,6 +209,50 @@ struct MeshPipelineKeyHasher {
 
     return h;
   }
+};
+
+struct GpuBatchKey {
+    MeshPipelineKey pipeline;
+
+    BufferHandle vertexBuffer;
+    BufferHandle indexBuffer;
+
+    IndexType indexType;
+
+    bool operator==(const GpuBatchKey& other) const noexcept {
+        return pipeline == other.pipeline &&
+               vertexBuffer.id == other.vertexBuffer.id &&
+               indexBuffer.id == other.indexBuffer.id &&
+               indexType == other.indexType;
+    }
+};
+
+struct GpuBatchKeyHasher {
+    size_t operator()(const GpuBatchKey& k) const noexcept {
+        const auto hashCombine = [](size_t seed, size_t value) {
+            return seed ^ (value + 0x9e3779b9u + (seed << 6) + (seed >> 2));
+        };
+
+        size_t h = MeshPipelineKeyHasher{}(k.pipeline);
+        h = hashCombine(h, std::hash<uint32_t>{}(k.vertexBuffer.id));
+        h = hashCombine(h, std::hash<uint32_t>{}(k.indexBuffer.id));
+        h = hashCombine(h, std::hash<int>{}(static_cast<int>(k.indexType)));
+        return h;
+    }
+};
+
+struct GpuBatchDraw {
+    uint32_t drawDataIndex;
+    uint32_t indexCount;
+    uint32_t firstIndex;
+    int32_t vertexOffset;
+};
+
+struct GpuBatch {
+    GpuBatchKey key;
+    std::vector<GpuBatchDraw> draws;
+    uint32_t indirectCommandOffset = 0;
+    uint32_t indirectCommandCount = 0;
 };
 
 struct ShadowMapResources {
@@ -243,6 +292,12 @@ struct DebugContext {
   DrawMode mode;
 };
 
+struct GpuObjectSlot {
+    uint32_t objectId;
+    uint32_t generation;
+    bool occupied;
+};
+
 class SceneRenderer {
 public:
   void Initialize(IDevice *device, SwapchainHandle swapchain,
@@ -272,10 +327,12 @@ private:
 
   void RenderAlphaBlendMeshes(ICommandList &cmd, const Camera &camera,
                               DebugContext dbgCtx);
-  void RenderStaticMeshes(ICommandList &cmd, const Camera &camera,
-                          DebugContext dbgCtx,
-                          const std::vector<StaticMeshRenderItem> &items,
-                          BindingSetHandle sceneSet);
+  void RenderStaticMeshesDirect(
+      ICommandList &cmd, const Camera &camera, DebugContext dbgCtx,
+      const std::vector<StaticMeshRenderItem> &items,
+      BindingSetHandle sceneSet);
+  void RenderStaticMeshesIndirect(ICommandList &cmd,
+                                  BindingSetHandle sceneSet);
 
   void RenderPostProcessingEffect(ICommandList &cmd,
                                   const FrameRenderContext &frame,
@@ -315,6 +372,15 @@ private:
 
   void UploadMaterialBuffer(ICommandList &command, const RenderWorld &world);
 
+  void BuildGpuSceneData(const RenderWorld& world);
+  void BuildOpaqueGpuBatch(const StaticMeshRenderItem& item);
+  GpuBatch& FindOrCreateBatch(const GpuBatchKey& batchKey);
+
+  GPUSceneObject ConvertToGpuObject(const RenderObject &object,
+                                    const MeshResource &mesh) const;
+  void UploadIfChanged(uint32_t slot, const GPUSceneObject& gpuObject);
+  void UploadGpuData();
+
 private:
   IDevice *device_ = nullptr;
   SwapchainHandle swapchain_;
@@ -343,6 +409,10 @@ private:
 
   BindingPoolHandle frameBindingPool_{};
   BindingSetHandle frameSet_{};
+
+  BindingLayoutHandle objectDataLayout_{};
+  BindingPoolHandle objectDataBindingPool_{};
+  BindingSetHandle objectDataSet_{};
 
   BindingLayoutHandle opaqueSceneLayout_{};
   BindingPoolHandle opaqueScenePool_{};
@@ -389,6 +459,24 @@ private:
   std::unordered_map<uint32_t, uint32_t> materialGpuIndex_;
 
   RenderGraph graph_;
+
+  std::vector<GpuObjectSlot> slots_;
+  std::vector<uint32_t> freeSlots_;
+  std::vector<GPUSceneObject> gpuObjectsCpu_;
+  std::vector<GPUDrawData> gpuDrawsCpu_;
+  std::vector<Velos::RHI::DrawIndexedIndirectCommand> indirectCommandsCpu_;
+  std::vector<uint32_t> dirtyGpuObjectSlots_;
+  std::unordered_map<uint32_t, uint32_t> objectToSlot_;
+
+  BufferHandle gpuObjectBuffer_;
+  BufferHandle gpuDrawBuffer_;
+  BufferHandle indirectCommands_;
+
+  std::unordered_map<GpuBatchKey, GpuBatch, GpuBatchKeyHasher> gpuBatches_{};
+
+  const RenderWorld *cachedRenderWorld_ = nullptr;
+  uint64_t cachedStructureRevision_ = std::numeric_limits<uint64_t>::max();
+  uint64_t cachedObjectRevision_ = std::numeric_limits<uint64_t>::max();
 };
 
 } // namespace Rodan

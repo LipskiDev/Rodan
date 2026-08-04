@@ -6,6 +6,7 @@ layout(location = 2) in vec2 vUV;
 layout(location = 3) in vec3 vTangent;
 layout(location = 4) in vec3 vBitangent;
 layout(location = 5) in vec3 vNormal;
+layout(location = 6) flat in uint vDrawIndex;
 
 layout(location = 0) out vec4 outColor;
 
@@ -62,15 +63,31 @@ layout(std430, set = 1, binding = 2) readonly buffer MaterialBuffer {
     MaterialData materials[];
 };
 
-layout(push_constant) uniform Push {
+struct ObjectData {
     mat4 model;
-    int showMode;
-    int hasTangents;
-    int materialIndex;
-    int _pad0;
-} pc;
+    mat4 normalMatrix;
+    vec4 boundingSphere;
+    vec4 boundsMinimum;
+    vec4 boundsMaximum;
+    uvec4 drawData;
+};
 
-#define material materials[pc.materialIndex]
+layout(std430, set = 4, binding = 0) readonly buffer ObjectBuffer {
+    ObjectData objects[];
+};
+
+struct DrawData {
+    uint objectIndex;
+    uint materialIndex;
+    uint flags;
+    uint padding;
+};
+
+layout(std430, set = 4, binding = 1) readonly buffer DrawDataBuffer {
+    DrawData draws[];
+};
+
+#define material materials[draws[vDrawIndex].materialIndex]
 
 layout(set = 2, binding = 1) uniform samplerCube u_PrefilterMap;
 layout(set = 3, binding = 0) uniform sampler2D u_OpaqueScene;

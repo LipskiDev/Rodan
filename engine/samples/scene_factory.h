@@ -13,6 +13,7 @@ inline std::unique_ptr<IScene> CreateSceneByType(SceneType type) {
     return std::make_unique<GltfViewerScene>();
   case SceneType::ComputeTest:
     return std::make_unique<ComputeTestScene>();
+
   default:
     return nullptr;
   }

@@ -51,6 +51,9 @@ private:
     float updateMs = 0.0f;
     float imguiMs = 0.0f;
     float beginFrameMs = 0.0f;
+    float frameFenceWaitMs = 0.0f;
+    float acquireImageMs = 0.0f;
+    float imageFenceWaitMs = 0.0f;
     float prepareFrameMs = 0.0f;
     float renderFrameMs = 0.0f;
     float endFrameMs = 0.0f;

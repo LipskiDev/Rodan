@@ -508,15 +508,23 @@ void DuckScene::UploadTextureIfNeeded(ICommandList &cmd) {
 
 void DuckScene::RenderDuckInstance(ICommandList &cmd, const glm::mat4 &model,
                                    BufferHandle indexBuffer, u32 indexCount) {
-  StaticMeshPushConstants push{};
-  push.model = model;
+  struct DuckPushConstants {
+    glm::mat4 model;
+    glm::mat4 view;
+    glm::mat4 projection;
+  };
+
+  const DuckPushConstants push{
+      .model = model,
+      .view = camera_.GetView(),
+      .projection = camera_.GetProjection(),
+  };
 
   cmd.BindPipeline(duck_.pipeline);
   cmd.SetBindings(duck_.pipeline, 0, duck_.descriptorSet);
   cmd.BindVertexBuffer(0, duck_.vertexBuffer, 0);
   cmd.BindIndexBuffer(indexBuffer, IndexType::U32, 0);
-  cmd.PushConstants(ShaderStage::Vertex, 0, sizeof(StaticMeshPushConstants),
-                    &push);
+  cmd.PushConstants(ShaderStage::Vertex, 0, sizeof(DuckPushConstants), &push);
   cmd.DrawIndexed(indexCount);
 }
 

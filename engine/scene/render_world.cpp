@@ -6,12 +6,14 @@ namespace Rodan {
 MeshHandle RenderWorld::AddMesh(MeshResource mesh) {
   const uint32_t id = nextMeshIndex_++;
   meshes_.emplace(id, std::move(mesh));
+  ++structureRevision_;
   return MeshHandle{id};
 }
 
 MaterialHandle RenderWorld::AddMaterial(MaterialResource material) {
   const uint32_t id = nextMaterialIndex_++;
   materials_.emplace(id, std::move(material));
+  ++structureRevision_;
   return MaterialHandle{id};
 }
 
@@ -31,8 +33,10 @@ void RenderWorld::Clear() {
   meshes_.clear();
   materials_.clear();
 
-  nextMeshIndex_ = 1;
-  nextMaterialIndex_ = 1;
+  nextMeshIndex_ = 0;
+  nextMaterialIndex_ = 0;
+  ++structureRevision_;
+  ++objectRevision_;
 }
 
 RenderObjectHandle RenderWorld::CreateObject(const RenderObjectDesc &desc) {
@@ -50,6 +54,9 @@ RenderObjectHandle RenderWorld::CreateObject(const RenderObjectDesc &desc) {
 
   objects_.push_back(std::move(object));
 
+  ++structureRevision_;
+  ++objectRevision_;
+
   return RenderObjectHandle{id};
 }
 
@@ -58,12 +65,15 @@ void RenderWorld::SetTransform(RenderObjectHandle handle,
   assert(handle.id < objects_.size());
 
   objects_[handle.id].worldTransform = transform;
+  ++objectRevision_;
 }
 
 void RenderWorld::SetVisible(RenderObjectHandle handle, bool visible) {
   assert(handle.id < objects_.size());
 
   objects_[handle.id].visible = visible;
+  ++structureRevision_;
+  ++objectRevision_;
 }
 
 const std::vector<RenderObject> &RenderWorld::GetObjects() const {

@@ -63,12 +63,15 @@ private:
   Texture fallbackTexture_{};
   Texture neutralNormalFallbackTexture_{};
 
+  BufferHandle vertexBuffer_{};
+  BufferHandle indexBuffer_{};
+
   StaticGltfAssetStats stats_;
 
 private:
   void CreateMaterialLayout(IDevice *device);
   void CreateBindingPool(IDevice *device, ImportedScene importedScene);
-  void UploadMeshes(IDevice *device, IUploadContext *upload,
+  void BuildMeshResources(IDevice *device, IUploadContext *upload,
                     ImportedScene importedScene);
   void UploadMaterials(IDevice *device, IUploadContext *upload,
                        ImportedScene importedScene);

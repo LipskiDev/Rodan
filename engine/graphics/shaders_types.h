@@ -4,12 +4,10 @@
 namespace Rodan {
 
 struct StaticMeshPushConstants {
-  glm::mat4 model; // 64
-
+  uint32_t gpuObjectIndex;
   int showMode;
   int hasTangents;
   int materialIndex;
-  int _pad0;
 };
 
 struct ShadowPushConstants {

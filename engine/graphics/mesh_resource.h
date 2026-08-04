@@ -11,6 +11,7 @@ namespace Rodan {
 struct Submesh {
   uint32_t firstIndex;
   uint32_t indexCount;
+  int32_t vertexOffset;
   uint32_t materialSlot;
   bool hasTangents = false;
   AABB aabb;
@@ -29,6 +30,9 @@ class MeshResource {
 public:
   Velos::RHI::BufferHandle vertexBuffer;
   Velos::RHI::BufferHandle indexBuffer;
+
+  uint32_t firstIndex = 0;
+  uint32_t firstVertex = 0;
 
   uint32_t vertexCount = 0;
   uint32_t indexCount = 0;

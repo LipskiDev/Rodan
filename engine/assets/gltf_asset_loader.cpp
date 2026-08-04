@@ -31,7 +31,7 @@ StaticGltfAsset::Load(IDevice *device, IUploadContext *upload,
   asset->CreateMaterialLayout(device);
   asset->CreateBindingPool(device, importedScene);
   asset->CreateFallbackResources(device, upload);
-  asset->UploadMeshes(device, upload, importedScene);
+  asset->BuildMeshResources(device, upload, importedScene);
   asset->UploadMaterials(device, upload, importedScene);
   asset->BuildInstances(importedScene);
   asset->ComputeStats(importedScene);
@@ -51,17 +51,21 @@ void StaticGltfAsset::Destroy(IDevice *device) {
       continue;
     }
 
-    if (mesh->vertexBuffer.IsValid()) {
-      device->DestroyBuffer(mesh->vertexBuffer);
-      mesh->vertexBuffer = {};
-    }
-
-    if (mesh->indexBuffer.IsValid()) {
-      device->DestroyBuffer(mesh->indexBuffer);
-      mesh->indexBuffer = {};
-    }
+    // Mesh resources only reference the buffers owned by this asset.
+    mesh->vertexBuffer = {};
+    mesh->indexBuffer = {};
   }
   meshes_.clear();
+
+  if (vertexBuffer_.IsValid()) {
+    device->DestroyBuffer(vertexBuffer_);
+    vertexBuffer_ = {};
+  }
+
+  if (indexBuffer_.IsValid()) {
+    device->DestroyBuffer(indexBuffer_);
+    indexBuffer_ = {};
+  }
 
   for (auto &mat : materials_) {
     if (mat.ownsBaseColorResources) {
@@ -197,7 +201,7 @@ void StaticGltfAsset::CreateBindingPool(IDevice *device,
 
 void StaticGltfAsset::Prepare(ICommandList &cmd) { prepared_ = true; }
 
-void StaticGltfAsset::UploadMeshes(IDevice *device, IUploadContext *upload,
+void StaticGltfAsset::BuildMeshResources(IDevice *device, IUploadContext *upload,
                                    ImportedScene importedScene) {
   if (!device) {
     throw std::runtime_error("StaticGltfAsset::UploadMeshes: device is null");
@@ -207,13 +211,98 @@ void StaticGltfAsset::UploadMeshes(IDevice *device, IUploadContext *upload,
     throw std::runtime_error("StaticGltfAsset::UploadMeshes: upload is null");
   }
 
+  std::vector<ImportedVertex> combinedVertices;
+  std::vector<uint32_t> combinedIndices;
+
   meshes_.clear();
   meshes_.reserve(importedScene.meshes.size());
-  for (const auto &mesh : importedScene.meshes) {
+  for (const ImportedMesh& mesh : importedScene.meshes) {
+      auto resource = std::make_shared<MeshResource>();
+      resource->submeshes.reserve(mesh.primitives.size());
 
-    auto gpuMesh = MeshUploader::Upload(device, upload, mesh);
+      resource->aabb = mesh.localBounds;
 
-    meshes_.push_back(gpuMesh);
+      const uint32_t meshFirstVertex = static_cast<uint32_t>(combinedVertices.size());
+      const uint32_t meshFirstIndex = static_cast<uint32_t>(combinedIndices.size());
+
+      for (const ImportedPrimitive& primitive : mesh.primitives) {
+          const uint32_t baseVertex = static_cast<uint32_t>(combinedVertices.size());
+
+          Submesh submesh{};
+          submesh.firstIndex = static_cast<uint32_t>(combinedIndices.size());
+          submesh.indexCount = static_cast<uint32_t>(primitive.indices.size());
+          submesh.vertexOffset = 0;
+          submesh.materialSlot = primitive.materialIndex >= 0 ? static_cast<uint32_t>(primitive.materialIndex) : 0;
+          submesh.hasTangents = primitive.hasTangents;
+          submesh.aabb = primitive.localBounds;
+
+          combinedVertices.insert(combinedVertices.end(), primitive.vertices.begin(), primitive.vertices.end());
+          combinedIndices.reserve(combinedIndices.size() + primitive.indices.size());
+
+          for (uint32_t localIndex : primitive.indices) {
+              if (localIndex >= primitive.vertices.size()) {
+                  throw std::runtime_error(
+                      "StaticGltfAsset::BuildMeshResources: primitive index is out of range");
+              }
+              combinedIndices.push_back(baseVertex + localIndex);
+          }
+
+          resource->submeshes.push_back(submesh);
+      }
+
+      resource->firstVertex = meshFirstVertex;
+      resource->vertexCount = static_cast<uint32_t>(combinedVertices.size()) - meshFirstVertex;
+
+      resource->firstIndex = meshFirstIndex;
+      resource->indexCount = static_cast<uint32_t>(combinedIndices.size()) - meshFirstIndex;
+
+      meshes_.push_back(std::move(resource));
+  }
+
+  if (combinedVertices.empty()) {
+      throw std::runtime_error(
+          "StaticGltfAsset::BuildMeshResources: asset produced no vertices");
+  }
+
+  if (combinedIndices.empty()) {
+      throw std::runtime_error(
+          "StaticGltfAsset::BuildMeshResources: asset produced no indices");
+  }
+
+  BufferDesc vertexDesc{
+      .size = combinedVertices.size() * sizeof(ImportedVertex),
+      .usage = BufferUsage::Vertex | BufferUsage::TransferDst,
+      .memoryUsage = MemoryUsage::GPUOnly,
+      .debugName = "Static glTF combined vertex buffer",
+  };
+
+  BufferDesc indexDesc{
+      .size = combinedIndices.size() * sizeof(uint32_t),
+      .usage = BufferUsage::Index | BufferUsage::TransferDst,
+      .memoryUsage = MemoryUsage::GPUOnly,
+      .debugName = "Static glTF combined index buffer",
+  };
+
+  vertexBuffer_ = device->CreateBuffer(vertexDesc);
+  indexBuffer_ = device->CreateBuffer(indexDesc);
+
+  upload->UploadBuffer({
+      .dstBuffer = vertexBuffer_,
+      .dstOffset = 0,
+      .size = vertexDesc.size,
+      .data = combinedVertices.data(),
+      });
+
+  upload->UploadBuffer({
+      .dstBuffer = indexBuffer_,
+      .dstOffset = 0,
+      .size = indexDesc.size,
+      .data = combinedIndices.data(),
+      });
+
+  for (const std::shared_ptr<MeshResource>& mesh : meshes_) {
+      mesh->vertexBuffer = vertexBuffer_;
+      mesh->indexBuffer = indexBuffer_;
   }
 }
 

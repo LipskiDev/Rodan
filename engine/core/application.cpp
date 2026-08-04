@@ -230,6 +230,12 @@ void Application::MainLoop() {
     peakTimings_.imguiMs = std::max(peakTimings_.imguiMs, timings_.imguiMs);
     peakTimings_.beginFrameMs =
         std::max(peakTimings_.beginFrameMs, timings_.beginFrameMs);
+    peakTimings_.frameFenceWaitMs =
+        std::max(peakTimings_.frameFenceWaitMs, timings_.frameFenceWaitMs);
+    peakTimings_.acquireImageMs =
+        std::max(peakTimings_.acquireImageMs, timings_.acquireImageMs);
+    peakTimings_.imageFenceWaitMs =
+        std::max(peakTimings_.imageFenceWaitMs, timings_.imageFenceWaitMs);
     peakTimings_.prepareFrameMs =
         std::max(peakTimings_.prepareFrameMs, timings_.prepareFrameMs);
     peakTimings_.renderFrameMs =
@@ -300,6 +306,9 @@ void Application::RenderFrame() {
   FrameBeginResult frame = device_->BeginFrame(swapchain_);
   timings_.beginFrameMs =
       static_cast<float>((glfwGetTime() - stageStart) * 1000.0);
+  timings_.frameFenceWaitMs = frame.frameFenceWaitMs;
+  timings_.acquireImageMs = frame.acquireImageMs;
+  timings_.imageFenceWaitMs = frame.imageFenceWaitMs;
   if (!frame.success) {
     return;
   }
@@ -414,8 +423,14 @@ void Application::BuildApplicationImGui() {
                 peakTimings_.updateMs);
     ImGui::Text("ImGui:   %6.2f / %6.2f", timings_.imguiMs,
                 peakTimings_.imguiMs);
-    ImGui::Text("GPU wait:%6.2f / %6.2f", timings_.beginFrameMs,
+    ImGui::Text("Begin:   %6.2f / %6.2f", timings_.beginFrameMs,
                 peakTimings_.beginFrameMs);
+    ImGui::Text("  Frame fence:%6.2f / %6.2f", timings_.frameFenceWaitMs,
+                peakTimings_.frameFenceWaitMs);
+    ImGui::Text("  Acquire:    %6.2f / %6.2f", timings_.acquireImageMs,
+                peakTimings_.acquireImageMs);
+    ImGui::Text("  Image fence:%6.2f / %6.2f", timings_.imageFenceWaitMs,
+                peakTimings_.imageFenceWaitMs);
     ImGui::Text("Prepare:%6.2f / %6.2f", timings_.prepareFrameMs,
                 peakTimings_.prepareFrameMs);
     ImGui::Text("Render:%6.2f / %6.2f", timings_.renderFrameMs,

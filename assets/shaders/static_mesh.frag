@@ -7,6 +7,7 @@ layout(location = 2) in vec2 vUV;
 layout(location = 3) in vec3 vTangent;
 layout(location = 4) in vec3 vBitangent;
 layout(location = 5) in vec3 vNormal;
+layout(location = 6) flat in uint vDrawIndex;
 
 layout(set = 0, binding = 0) uniform sampler2D textures[];
 
@@ -109,18 +110,37 @@ layout(set = 2, binding = 2) uniform sampler2D u_BRDFLUT;
 
 layout(set = 3, binding = 0) uniform sampler2D u_OpaqueScene;
 
+// Data for entire object
+struct ObjectData {
+    mat4 model;
+    mat4 normalMatrix;
+
+    vec4 boundingSphere;
+    vec4 boundsMinimum;
+    vec4 boundsMaximum;
+
+    uvec4 drawData;
+};
+
+layout(std430, set = 4, binding = 0) readonly buffer ObjectBuffer {
+    ObjectData objects[];
+};
+
+// Data for submesh
+struct DrawData {
+    uint objectIndex;
+    uint materialIndex;
+    uint flags;
+    uint padding;
+};
+
+layout(std430, set = 4, binding = 1) readonly buffer DrawDataBuffer {
+    DrawData draws[];
+};
+
 layout(location = 0) out vec4 outColor;
 
-layout(push_constant) uniform PushConstants {
-    mat4 model;              // offset 0,   size 64
-
-    int showMode;           
-    int hasTangents;    
-    int materialIndex;
-    int _pad0;
-} pc;
-
-#define material materials[pc.materialIndex]
+#define material materials[draws[vDrawIndex].materialIndex]
 
 const float PI = 3.14159265359;
 
@@ -535,7 +555,7 @@ void main() {
 
       vec2 transmissionUV = gl_FragCoord.xy / max(u_Frame.viewportSize, vec2(1.0));
 
-      vec3 objectScale = extractScale(pc.model);
+      vec3 objectScale = extractScale(objects[draws[vDrawIndex].objectIndex].model);
               float scaleCompensation =
                   (objectScale.x + objectScale.y + objectScale.z) / 3.0;
 

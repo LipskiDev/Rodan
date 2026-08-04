@@ -17,6 +17,7 @@
 #include "scene/render_world.h"
 #include "tracy/Tracy.hpp"
 #include <core/path.h>
+#include <cstring>
 #include <iostream>
 #include <renderer/scene_renderer.h>
 #include <stdexcept>
@@ -212,6 +213,21 @@ void SceneRenderer::Initialize(IDevice *device, SwapchainHandle swapchain,
        .visibility = ShaderStage::Fragment},
   };
 
+  BindingDesc objectDataBindings[] = {
+      {
+          .binding = 0,
+          .type = BindingType::StorageBuffer,
+          .count = 1,
+          .visibility = ShaderStage::Vertex | ShaderStage::Fragment
+      },
+      {
+          .binding = 1,
+          .type = BindingType::StorageBuffer,
+          .count = 1,
+          .visibility = ShaderStage::Vertex | ShaderStage::Fragment,
+      },
+  };
+
   BindingDesc environmentBindings[] = {
       {
           .binding = 0,
@@ -232,8 +248,21 @@ void SceneRenderer::Initialize(IDevice *device, SwapchainHandle swapchain,
       },
       {
           .type = BindingType::StorageBuffer,
-          .count = 1,
+          .count = 2,
       }};
+
+  BindingPoolSize objectDataPoolSizes[] = {
+      {
+          .type = BindingType::StorageBuffer,
+          .count = 2,
+      },
+  };
+
+  objectDataBindingPool_ = device_->CreateBindingPool({
+      .poolSizes = objectDataPoolSizes,
+      .poolSizeCount = 1,
+      .maxSets = 1,
+  });
 
   frameBindingPool_ = device_->CreateBindingPool({
       .poolSizes = poolSizes,
@@ -246,6 +275,12 @@ void SceneRenderer::Initialize(IDevice *device, SwapchainHandle swapchain,
       .bindingCount = 3,
       .debugName = "SceneRenderer Frame Descriptor Set Layout",
   });
+
+  objectDataLayout_ = device_->CreateBindingLayout({
+      .bindings = objectDataBindings,
+      .bindingCount = 2,
+      .debugName = "SceneRenderer Object Data Descriptor Set Layout",
+      });
 
   BindingDesc postProcessingBindings[] = {
       {
@@ -280,6 +315,8 @@ void SceneRenderer::Initialize(IDevice *device, SwapchainHandle swapchain,
 
   frameSet_ =
       device_->AllocateBindingSet({ .pool = frameBindingPool_, .layout = frameLayout_ });
+
+  objectDataSet_ = device_->AllocateBindingSet({ .pool = objectDataBindingPool_, .layout = objectDataLayout_ });
 
   frameUBO_ = device_->CreateBuffer({.size = sizeof(FrameDataGPU),
                                      .usage = BufferUsage::Uniform,
@@ -404,6 +441,29 @@ void SceneRenderer::Initialize(IDevice *device, SwapchainHandle swapchain,
 
   iblBaker_ = std::make_unique<IBLBaker>();
   iblBaker_->Initialize(device, environment_->GetBindingLayout());
+
+  BufferDesc objectBufferDesc{};
+  objectBufferDesc.size = sizeof(GPUSceneObject) * k_MaxGpuObjects;
+  objectBufferDesc.usage = BufferUsage::Storage | BufferUsage::TransferDst;
+  objectBufferDesc.memoryUsage = MemoryUsage::GPUOnly;
+  objectBufferDesc.debugName = "GPU Driven Object Buffer";
+
+  BufferDesc drawBufferDesc{};
+  drawBufferDesc.size = sizeof(GPUDrawData) * k_MaxGpuDraws;
+  drawBufferDesc.usage = BufferUsage::Storage | BufferUsage::TransferDst;
+  drawBufferDesc.memoryUsage = MemoryUsage::GPUOnly;
+  drawBufferDesc.debugName = "GPU Driven Draw Buffer";
+
+  BufferDesc indirectCommandsBufferDesc{
+    .size = sizeof(Velos::RHI::DrawIndexedIndirectCommand) * k_MaxGpuDraws,
+    .usage = BufferUsage::Storage | BufferUsage::Indirect | BufferUsage::TransferDst,
+    .memoryUsage = MemoryUsage::GPUOnly,
+    .debugName = "GPU Driven Indirect Command Buffer",
+  };
+
+  gpuObjectBuffer_ = device_->CreateBuffer(objectBufferDesc);
+  gpuDrawBuffer_ = device_->CreateBuffer(drawBufferDesc);
+  indirectCommands_ = device_->CreateBuffer(indirectCommandsBufferDesc);
 }
 
 void SceneRenderer::Shutdown(IDevice *device) {
@@ -416,6 +476,14 @@ void SceneRenderer::Shutdown(IDevice *device) {
   if (device == nullptr) {
     device = device_;
   }
+
+  device->DestroyBuffer(gpuObjectBuffer_);
+  device->DestroyBuffer(gpuDrawBuffer_);
+  device->DestroyBuffer(indirectCommands_);
+
+  cachedRenderWorld_ = nullptr;
+  cachedStructureRevision_ = std::numeric_limits<uint64_t>::max();
+  cachedObjectRevision_ = std::numeric_limits<uint64_t>::max();
 
   graph_.Shutdown(*device);
   DestroyTexture(device, opaqueSceneFallback_.dummy);
@@ -642,22 +710,42 @@ void SceneRenderer::Render(ICommandList &cmd, const RenderWorld &world,
   Clock::time_point tUI;
 
   graph_.AddPass(
-      "Build Static Mesh Render List", [](RenderGraphBuilder &) {},
-      [&](ICommandList &) {
-        BuildStaticMeshRenderList(world);
-
-        tBuildList = now();
-      });
-
-  graph_.AddPass(
       "Upload Materials",
       [](RenderGraphBuilder &builder) {
         builder.StorageWrite("MaterialBuffer");
       },
       [&](ICommandList &cmd) {
-        UploadMaterialBuffer(cmd, world);
+        const bool newWorld = cachedRenderWorld_ != &world;
+        const bool structureChanged =
+            newWorld || cachedStructureRevision_ != world.GetStructureRevision();
+        if (structureChanged) {
+          UploadMaterialBuffer(cmd, world);
+        }
 
         tUploadMaterials = now();
+      });
+
+  graph_.AddPass(
+      "Build Static Mesh Render List", [](RenderGraphBuilder &) {},
+      [&](ICommandList &) {
+        const bool newWorld = cachedRenderWorld_ != &world;
+        const bool structureChanged =
+            newWorld || cachedStructureRevision_ != world.GetStructureRevision();
+        const bool objectsChanged =
+            newWorld || cachedObjectRevision_ != world.GetObjectRevision();
+
+        if (structureChanged) {
+          BuildStaticMeshRenderList(world);
+        } else if (objectsChanged) {
+          BuildGpuSceneData(world);
+          UploadGpuData();
+        }
+
+        cachedRenderWorld_ = &world;
+        cachedStructureRevision_ = world.GetStructureRevision();
+        cachedObjectRevision_ = world.GetObjectRevision();
+
+        tBuildList = now();
       });
 
   graph_.AddPass(
@@ -912,10 +1000,11 @@ PipelineHandle SceneRenderer::GetOrCreatePipeline(const MeshPipelineKey &key) {
       frameLayout_,
       iblResources_.descriptorSetLayout,
       opaqueSceneLayout_,
+      objectDataLayout_
   };
 
   desc.layout.descriptorSetLayouts = setLayouts;
-  desc.layout.descriptorSetLayoutCount = 4;
+  desc.layout.descriptorSetLayoutCount = 5;
 
   // Raster state
   desc.raster.cullBackFaces = true;
@@ -998,10 +1087,11 @@ PipelineHandle SceneRenderer::GetOrCreateTransmissionPipeline() {
       frameLayout_,
       iblResources_.descriptorSetLayout,
       opaqueSceneLayout_,
+      objectDataLayout_
   };
 
   desc.layout.descriptorSetLayouts = setLayouts;
-  desc.layout.descriptorSetLayoutCount = 4;
+  desc.layout.descriptorSetLayoutCount = 5;
 
   desc.raster.cullBackFaces = true;
   desc.raster.frontFaceCCW = true;
@@ -1263,7 +1353,13 @@ void SceneRenderer::BuildStaticMeshRenderList(const RenderWorld &world) {
   transmissions_.clear();
   alphaBlends_.clear();
 
-  for (const RenderObject &object : world.GetObjects()) {
+  BuildGpuSceneData(world);
+  gpuDrawsCpu_.clear();
+  gpuBatches_.clear();
+
+  const auto& objects = world.GetObjects();
+  for (size_t objectIndex = 0; objectIndex < objects.size(); ++objectIndex) {
+    const RenderObject& object = objects[objectIndex];
     if (!object.visible) {
       continue;
     }
@@ -1275,7 +1371,8 @@ void SceneRenderer::BuildStaticMeshRenderList(const RenderWorld &world) {
       item.mesh = &mesh;
       item.worldTransform = object.worldTransform;
       item.localTransform = object.localTransform;
-      item.objectId = object.objectId;
+      item.objectId = static_cast<uint32_t>(objectIndex);
+      item.drawDataIndex = static_cast<uint32_t>(gpuDrawsCpu_.size());
 
       const MaterialResource *material = nullptr;
 
@@ -1293,6 +1390,14 @@ void SceneRenderer::BuildStaticMeshRenderList(const RenderWorld &world) {
       item.material = material;
       item.submesh = &submesh;
 
+      GPUDrawData drawData{
+        .objectIndex = item.objectId,
+        .materialIndex = materialGpuIndex_[item.materialHandle.id],
+        .flags = submesh.hasTangents ? GPUDrawFlag_HasTangents : 0u,
+      };
+
+      gpuDrawsCpu_.push_back(drawData);
+
       bool isTransmission =
           material && material->transmission.transmissionFactor > 0.001f;
 
@@ -1304,15 +1409,55 @@ void SceneRenderer::BuildStaticMeshRenderList(const RenderWorld &world) {
         alphaBlends_.push_back(item);
       } else {
         opaques_.push_back(item);
+        BuildOpaqueGpuBatch(item);
       }
     }
   }
+
+  UploadGpuData();
 }
 
 void SceneRenderer::RenderOpaqueMeshes(ICommandList &cmd, const Camera &camera,
                                        DebugContext dbgCtx,
                                        BindingSetHandle set) {
-  RenderStaticMeshes(cmd, camera, dbgCtx, opaques_, set);
+  RenderStaticMeshesIndirect(cmd, set);
+}
+
+void SceneRenderer::RenderStaticMeshesIndirect(ICommandList &cmd,
+                                                BindingSetHandle sceneSet) {
+  if (!indirectCommands_ || indirectCommandsCpu_.empty()) {
+    return;
+  }
+
+  PipelineHandle lastPipeline{};
+  for (const auto &[key, batch] : gpuBatches_) {
+    if (batch.indirectCommandCount == 0) {
+      continue;
+    }
+
+    const PipelineHandle pipeline = GetOrCreatePipeline(key.pipeline);
+    if (pipeline.id != lastPipeline.id) {
+      cmd.BindPipeline(pipeline);
+      cmd.SetBindings(pipeline, 0, GetTextureRegistry().GetBindingSet());
+      cmd.SetBindings(pipeline, 1, frameSet_);
+      if (iblReady_) {
+        cmd.SetBindings(pipeline, 2, iblResources_.descriptorSet);
+      }
+      cmd.SetBindings(pipeline, 3, sceneSet);
+      cmd.SetBindings(pipeline, 4, objectDataSet_);
+      lastPipeline = pipeline;
+    }
+
+    cmd.BindVertexBuffer(0, key.vertexBuffer, 0);
+    cmd.BindIndexBuffer(key.indexBuffer, key.indexType, 0);
+
+    const uint64_t byteOffset =
+        static_cast<uint64_t>(batch.indirectCommandOffset) *
+        sizeof(Velos::RHI::DrawIndexedIndirectCommand);
+    cmd.DrawIndexedIndirect(indirectCommands_, byteOffset,
+                            batch.indirectCommandCount,
+                            sizeof(Velos::RHI::DrawIndexedIndirectCommand));
+  }
 }
 
 void SceneRenderer::RenderTransmissionMeshes(ICommandList &cmd,
@@ -1333,6 +1478,7 @@ void SceneRenderer::RenderTransmissionMeshes(ICommandList &cmd,
   }
 
   cmd.SetBindings(pipeline, 3, opaqueSceneSet_);
+  cmd.SetBindings(pipeline, 4, objectDataSet_);
 
   BufferHandle lastVB{};
   BufferHandle lastIB{};
@@ -1355,32 +1501,16 @@ void SceneRenderer::RenderTransmissionMeshes(ICommandList &cmd,
       lastIB = item.mesh->indexBuffer;
     }
 
-    StaticMeshPushConstants pc{};
-    pc.model = item.worldTransform.ToMatrix() * item.localTransform.ToMatrix();
-    pc.showMode = 4;
-    pc.hasTangents = submesh.hasTangents ? 1 : 0;
-    pc.materialIndex = 0;
-
-    if (item.materialHandle.IsValid()) {
-      auto it = materialGpuIndex_.find(item.materialHandle.id);
-      if (it != materialGpuIndex_.end()) {
-        pc.materialIndex = static_cast<int>(it->second);
-      }
-    }
-
-    cmd.PushConstants(ShaderStage::Vertex | ShaderStage::Fragment, 0,
-                      sizeof(StaticMeshPushConstants), &pc);
-
-    meshRenderer_.DrawSubmeshBound(&cmd, submesh);
+    meshRenderer_.DrawSubmeshBound(&cmd, submesh, item.drawDataIndex);
   }
 }
 void SceneRenderer::RenderAlphaBlendMeshes(ICommandList &cmd,
                                            const Camera &camera,
                                            DebugContext dbgCtx) {
-  RenderStaticMeshes(cmd, camera, dbgCtx, alphaBlends_, opaqueSceneSet_);
+  RenderStaticMeshesDirect(cmd, camera, dbgCtx, alphaBlends_, opaqueSceneSet_);
 }
 
-void SceneRenderer::RenderStaticMeshes(
+void SceneRenderer::RenderStaticMeshesDirect(
     ICommandList &cmd, const Camera &camera, DebugContext dbgCtx,
     const std::vector<StaticMeshRenderItem> &items,
     BindingSetHandle sceneSet) {
@@ -1416,6 +1546,7 @@ void SceneRenderer::RenderStaticMeshes(
       if (iblReady_) {
         cmd.SetBindings(pipeline, 2, iblResources_.descriptorSet);
       }
+      cmd.SetBindings(pipeline, 4, objectDataSet_);
 
       lastPipeline = pipeline;
       lastMaterialSet = {};
@@ -1439,23 +1570,7 @@ void SceneRenderer::RenderStaticMeshes(
       lastIndexBuffer = mesh.indexBuffer;
     }
 
-    StaticMeshPushConstants pc{};
-    pc.model = item.worldTransform.ToMatrix() * item.localTransform.ToMatrix();
-    pc.showMode = 4;
-    pc.hasTangents = submesh.hasTangents ? 1 : 0;
-    pc.materialIndex = 0;
-
-    if (item.materialHandle.IsValid()) {
-      auto it = materialGpuIndex_.find(item.materialHandle.id);
-      if (it != materialGpuIndex_.end()) {
-        pc.materialIndex = static_cast<int>(it->second);
-      }
-    }
-
-    cmd.PushConstants(ShaderStage::Vertex | ShaderStage::Fragment, 0,
-                      sizeof(StaticMeshPushConstants), &pc);
-
-    meshRenderer_.DrawSubmeshBound(&cmd, submesh);
+    meshRenderer_.DrawSubmeshBound(&cmd, submesh, item.drawDataIndex);
   }
 }
 void SceneRenderer::RenderPostProcessingEffect(ICommandList &cmd,
@@ -1950,6 +2065,222 @@ void SceneRenderer::UploadMaterialBuffer(ICommandList &command,
         .size = gpuMaterials.size() * sizeof(MaterialDataGPU),
     });
   }
+}
+
+void SceneRenderer::BuildGpuSceneData(const RenderWorld& world)
+{
+    const std::vector<RenderObject>& objects = world.GetObjects();
+
+    objectToSlot_.clear();
+    objectToSlot_.reserve(objects.size());
+    freeSlots_.clear();
+
+    if (slots_.size() > objects.size()) {
+        slots_.resize(objects.size());
+    }
+    if (slots_.size() < objects.size()) {
+        const size_t previousSize = slots_.size();
+        slots_.resize(objects.size());
+        for (size_t index = previousSize; index < objects.size(); ++index) {
+            slots_[index] = GpuObjectSlot{
+                .objectId = static_cast<uint32_t>(index),
+                .generation = 1,
+                .occupied = true,
+            };
+        }
+    }
+
+    for (size_t objectIndex = 0; objectIndex < objects.size(); ++objectIndex) {
+        const uint32_t slot = static_cast<uint32_t>(objectIndex);
+        const RenderObject& object = objects[objectIndex];
+
+        GpuObjectSlot& slotInfo = slots_[slot];
+        slotInfo.objectId = slot;
+        slotInfo.occupied = true;
+        objectToSlot_.emplace(slot, slot);
+
+        const MeshResource& mesh = world.GetMesh(object.mesh);
+        UploadIfChanged(slot, ConvertToGpuObject(object, mesh));
+    }
+}
+
+void SceneRenderer::BuildOpaqueGpuBatch(const StaticMeshRenderItem& item)
+{
+    MeshPipelineKey pipelineKey{};
+    if (item.material) {
+        pipelineKey.alphaMode = item.material->alphaMode;
+        pipelineKey.doubleSided = item.material->doubleSided;
+    }
+
+    GpuBatchKey batchkey{
+        .pipeline = pipelineKey,
+        .vertexBuffer = item.mesh->vertexBuffer,
+        .indexBuffer = item.mesh->indexBuffer,
+        .indexType = IndexType::U32,
+    };
+
+    GpuBatch& batch = FindOrCreateBatch(batchkey);
+
+    batch.draws.push_back(
+        GpuBatchDraw{
+            .drawDataIndex = item.drawDataIndex,
+            .indexCount = item.submesh->indexCount,
+            .firstIndex = item.submesh->firstIndex,
+            .vertexOffset = 0,
+        });
+}
+
+GpuBatch& SceneRenderer::FindOrCreateBatch(const GpuBatchKey& batchKey)
+{
+    const auto existing = gpuBatches_.find(batchKey);
+    if (existing != gpuBatches_.end()) {
+        return existing->second;
+    }
+
+    GpuBatch batch{};
+    batch.key = batchKey;
+
+    gpuBatches_.emplace(batchKey, batch);
+    return gpuBatches_[batchKey];
+}
+
+GPUSceneObject SceneRenderer::ConvertToGpuObject(const RenderObject &object,
+                                  const MeshResource &mesh) const
+{
+    GPUSceneObject out{};
+
+    out.model =
+        object.worldTransform.ToMatrix() * object.localTransform.ToMatrix();
+    out.normalMatrix = glm::transpose(glm::inverse(out.model));
+
+    const AABB worldBounds = mesh.aabb.Transform(out.model);
+    const glm::vec3 center = worldBounds.Center();
+    const glm::vec3 halfExtents = worldBounds.Extents() * 0.5f;
+
+    out.boundingSphere = glm::vec4(center, glm::length(halfExtents));
+    out.boundsMinimum = glm::vec4(worldBounds.lower, 0.0f);
+    out.boundsMaximum = glm::vec4(worldBounds.upper, 0.0f);
+
+    // Batch and material are assigned later, once this object has been
+    // expanded into its submesh render items.
+    out.drawData = glm::uvec4{
+        0u,
+        0u,
+        object.objectId,
+        object.visible ? 1u : 0u,
+    };
+
+    return out;
+}
+
+void SceneRenderer::UploadIfChanged(uint32_t slot,
+                                    const GPUSceneObject& gpuObject)
+{
+    if (slot >= gpuObjectsCpu_.size()) {
+        gpuObjectsCpu_.resize(slot + 1);
+        gpuObjectsCpu_[slot] = gpuObject;
+        dirtyGpuObjectSlots_.push_back(slot);
+        return;
+    }
+
+    if (std::memcmp(&gpuObjectsCpu_[slot], &gpuObject,
+                    sizeof(GPUSceneObject)) == 0) {
+        return;
+    }
+
+    gpuObjectsCpu_[slot] = gpuObject;
+    dirtyGpuObjectSlots_.push_back(slot);
+}
+
+void SceneRenderer::UploadGpuData()
+{
+    if (gpuObjectsCpu_.empty() || gpuDrawsCpu_.empty()) {
+        return;
+    }
+
+    assert(gpuObjectsCpu_.size() <= k_MaxGpuObjects);
+    assert(gpuDrawsCpu_.size() <= k_MaxGpuDraws);
+
+    indirectCommandsCpu_.clear();
+    indirectCommandsCpu_.reserve(gpuDrawsCpu_.size());
+    for (auto& [key, batch] : gpuBatches_) {
+        batch.indirectCommandOffset =
+            static_cast<uint32_t>(indirectCommandsCpu_.size());
+        batch.indirectCommandCount = static_cast<uint32_t>(batch.draws.size());
+
+        for (const GpuBatchDraw& draw : batch.draws) {
+            indirectCommandsCpu_.push_back(Velos::RHI::DrawIndexedIndirectCommand{
+                .indexCount = draw.indexCount,
+                .instanceCount = 1,
+                .firstIndex = draw.firstIndex,
+                .vertexOffset = draw.vertexOffset,
+                .firstInstance = draw.drawDataIndex,
+            });
+        }
+    }
+
+    const uint64_t objectUploadSize =
+        gpuObjectsCpu_.size() * sizeof(GPUSceneObject);
+    const uint64_t drawUploadSize = gpuDrawsCpu_.size() * sizeof(GPUDrawData);
+    const uint64_t indirectUploadSize = indirectCommandsCpu_.size() *
+        sizeof(Velos::RHI::DrawIndexedIndirectCommand);
+
+    auto context = device_->CreateUploadContext(
+        objectUploadSize + drawUploadSize + indirectUploadSize);
+    context->Begin();
+
+    context->UploadBuffer({
+        .dstBuffer = gpuObjectBuffer_,
+        .dstOffset = 0,
+        .size = objectUploadSize,
+        .data = gpuObjectsCpu_.data(),
+        });
+
+    context->UploadBuffer({
+        .dstBuffer = gpuDrawBuffer_,
+        .dstOffset = 0,
+        .size = drawUploadSize,
+        .data = gpuDrawsCpu_.data(),
+    });
+
+    if (indirectUploadSize > 0) {
+        context->UploadBuffer({
+            .dstBuffer = indirectCommands_,
+            .dstOffset = 0,
+            .size = indirectUploadSize,
+            .data = indirectCommandsCpu_.data(),
+        });
+    }
+
+    context->Flush();
+    dirtyGpuObjectSlots_.clear();
+
+
+    BindingBufferInfo objectDataBuffer{};
+    objectDataBuffer.buffer = gpuObjectBuffer_;
+    objectDataBuffer.offset = 0;
+    objectDataBuffer.range = sizeof(GPUSceneObject) * gpuObjectsCpu_.size();
+
+    device_->UpdateBindingSet({
+        .dstSet = objectDataSet_,
+        .binding = 0,
+        .type = BindingType::StorageBuffer,
+        .bufferInfo = &objectDataBuffer,
+        .descriptorCount = 1,
+        });
+
+    BindingBufferInfo drawDataBuffer{};
+    drawDataBuffer.buffer = gpuDrawBuffer_;
+    drawDataBuffer.offset = 0;
+    drawDataBuffer.range = drawUploadSize;
+
+    device_->UpdateBindingSet({
+        .dstSet = objectDataSet_,
+        .binding = 1,
+        .type = BindingType::StorageBuffer,
+        .bufferInfo = &drawDataBuffer,
+        .descriptorCount = 1,
+    });
 }
 
 } // namespace Rodan

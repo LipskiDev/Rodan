@@ -64,6 +64,9 @@ external/assimp-install-windows/
 
 # Generated files
 Makefile
+/frag.spv
+/vert.spv
+/runtime-startup-*.log
 
 # Premake / compilation database
 compile_commands.json
