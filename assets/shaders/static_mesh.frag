@@ -174,13 +174,8 @@ int SelectCascade(vec3 worldPos)
     return -1;
 }
 
-float ComputeShadow(vec3 worldPos, vec3 normal, vec3 lightDir) {
-    int cascadeIndex = SelectCascade(worldPos);
-
-    if (cascadeIndex < 0) {
-        return 1.0;
-    }
-
+float SampleShadowCascade(int cascadeIndex, vec3 worldPos,
+                          vec3 normal, vec3 lightDir) {
     vec4 lightSpace =
         u_Frame.cascades[cascadeIndex].lightViewProj *
         vec4(worldPos, 1.0);
@@ -194,16 +189,60 @@ float ComputeShadow(vec3 worldPos, vec3 normal, vec3 lightDir) {
         return 1.0;
     }
 
-    float closestDepth = texture(
-        u_ShadowMap,
-        vec3(projCoords.xy, float(cascadeIndex))
-    ).r;
     float currentDepth = projCoords.z;
-
     float NdotL = max(dot(normal, lightDir), 0.0);
-    float bias = max(0.02 * (1.0 - NdotL), 0.002);
 
-    return currentDepth - bias > closestDepth ? 0.0 : 1.0;
+    // Keep the receiver bias proportional to shadow-map resolution. The old
+    // fixed normalized-depth bias grew into a very large world-space offset in
+    // the distant cascades and caused severe peter-panning.
+    vec2 shadowMapSize = vec2(textureSize(u_ShadowMap, 0).xy);
+    vec2 texelSize = 1.0 / shadowMapSize;
+    float bias = max(1.25 * (1.0 - NdotL), 0.25) / shadowMapSize.x;
+
+    float visibility = 0.0;
+    for (int y = -1; y <= 1; ++y) {
+        for (int x = -1; x <= 1; ++x) {
+            float closestDepth = texture(
+                u_ShadowMap,
+                vec3(projCoords.xy + vec2(x, y) * texelSize,
+                     float(cascadeIndex))
+            ).r;
+            visibility += currentDepth - bias > closestDepth ? 0.0 : 1.0;
+        }
+    }
+
+    return visibility / 9.0;
+}
+
+float ComputeShadow(vec3 worldPos, vec3 normal, vec3 lightDir) {
+    int cascadeIndex = SelectCascade(worldPos);
+
+    if (cascadeIndex < 0) {
+        return 1.0;
+    }
+
+    float shadow = SampleShadowCascade(
+        cascadeIndex, worldPos, normal, lightDir);
+
+    // Blend across the final 10% of a cascade. A hard switch exposes the
+    // different texel scales and receiver bias of adjacent cascades as a seam.
+    if (uint(cascadeIndex + 1) < u_Frame.cascadeCount) {
+        float viewDepth = -(u_Frame.view * vec4(worldPos, 1.0)).z;
+        float cascadeNear = cascadeIndex == 0
+            ? 0.0
+            : u_Frame.cascades[cascadeIndex - 1].splitData.x;
+        float cascadeFar = u_Frame.cascades[cascadeIndex].splitData.x;
+        float blendStart = mix(cascadeFar, cascadeNear, 0.10);
+        float blend = smoothstep(blendStart, cascadeFar, viewDepth);
+
+        if (blend > 0.0) {
+            float nextShadow = SampleShadowCascade(
+                cascadeIndex + 1, worldPos, normal, lightDir);
+            shadow = mix(shadow, nextShadow, blend);
+        }
+    }
+
+    return shadow;
 }
 
 float DistributionGGX(vec3 N, vec3 H, float roughness) {

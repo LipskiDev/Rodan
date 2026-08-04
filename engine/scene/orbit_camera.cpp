@@ -78,7 +78,12 @@ void OrbitCamera::UpdateProjectionMatrix() {
 
   projections_.push_back(projection);
   for (uint32_t i = 0; i < cascadeCount_; ++i) {
-      const float nearFraction = i == 0 ? 0.0f : cascades_[i - 1];
+      const float nominalNearFraction = i == 0 ? 0.0f : cascades_[i - 1];
+      const float previousNearFraction = i <= 1 ? 0.0f : cascades_[i - 2];
+      const float nearFraction = i == 0
+          ? 0.0f
+          : nominalNearFraction -
+                (nominalNearFraction - previousNearFraction) * 0.10f;
       const float farFraction =
           i + 1 == cascadeCount_ ? 1.0f : cascades_[i];
       const float shadowFar = glm::clamp(

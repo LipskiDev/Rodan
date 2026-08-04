@@ -734,11 +734,8 @@ void SceneRenderer::Render(ICommandList &cmd, const RenderWorld &world,
         const bool objectsChanged =
             newWorld || cachedObjectRevision_ != world.GetObjectRevision();
 
-        if (structureChanged) {
+        if (structureChanged || objectsChanged) {
           BuildStaticMeshRenderList(world);
-        } else if (objectsChanged) {
-          BuildGpuSceneData(world);
-          UploadGpuData();
         }
 
         cachedRenderWorld_ = &world;
@@ -882,10 +879,6 @@ void SceneRenderer::Render(ICommandList &cmd, const RenderWorld &world,
 
   graph_.Compile();
   graph_.Execute(cmd);
-
-  opaques_.clear();
-  transmissions_.clear();
-  alphaBlends_.clear();
 
   const auto tFrameEnd = now();
 
@@ -1330,9 +1323,9 @@ void SceneRenderer::RenderShadowMaps(ICommandList &cmd,
       PipelineHandle pipeline = GetOrCreateShadowPipeline();
       cmd.BindPipeline(pipeline);
 
-      for (const StaticMeshRenderItem& item : opaques_) {
+      const auto drawShadowCaster = [&](const StaticMeshRenderItem& item) {
           if (!item.mesh) {
-              continue;
+              return;
           }
 
           ShadowPushConstants pc{};
@@ -1342,6 +1335,17 @@ void SceneRenderer::RenderShadowMaps(ICommandList &cmd,
           cmd.PushConstants(ShaderStage::Vertex, 0, sizeof(ShadowPushConstants), &pc);
 
           meshRenderer_.DrawDepthOnly(&cmd, *item.mesh, *item.submesh);
+      };
+
+      for (const StaticMeshRenderItem& item : opaques_) {
+          drawShadowCaster(item);
+      }
+
+      // Transmission is a surface-lighting property, not an instruction to
+      // remove the object from the shadow caster set. Until colored transparent
+      // shadows are supported, render it as an opaque caster.
+      for (const StaticMeshRenderItem& item : transmissions_) {
+          drawShadowCaster(item);
       }
 
       cmd.EndRendering();
